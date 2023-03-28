@@ -1,0 +1,26 @@
+[package]
+name = "mostro-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Francisco Calderón <negrunch@grunch.dev>"]
+description = "Mostro Core library"
+
+[dependencies]
+anyhow = "1.0.66"
+serde = { version = "1.0.149", features = ["derive"] }
+serde_json = "1.0.89"
+uuid = { version = "1.3.0", features = [
+  "v4",
+  "fast-rng",
+  "macro-diagnostics",
+  "serde",
+] }
+sqlx = { version = "0.6.2", features = [
+  "runtime-tokio-rustls",
+  "sqlite",
+  "macros",
+  "chrono",
+  "uuid",
+] }
+sqlx-crud = { version = "0.3.2", features = ["runtime-tokio-rustls"] }
