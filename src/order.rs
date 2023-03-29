@@ -44,7 +44,7 @@ impl Order {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct NewOrder {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
