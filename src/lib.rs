@@ -1,6 +1,7 @@
 pub mod order;
 
 use anyhow::{Ok, Result};
+use clap::ValueEnum;
 use order::NewOrder;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -8,7 +9,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 /// Orders can be only Buy or Sell
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Kind {
     Buy,
     Sell,
@@ -33,7 +34,7 @@ impl fmt::Display for Kind {
 }
 
 /// Each status that an order can have
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Status {
     Active,
     Canceled,
@@ -78,7 +79,7 @@ impl FromStr for Status {
 }
 
 /// Action is used to identify each message between Mostro and users
-#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone, ValueEnum)]
 pub enum Action {
     Order,
     TakeSell,
@@ -106,7 +107,7 @@ pub struct Message {
 }
 
 /// Message content
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum Content {
     Order(NewOrder),
     PaymentRequest(Option<NewOrder>, String),
