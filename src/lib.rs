@@ -88,6 +88,15 @@ pub enum Action {
     FiatSent,
     Release,
     Cancel,
+    BuyerInvoiceAccepted,
+    SaleCompleted,
+    PurchaseCompleted,
+    HoldInvoicePaymentAccepted,
+    HoldInvoicePaymentSettled,
+    HoldInvoicePaymentCanceled,
+    WaitingSellerToPay,
+    BuyerTookOrder,
+    CantDo,
 }
 
 impl fmt::Display for Action {
@@ -158,6 +167,17 @@ impl Message {
                     return false;
                 }
                 true
+            }
+            Action::BuyerInvoiceAccepted
+            | Action::SaleCompleted
+            | Action::PurchaseCompleted
+            | Action::HoldInvoicePaymentAccepted
+            | Action::HoldInvoicePaymentSettled
+            | Action::HoldInvoicePaymentCanceled
+            | Action::WaitingSellerToPay
+            | Action::BuyerTookOrder
+            | Action::CantDo => {
+                matches!(&self.content, Some(Content::TextMessage(_)))
             }
         }
     }
