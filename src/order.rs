@@ -7,6 +7,7 @@ use sqlx::FromRow;
 use sqlx_crud::SqlxCrud;
 use uuid::Uuid;
 
+/// Database representation of an order
 #[derive(Debug, FromRow, SqlxCrud, Deserialize, Serialize)]
 pub struct Order {
     pub id: Uuid,
@@ -44,6 +45,7 @@ impl Order {
     }
 }
 
+/// Small representation of an order
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct SmallOrder {
     pub id: Uuid,
@@ -91,6 +93,7 @@ impl SmallOrder {
     }
 }
 
+/// We use this struct to create a new order
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct NewOrder {
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -205,7 +205,7 @@ impl Message {
     }
 }
 
-// One party of the trade
+/// One party of the trade
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
     pub pubkey: String,
