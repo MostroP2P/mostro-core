@@ -122,6 +122,7 @@ pub enum Content {
     PaymentRequest(Option<NewOrder>, String),
     SmallOrder(SmallOrder),
     TextMessage(String),
+    Peer(Peer),
 }
 
 #[allow(dead_code)]
@@ -201,5 +202,25 @@ impl Message {
             Some(Content::PaymentRequest(_, pr)) => Some(pr.to_owned()),
             _ => None,
         }
+    }
+}
+
+// One party of the trade
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct Peer {
+    pub pubkey: String,
+}
+
+impl Peer {
+    pub fn new(pubkey: String) -> Self {
+        Self { pubkey }
+    }
+
+    pub fn from_json(json: &str) -> Result<Self> {
+        Ok(serde_json::from_str(json)?)
+    }
+
+    pub fn as_json(&self) -> Result<String> {
+        Ok(serde_json::to_string(&self)?)
     }
 }
