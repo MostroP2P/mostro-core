@@ -2,7 +2,7 @@ pub mod order;
 
 use anyhow::{Ok, Result};
 use clap::ValueEnum;
-use order::NewOrder;
+use order::{NewOrder, SmallOrder};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -120,6 +120,7 @@ pub struct Message {
 pub enum Content {
     Order(NewOrder),
     PaymentRequest(Option<NewOrder>, String),
+    SmallOrder(SmallOrder),
     TextMessage(String),
 }
 

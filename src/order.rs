@@ -18,7 +18,7 @@ pub struct Order {
     pub buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
     pub status: String,
-    pub prime: i64,
+    pub premium: i64,
     pub payment_method: String,
     pub amount: i64,
     pub fiat_code: String,
@@ -37,10 +37,57 @@ impl Order {
             self.fiat_code.clone(),
             self.fiat_amount,
             self.payment_method.clone(),
-            self.prime,
+            self.premium,
             self.buyer_invoice.clone(),
             Some(self.created_at),
         )
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SmallOrder {
+    pub id: Uuid,
+    pub amount: i64,
+    pub fiat_code: String,
+    pub fiat_amount: i64,
+    pub payment_method: String,
+    pub premium: i64,
+    pub buyer_pubkey: Option<String>,
+    pub seller_pubkey: Option<String>,
+}
+
+#[allow(dead_code)]
+impl SmallOrder {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: Uuid,
+        amount: i64,
+        fiat_code: String,
+        fiat_amount: i64,
+        payment_method: String,
+        premium: i64,
+        buyer_pubkey: Option<String>,
+        seller_pubkey: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            amount,
+            fiat_code,
+            fiat_amount,
+            payment_method,
+            premium,
+            buyer_pubkey,
+            seller_pubkey,
+        }
+    }
+    /// New order from json string
+    pub fn from_json(json: &str) -> Result<Self> {
+        Ok(serde_json::from_str(json)?)
+    }
+
+    /// Get order as json string
+    pub fn as_json(&self) -> Result<String> {
+        Ok(serde_json::to_string(&self)?)
     }
 }
 
@@ -54,7 +101,7 @@ pub struct NewOrder {
     pub fiat_code: String,
     pub fiat_amount: i64,
     pub payment_method: String,
-    pub prime: i64,
+    pub premium: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buyer_invoice: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -72,7 +119,7 @@ impl NewOrder {
         fiat_code: String,
         fiat_amount: i64,
         payment_method: String,
-        prime: i64,
+        premium: i64,
         buyer_invoice: Option<String>,
         created_at: Option<i64>,
     ) -> Self {
@@ -84,7 +131,7 @@ impl NewOrder {
             fiat_code,
             fiat_amount,
             payment_method,
-            prime,
+            premium,
             buyer_invoice,
             created_at,
         }
