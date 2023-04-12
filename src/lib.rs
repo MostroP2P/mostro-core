@@ -48,6 +48,7 @@ pub enum Status {
     Success,
     WaitingBuyerInvoice,
     WaitingPayment,
+    CooperativelyCanceled,
 }
 
 impl fmt::Display for Status {
@@ -73,6 +74,7 @@ impl FromStr for Status {
             "Success" => std::result::Result::Ok(Self::Success),
             "WaitingBuyerInvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
             "WaitingPayment" => std::result::Result::Ok(Self::WaitingPayment),
+            "CooperativelyCanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
             _ => Err(()),
         }
     }
