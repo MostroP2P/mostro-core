@@ -97,6 +97,8 @@ pub enum Action {
     HoldInvoicePaymentSettled,
     HoldInvoicePaymentCanceled,
     WaitingSellerToPay,
+    WaitingBuyerInvoice,
+    AddInvoice,
     BuyerTookOrder,
     CantDo,
 }
@@ -180,6 +182,8 @@ impl Message {
             | Action::HoldInvoicePaymentCanceled
             | Action::WaitingSellerToPay
             | Action::BuyerTookOrder
+            | Action::WaitingBuyerInvoice
+            | Action::AddInvoice
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
             }
@@ -197,7 +201,7 @@ impl Message {
     }
 
     pub fn get_payment_request(&self) -> Option<String> {
-        if self.action != Action::TakeSell {
+        if self.action != Action::TakeSell && self.action != Action::AddInvoice {
             return None;
         }
         match &self.content {
