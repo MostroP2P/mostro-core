@@ -16,6 +16,7 @@ pub struct Order {
     pub hash: Option<String>,
     pub preimage: Option<String>,
     pub creator_pubkey: String,
+    pub cancel_initiator_pubkey: Option<String>,
     pub buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
     pub status: String,

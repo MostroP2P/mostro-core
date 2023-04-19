@@ -90,6 +90,9 @@ pub enum Action {
     FiatSent,
     Release,
     Cancel,
+    CooperativeCancelInitiatedByYou,
+    CooperativeCancelInitiatedByPeer,
+    CooperativeCancelAccepted,
     BuyerInvoiceAccepted,
     SaleCompleted,
     PurchaseCompleted,
@@ -184,6 +187,9 @@ impl Message {
             | Action::BuyerTookOrder
             | Action::WaitingBuyerInvoice
             | Action::AddInvoice
+            | Action::CooperativeCancelInitiatedByYou
+            | Action::CooperativeCancelInitiatedByPeer
+            | Action::CooperativeCancelAccepted
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
             }
