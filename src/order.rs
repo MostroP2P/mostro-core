@@ -161,3 +161,4 @@ impl NewOrder {
         Ok(serde_json::to_string(&self)?)
     }
 }
+
