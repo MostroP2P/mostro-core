@@ -244,6 +244,8 @@ pub struct Review{
     pub total_reviews: u16,
     pub total_rating: u16,
     pub last_rating: u16,
+    pub max_rate: u64,
+    pub min_rate: u64,
 }
 
 impl Review{
@@ -251,11 +253,15 @@ impl Review{
         total_reviews :u16,
         total_rating :u16,
         last_rating  :u16,
+        min_rate: u64,
+        max_rate: u64,
     ) ->Self {
         Self { 
-            total_reviews: total_reviews,
-            total_rating: total_rating,
-            last_rating: last_rating 
+            total_reviews,
+            total_rating,
+            last_rating,
+            min_rate,
+            max_rate,
         }
     }
 
