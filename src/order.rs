@@ -8,7 +8,7 @@ use sqlx_crud::SqlxCrud;
 use uuid::Uuid;
 
 /// Database representation of an order
-#[derive(Debug, FromRow, SqlxCrud, Deserialize, Serialize)]
+#[derive(Debug, FromRow, SqlxCrud, Deserialize, Serialize, Clone)]
 pub struct Order {
     pub id: Uuid,
     pub kind: String,
