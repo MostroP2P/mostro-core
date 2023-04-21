@@ -241,18 +241,18 @@ impl Peer {
 /// We use this struct to create a user reputation
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Review{
-    pub total_reviews: u16,
-    pub total_rating: u16,
-    pub last_rating: u16,
+    pub total_reviews: u64,
+    pub total_rating: u64,
+    pub last_rating: u64,
     pub max_rate: u64,
     pub min_rate: u64,
 }
 
 impl Review{
     pub fn new(
-        total_reviews :u16,
-        total_rating :u16,
-        last_rating  :u16,
+        total_reviews :u64,
+        total_rating :u64,
+        last_rating  :u64,
         min_rate: u64,
         max_rate: u64,
     ) ->Self {
