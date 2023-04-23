@@ -178,6 +178,9 @@ impl Message {
                 }
                 true
             }
+            Action::VoteUser => {
+                matches!(&self.content, Some(Content::Peer(_)))
+            }
             Action::BuyerInvoiceAccepted
             | Action::SaleCompleted
             | Action::PurchaseCompleted
@@ -191,7 +194,6 @@ impl Message {
             | Action::CooperativeCancelInitiatedByYou
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
-            | Action::VoteUser
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
             }
@@ -223,11 +225,12 @@ impl Message {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
     pub pubkey: String,
+    pub vote: Option<u64>
 }
 
 impl Peer {
-    pub fn new(pubkey: String) -> Self {
-        Self { pubkey }
+    pub fn new(pubkey: String, vote : Option<u64>) -> Self {
+        Self { pubkey , vote }
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
