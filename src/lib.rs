@@ -161,7 +161,7 @@ impl Message {
     pub fn verify(&self) -> bool {
         match &self.action {
             Action::Order => matches!(&self.content, Some(Content::Order(_))),
-            Action::PayInvoice => {
+            Action::PayInvoice | Action::AddInvoice => {
                 if self.order_id.is_none() {
                     return false;
                 }
@@ -186,7 +186,6 @@ impl Message {
             | Action::WaitingSellerToPay
             | Action::BuyerTookOrder
             | Action::WaitingBuyerInvoice
-            | Action::AddInvoice
             | Action::CooperativeCancelInitiatedByYou
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
