@@ -40,7 +40,7 @@ pub struct Order {
     pub taken_at: i64,
     pub created_at: i64,
     pub buyer_sent_rate: bool,
-    pub seller_sent_rate:bool,
+    pub seller_sent_rate: bool,
 }
 
 impl Order {
@@ -164,4 +164,3 @@ impl NewOrder {
         Ok(serde_json::to_string(&self)?)
     }
 }
-
