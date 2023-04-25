@@ -119,6 +119,7 @@ pub struct Message {
     pub version: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order_id: Option<Uuid>,
+    pub pubkey: String,
     pub action: Action,
     pub content: Option<Content>,
 }
@@ -139,12 +140,14 @@ impl Message {
     pub fn new(
         version: u8,
         order_id: Option<Uuid>,
+        pubkey: String,
         action: Action,
         content: Option<Content>,
     ) -> Self {
         Self {
             version,
             order_id,
+            pubkey,
             action,
             content,
         }

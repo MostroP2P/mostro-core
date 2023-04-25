@@ -18,7 +18,9 @@ pub struct Order {
     pub creator_pubkey: String,
     pub cancel_initiator_pubkey: Option<String>,
     pub buyer_pubkey: Option<String>,
+    pub master_buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
+    pub master_seller_pubkey: Option<String>,
     pub status: String,
     pub price_from_api: bool,
     pub premium: i64,
@@ -54,6 +56,8 @@ impl Order {
             self.fiat_amount,
             self.payment_method.clone(),
             self.premium,
+            None,
+            None,
             self.buyer_invoice.clone(),
             Some(self.created_at),
         )
@@ -121,6 +125,10 @@ pub struct NewOrder {
     pub payment_method: String,
     pub premium: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_buyer_pubkey: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub master_seller_pubkey: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub buyer_invoice: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<i64>,
@@ -138,6 +146,8 @@ impl NewOrder {
         fiat_amount: i64,
         payment_method: String,
         premium: i64,
+        master_buyer_pubkey: Option<String>,
+        master_seller_pubkey: Option<String>,
         buyer_invoice: Option<String>,
         created_at: Option<i64>,
     ) -> Self {
@@ -150,6 +160,8 @@ impl NewOrder {
             fiat_amount,
             payment_method,
             premium,
+            master_buyer_pubkey,
+            master_seller_pubkey,
             buyer_invoice,
             created_at,
         }
