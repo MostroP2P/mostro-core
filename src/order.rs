@@ -8,7 +8,7 @@ use sqlx_crud::SqlxCrud;
 use uuid::Uuid;
 
 /// Database representation of an order
-#[derive(Debug, FromRow, SqlxCrud, Deserialize, Serialize)]
+#[derive(Debug, FromRow, SqlxCrud, Deserialize, Serialize, Clone)]
 pub struct Order {
     pub id: Uuid,
     pub kind: String,
@@ -39,6 +39,8 @@ pub struct Order {
     pub invoice_held_at: i64,
     pub taken_at: i64,
     pub created_at: i64,
+    pub buyer_sent_rate: bool,
+    pub seller_sent_rate:bool,
 }
 
 impl Order {
@@ -162,3 +164,4 @@ impl NewOrder {
         Ok(serde_json::to_string(&self)?)
     }
 }
+
