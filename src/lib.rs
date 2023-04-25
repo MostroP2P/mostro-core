@@ -225,11 +225,11 @@ impl Message {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
     pub pubkey: String,
-    pub vote: Option<u64>
+    pub vote: Option<f64>
 }
 
 impl Peer {
-    pub fn new(pubkey: String, vote : Option<u64>) -> Self {
+    pub fn new(pubkey: String, vote : Option<f64>) -> Self {
         Self { pubkey , vote }
     }
 
@@ -244,20 +244,20 @@ impl Peer {
 /// We use this struct to create a user reputation
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Review{
-    pub total_reviews: u64,
-    pub total_rating: u64,
-    pub last_rating: u64,
-    pub max_rate: u64,
-    pub min_rate: u64,
+    pub total_reviews: f64,
+    pub total_rating: f64,
+    pub last_rating: f64,
+    pub max_rate: f64,
+    pub min_rate: f64,
 }
 
 impl Review{
     pub fn new(
-        total_reviews :u64,
-        total_rating :u64,
-        last_rating  :u64,
-        min_rate: u64,
-        max_rate: u64,
+        total_reviews :f64,
+        total_rating :f64,
+        last_rating  :f64,
+        min_rate: f64,
+        max_rate: f64,
     ) ->Self {
         Self { 
             total_reviews,
