@@ -39,8 +39,8 @@ pub struct Order {
     pub invoice_held_at: i64,
     pub taken_at: i64,
     pub created_at: i64,
-    pub buyer_voted: bool,
-    pub seller_voted:bool,
+    pub buyer_sent_rate: bool,
+    pub seller_sent_rate:bool,
 }
 
 impl Order {

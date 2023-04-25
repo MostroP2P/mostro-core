@@ -103,7 +103,7 @@ pub enum Action {
     WaitingBuyerInvoice,
     AddInvoice,
     BuyerTookOrder,
-    VoteUser,
+    RateUser,
     CantDo,
 }
 
@@ -178,7 +178,7 @@ impl Message {
                 }
                 true
             }
-            Action::VoteUser => {
+            Action::RateUser => {
                 matches!(&self.content, Some(Content::Peer(_)))
             }
             Action::BuyerInvoiceAccepted
@@ -225,12 +225,12 @@ impl Message {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
     pub pubkey: String,
-    pub vote: Option<f64>
+    pub rating: Option<f64>
 }
 
 impl Peer {
-    pub fn new(pubkey: String, vote : Option<f64>) -> Self {
-        Self { pubkey , vote }
+    pub fn new(pubkey: String, rating : Option<f64>) -> Self {
+        Self { pubkey , rating }
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
@@ -243,7 +243,7 @@ impl Peer {
 }
 /// We use this struct to create a user reputation
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Review{
+pub struct Rating{
     pub total_reviews: f64,
     pub total_rating: f64,
     pub last_rating: f64,
@@ -251,7 +251,7 @@ pub struct Review{
     pub min_rate: f64,
 }
 
-impl Review{
+impl Rating{
     pub fn new(
         total_reviews :f64,
         total_rating :f64,
