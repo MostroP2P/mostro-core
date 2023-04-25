@@ -145,7 +145,7 @@ impl Message {
     pub fn new(
         version: u8,
         order_id: Option<Uuid>,
-        pubkey: String,
+        pubkey: Option<String>,
         action: Action,
         content: Option<Content>,
     ) -> Self {
