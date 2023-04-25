@@ -224,12 +224,12 @@ impl Message {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
     pub pubkey: String,
-    pub rating: Option<f64>
+    pub rating: Option<f64>,
 }
 
 impl Peer {
-    pub fn new(pubkey: String, rating : Option<f64>) -> Self {
-        Self { pubkey , rating }
+    pub fn new(pubkey: String, rating: Option<f64>) -> Self {
+        Self { pubkey, rating }
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
@@ -242,7 +242,7 @@ impl Peer {
 }
 /// We use this struct to create a user reputation
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Rating{
+pub struct Rating {
     pub total_reviews: f64,
     pub total_rating: f64,
     pub last_rating: f64,
@@ -250,15 +250,15 @@ pub struct Rating{
     pub min_rate: f64,
 }
 
-impl Rating{
+impl Rating {
     pub fn new(
-        total_reviews :f64,
-        total_rating :f64,
-        last_rating  :f64,
+        total_reviews: f64,
+        total_rating: f64,
+        last_rating: f64,
         min_rate: f64,
         max_rate: f64,
-    ) ->Self {
-        Self { 
+    ) -> Self {
+        Self {
             total_reviews,
             total_rating,
             last_rating,
@@ -267,8 +267,8 @@ impl Rating{
         }
     }
 
-     /// New order from json string
-     pub fn from_json(json: &str) -> Result<Self> {
+    /// New order from json string
+    pub fn from_json(json: &str) -> Result<Self> {
         Ok(serde_json::from_str(json)?)
     }
 
