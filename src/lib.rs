@@ -117,10 +117,15 @@ impl fmt::Display for Action {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Message {
     pub version: u8,
+    /// Most of the times messages are related to an order
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order_id: Option<Uuid>,
-    pub pubkey: String,
+    /// Real pubkey of the user hidden in the encrypted message,
+    /// used with ephemeral identities
+    pub pubkey: Option<String>,
+    /// Action to be taken
     pub action: Action,
+    /// Message content
     pub content: Option<Content>,
 }
 
