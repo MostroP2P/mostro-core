@@ -105,6 +105,7 @@ pub enum Action {
     BuyerTookOrder,
     RateUser,
     CantDo,
+    MessageReceived,
 }
 
 impl fmt::Display for Action {
@@ -137,6 +138,7 @@ pub enum Content {
     SmallOrder(SmallOrder),
     TextMessage(String),
     Peer(Peer),
+    RatingUser(u64),
 }
 
 #[allow(dead_code)]
@@ -187,7 +189,7 @@ impl Message {
                 true
             }
             Action::RateUser => {
-                matches!(&self.content, Some(Content::Peer(_)))
+                matches!(&self.content, Some(Content::RatingUser(_)))
             }
             Action::BuyerInvoiceAccepted
             | Action::SaleCompleted
@@ -201,6 +203,7 @@ impl Message {
             | Action::CooperativeCancelInitiatedByYou
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
+            | Action::MessageReceived
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
             }
@@ -232,12 +235,11 @@ impl Message {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
     pub pubkey: String,
-    pub rating: Option<f64>,
 }
 
 impl Peer {
-    pub fn new(pubkey: String, rating: Option<f64>) -> Self {
-        Self { pubkey, rating }
+    pub fn new(pubkey: String) -> Self {
+        Self { pubkey }
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
@@ -251,20 +253,20 @@ impl Peer {
 /// We use this struct to create a user reputation
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Rating {
-    pub total_reviews: f64,
+    pub total_reviews: u64,
     pub total_rating: f64,
-    pub last_rating: f64,
-    pub max_rate: f64,
-    pub min_rate: f64,
+    pub last_rating: u64,
+    pub max_rate: u64,
+    pub min_rate: u64,
 }
 
 impl Rating {
     pub fn new(
-        total_reviews: f64,
+        total_reviews: u64,
         total_rating: f64,
-        last_rating: f64,
-        min_rate: f64,
-        max_rate: f64,
+        last_rating: u64,
+        min_rate: u64,
+        max_rate: u64,
     ) -> Self {
         Self {
             total_reviews,
