@@ -105,7 +105,7 @@ pub enum Action {
     BuyerTookOrder,
     RateUser,
     CantDo,
-    MessageReceived,
+    Received,
 }
 
 impl fmt::Display for Action {
@@ -203,7 +203,7 @@ impl Message {
             | Action::CooperativeCancelInitiatedByYou
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
-            | Action::MessageReceived
+            | Action::Received
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
             }
