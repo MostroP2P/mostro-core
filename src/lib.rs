@@ -138,7 +138,7 @@ pub enum Content {
     SmallOrder(SmallOrder),
     TextMessage(String),
     Peer(Peer),
-    RatingUser(u64),
+    RatingUser(u8),
 }
 
 #[allow(dead_code)]
@@ -255,18 +255,18 @@ impl Peer {
 pub struct Rating {
     pub total_reviews: u64,
     pub total_rating: f64,
-    pub last_rating: u64,
-    pub max_rate: u64,
-    pub min_rate: u64,
+    pub last_rating: u8,
+    pub max_rate: u8,
+    pub min_rate: u8,
 }
 
 impl Rating {
     pub fn new(
         total_reviews: u64,
         total_rating: f64,
-        last_rating: u64,
-        min_rate: u64,
-        max_rate: u64,
+        last_rating: u8,
+        min_rate: u8,
+        max_rate: u8,
     ) -> Self {
         Self {
             total_reviews,
