@@ -107,6 +107,7 @@ pub enum Action {
     CantDo,
     Received,
     Dispute,
+    AdminCancel,
 }
 
 impl fmt::Display for Action {
@@ -184,6 +185,7 @@ impl Message {
             | Action::FiatSent
             | Action::Release
             | Action::Dispute
+            | Action::AdminCancel
             | Action::Cancel => {
                 if self.order_id.is_none() {
                     return false;
