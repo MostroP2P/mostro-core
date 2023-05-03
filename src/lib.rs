@@ -108,6 +108,7 @@ pub enum Action {
     Received,
     Dispute,
     AdminCancel,
+    CanceledByAdmin,
 }
 
 impl fmt::Display for Action {
@@ -207,6 +208,7 @@ impl Message {
             | Action::CooperativeCancelInitiatedByYou
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
+            | Action::CanceledByAdmin
             | Action::Received
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
