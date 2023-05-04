@@ -39,6 +39,7 @@ pub enum Status {
     Active,
     Canceled,
     CanceledByAdmin,
+    SettledByAdmin,
     CompletedByAdmin,
     Dispute,
     Expired,
@@ -65,6 +66,7 @@ impl FromStr for Status {
             "Active" => std::result::Result::Ok(Self::Active),
             "Canceled" => std::result::Result::Ok(Self::Canceled),
             "CanceledByAdmin" => std::result::Result::Ok(Self::CanceledByAdmin),
+            "SettledByAdmin" => std::result::Result::Ok(Self::SettledByAdmin),
             "CompletedByAdmin" => std::result::Result::Ok(Self::CompletedByAdmin),
             "Dispute" => std::result::Result::Ok(Self::Dispute),
             "Expired" => std::result::Result::Ok(Self::Expired),
@@ -108,7 +110,7 @@ pub enum Action {
     Received,
     Dispute,
     AdminCancel,
-    CanceledByAdmin,
+    AdminSettle,
 }
 
 impl fmt::Display for Action {
@@ -187,6 +189,7 @@ impl Message {
             | Action::Release
             | Action::Dispute
             | Action::AdminCancel
+            | Action::AdminSettle
             | Action::Cancel => {
                 if self.order_id.is_none() {
                     return false;
@@ -208,7 +211,6 @@ impl Message {
             | Action::CooperativeCancelInitiatedByYou
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
-            | Action::CanceledByAdmin
             | Action::Received
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
