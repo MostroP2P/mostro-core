@@ -8,6 +8,8 @@ use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 
+pub const NOSTR_REPLACEABLE_EVENT_KIND: u64 = 30078;
+
 /// Orders can be only Buy or Sell
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Kind {
