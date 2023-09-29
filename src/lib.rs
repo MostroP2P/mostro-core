@@ -1,3 +1,4 @@
+pub mod dispute;
 pub mod order;
 
 use anyhow::{Ok, Result};
@@ -5,84 +6,9 @@ use clap::ValueEnum;
 use order::{NewOrder, SmallOrder};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::str::FromStr;
 use uuid::Uuid;
 
 pub const NOSTR_REPLACEABLE_EVENT_KIND: u64 = 30078;
-
-/// Orders can be only Buy or Sell
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum Kind {
-    Buy,
-    Sell,
-}
-
-impl FromStr for Kind {
-    type Err = ();
-
-    fn from_str(kind: &str) -> std::result::Result<Self, Self::Err> {
-        match kind {
-            "Buy" => std::result::Result::Ok(Self::Buy),
-            "Sell" => std::result::Result::Ok(Self::Sell),
-            _ => Err(()),
-        }
-    }
-}
-
-impl fmt::Display for Kind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-/// Each status that an order can have
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum Status {
-    Active,
-    Canceled,
-    CanceledByAdmin,
-    SettledByAdmin,
-    CompletedByAdmin,
-    Dispute,
-    Expired,
-    FiatSent,
-    SettledHoldInvoice,
-    Pending,
-    Success,
-    WaitingBuyerInvoice,
-    WaitingPayment,
-    CooperativelyCanceled,
-}
-
-impl fmt::Display for Status {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl FromStr for Status {
-    type Err = ();
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "Active" => std::result::Result::Ok(Self::Active),
-            "Canceled" => std::result::Result::Ok(Self::Canceled),
-            "CanceledByAdmin" => std::result::Result::Ok(Self::CanceledByAdmin),
-            "SettledByAdmin" => std::result::Result::Ok(Self::SettledByAdmin),
-            "CompletedByAdmin" => std::result::Result::Ok(Self::CompletedByAdmin),
-            "Dispute" => std::result::Result::Ok(Self::Dispute),
-            "Expired" => std::result::Result::Ok(Self::Expired),
-            "FiatSent" => std::result::Result::Ok(Self::FiatSent),
-            "SettledHoldInvoice" => std::result::Result::Ok(Self::SettledHoldInvoice),
-            "Pending" => std::result::Result::Ok(Self::Pending),
-            "Success" => std::result::Result::Ok(Self::Success),
-            "WaitingBuyerInvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
-            "WaitingPayment" => std::result::Result::Ok(Self::WaitingPayment),
-            "CooperativelyCanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
-            _ => Err(()),
-        }
-    }
-}
 
 /// Action is used to identify each message between Mostro and users
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone, ValueEnum)]
