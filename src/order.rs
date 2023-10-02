@@ -1,4 +1,5 @@
 use anyhow::{Ok, Result};
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use sqlx_crud::SqlxCrud;
@@ -7,7 +8,7 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 /// Orders can be only Buy or Sell
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Kind {
     Buy,
     Sell,
@@ -32,7 +33,7 @@ impl fmt::Display for Kind {
 }
 
 /// Each status that an order can have
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Status {
     Active,
     Canceled,
