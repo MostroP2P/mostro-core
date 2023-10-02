@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use sqlx_crud::SqlxCrud;
 use std::fmt;
-use std::str::FromStr;
 use uuid::Uuid;
 
 /// Orders can be only Buy or Sell
@@ -12,18 +11,6 @@ use uuid::Uuid;
 pub enum Kind {
     Buy,
     Sell,
-}
-
-impl FromStr for Kind {
-    type Err = ();
-
-    fn from_str(kind: &str) -> std::result::Result<Self, Self::Err> {
-        match kind {
-            "Buy" => std::result::Result::Ok(Self::Buy),
-            "Sell" => std::result::Result::Ok(Self::Sell),
-            _ => Err(()),
-        }
-    }
 }
 
 impl fmt::Display for Kind {
@@ -54,30 +41,6 @@ pub enum Status {
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{self:?}")
-    }
-}
-
-impl FromStr for Status {
-    type Err = ();
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "Active" => std::result::Result::Ok(Self::Active),
-            "Canceled" => std::result::Result::Ok(Self::Canceled),
-            "CanceledByAdmin" => std::result::Result::Ok(Self::CanceledByAdmin),
-            "SettledByAdmin" => std::result::Result::Ok(Self::SettledByAdmin),
-            "CompletedByAdmin" => std::result::Result::Ok(Self::CompletedByAdmin),
-            "Dispute" => std::result::Result::Ok(Self::Dispute),
-            "Expired" => std::result::Result::Ok(Self::Expired),
-            "FiatSent" => std::result::Result::Ok(Self::FiatSent),
-            "SettledHoldInvoice" => std::result::Result::Ok(Self::SettledHoldInvoice),
-            "Pending" => std::result::Result::Ok(Self::Pending),
-            "Success" => std::result::Result::Ok(Self::Success),
-            "WaitingBuyerInvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
-            "WaitingPayment" => std::result::Result::Ok(Self::WaitingPayment),
-            "CooperativelyCanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
-            _ => Err(()),
-        }
     }
 }
 
@@ -123,8 +86,8 @@ impl Order {
     pub fn as_new_order(&self) -> NewOrder {
         NewOrder::new(
             Some(self.id),
-            Kind::from_str(&self.kind).unwrap(),
-            Status::from_str(&self.status).unwrap(),
+            Kind::from_str(&self.kind, false).unwrap(),
+            Status::from_str(&self.status, false).unwrap(),
             self.amount,
             self.fiat_code.clone(),
             self.fiat_amount,
