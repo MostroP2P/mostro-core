@@ -21,6 +21,8 @@ pub enum Action {
     Cancel,
     CooperativeCancelInitiatedByYou,
     CooperativeCancelInitiatedByPeer,
+    DisputeInitiatedByYou,
+    DisputeInitiatedByPeer,
     CooperativeCancelAccepted,
     BuyerInvoiceAccepted,
     SaleCompleted,
