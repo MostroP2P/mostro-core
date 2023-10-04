@@ -139,6 +139,8 @@ impl Message {
             | Action::WaitingBuyerInvoice
             | Action::CooperativeCancelInitiatedByYou
             | Action::CooperativeCancelInitiatedByPeer
+            | Action::DisputeInitiatedByYou
+            | Action::DisputeInitiatedByPeer
             | Action::CooperativeCancelAccepted
             | Action::Received
             | Action::CantDo => {
