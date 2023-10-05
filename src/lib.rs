@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
 
-pub const NOSTR_REPLACEABLE_EVENT_KIND: u64 = 30078;
+pub const NOSTR_REPLACEABLE_EVENT_KIND: u16 = 30078;
 
 /// Action is used to identify each message between Mostro and users
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
