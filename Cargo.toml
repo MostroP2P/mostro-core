@@ -24,3 +24,4 @@ sqlx = { version = "0.6.2", features = [
   "uuid",
 ] }
 sqlx-crud = { version = "0.3.2", features = ["runtime-tokio-rustls"] }
+clap = { version = "4.4.6", features = ["derive"] }
