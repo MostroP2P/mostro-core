@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sqlx::types::chrono::Utc;
 use sqlx::FromRow;
 use sqlx::Type;
 use sqlx_crud::SqlxCrud;
@@ -45,9 +46,23 @@ impl FromStr for Status {
 /// Database representation of a dispute
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, FromRow, SqlxCrud)]
 pub struct Dispute {
+    pub id: Uuid,
     pub order_id: Uuid,
     pub status: Status,
     pub solver_pubkey: Option<String>,
     pub created_at: i64,
     pub taken_at: i64,
+}
+
+impl Dispute {
+    pub fn new(order_id: Uuid) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            order_id,
+            status: Status::Pending,
+            solver_pubkey: None,
+            created_at: Utc::now().timestamp(),
+            taken_at: 0,
+        }
+    }
 }

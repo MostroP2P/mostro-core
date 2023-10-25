@@ -132,7 +132,7 @@ impl Order {
             None,
             None,
             self.buyer_invoice.clone(),
-            Some(self.created_at),
+            self.created_at,
         )
     }
 }
@@ -203,8 +203,7 @@ pub struct NewOrder {
     pub master_seller_pubkey: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buyer_invoice: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub created_at: Option<i64>,
+    pub created_at: i64,
 }
 
 #[allow(dead_code)]
@@ -222,7 +221,7 @@ impl NewOrder {
         master_buyer_pubkey: Option<String>,
         master_seller_pubkey: Option<String>,
         buyer_invoice: Option<String>,
-        created_at: Option<i64>,
+        created_at: i64,
     ) -> Self {
         Self {
             id,
