@@ -1,5 +1,6 @@
 pub mod dispute;
 pub mod order;
+pub mod user;
 
 use anyhow::{Ok, Result};
 use order::{NewOrder, SmallOrder};
@@ -40,6 +41,7 @@ pub enum Action {
     Dispute,
     AdminCancel,
     AdminSettle,
+    AdminAddSolver,
 }
 
 impl fmt::Display for Action {
@@ -121,6 +123,12 @@ impl Message {
             | Action::AdminSettle
             | Action::Cancel => {
                 if self.order_id.is_none() {
+                    return false;
+                }
+                true
+            }
+            Action::AdminAddSolver => {
+                if self.pubkey.is_none() {
                     return false;
                 }
                 true
