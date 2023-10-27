@@ -42,6 +42,7 @@ pub enum Action {
     AdminCancel,
     AdminSettle,
     AdminAddSolver,
+    AdminTakeDispute,
 }
 
 impl fmt::Display for Action {
@@ -75,6 +76,7 @@ pub enum Content {
     TextMessage(String),
     Peer(Peer),
     RatingUser(u8),
+    Dispute(String),
 }
 
 #[allow(dead_code)]
@@ -132,6 +134,9 @@ impl Message {
                     return false;
                 }
                 true
+            }
+            Action::AdminTakeDispute => {
+                matches!(&self.content, Some(Content::Dispute(_)))
             }
             Action::RateUser => {
                 matches!(&self.content, Some(Content::RatingUser(_)))
