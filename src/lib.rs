@@ -1,5 +1,6 @@
 pub mod dispute;
 pub mod order;
+pub mod rating;
 pub mod user;
 
 use anyhow::{Ok, Result};
@@ -198,43 +199,6 @@ impl Peer {
         Ok(serde_json::from_str(json)?)
     }
 
-    pub fn as_json(&self) -> Result<String> {
-        Ok(serde_json::to_string(&self)?)
-    }
-}
-/// We use this struct to create a user reputation
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Rating {
-    pub total_reviews: u64,
-    pub total_rating: f64,
-    pub last_rating: u8,
-    pub max_rate: u8,
-    pub min_rate: u8,
-}
-
-impl Rating {
-    pub fn new(
-        total_reviews: u64,
-        total_rating: f64,
-        last_rating: u8,
-        min_rate: u8,
-        max_rate: u8,
-    ) -> Self {
-        Self {
-            total_reviews,
-            total_rating,
-            last_rating,
-            min_rate,
-            max_rate,
-        }
-    }
-
-    /// New order from json string
-    pub fn from_json(json: &str) -> Result<Self> {
-        Ok(serde_json::from_str(json)?)
-    }
-
-    /// Get order as json string
     pub fn as_json(&self) -> Result<String> {
         Ok(serde_json::to_string(&self)?)
     }
