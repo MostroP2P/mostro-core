@@ -77,7 +77,7 @@ pub enum Content {
     TextMessage(String),
     Peer(Peer),
     RatingUser(u8),
-    Dispute(String),
+    Dispute(Uuid),
 }
 
 #[allow(dead_code)]
