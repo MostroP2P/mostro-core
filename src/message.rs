@@ -65,9 +65,37 @@ impl fmt::Display for Action {
     }
 }
 
+/// Use this Message to establish communication between users and Mostro
+#[derive(Debug, Deserialize, Serialize)]
 pub enum Message {
     Order(MessageKind),
     Dispute(MessageKind),
+}
+
+impl Message {
+    /// Get message from json string
+    pub fn from_json(json: &str) -> Result<Self> {
+        Ok(serde_json::from_str(json)?)
+    }
+
+    /// Get message as json string
+    pub fn as_json(&self) -> Result<String> {
+        Ok(serde_json::to_string(&self)?)
+    }
+
+    pub fn get_order(&self) -> Option<&MessageKind> {
+        match self {
+            Message::Order(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    pub fn get_dispute(&self) -> Option<&MessageKind> {
+        match self {
+            Message::Dispute(m) => Some(m),
+            _ => None,
+        }
+    }
 }
 
 /// Use this Message to establish communication between users and Mostro
@@ -75,7 +103,7 @@ pub enum Message {
 pub struct MessageKind {
     /// Message version
     pub version: u8,
-    /// Message id are not mandatory
+    /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
     /// Real pubkey of the user hidden in the encrypted message,
@@ -200,5 +228,9 @@ impl MessageKind {
             Some(Content::PaymentRequest(_, pr)) => Some(pr.to_owned()),
             _ => None,
         }
+    }
+
+    pub fn get_content(&self) -> Option<&Content> {
+        self.content.as_ref()
     }
 }
