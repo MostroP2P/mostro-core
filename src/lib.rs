@@ -8,18 +8,17 @@ pub mod user;
 /// and use 30078 as event kind
 pub const NOSTR_REPLACEABLE_EVENT_KIND: u64 = 30078;
 
-
 #[cfg(test)]
 mod test {
 
     use crate::message::{Action, Content, Message, MessageKind};
     use crate::order::{Kind, NewOrder, Status};
-    use uuid::Uuid;
+    use uuid::uuid;
 
     #[test]
     fn test_message_order() {
-        let uuid = Uuid::new_v4();
-        let test = Message::Order(MessageKind::new(
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let test_message = Message::Order(MessageKind::new(
             0,
             Some(uuid),
             None,
@@ -39,9 +38,11 @@ mod test {
                 1627371434,
             ))),
         ));
-
-        if let Some(ord) = test.get_order() {
-            println!("{:?}", ord);
-        }
+        let sample_message = r#"{"Order":{"version":0,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"NewOrder","content":{"Order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"Sell","status":"Pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
+        let message = Message::from_json(sample_message).unwrap();
+        assert!(message.verify());
+        let message_json = message.as_json().unwrap();
+        let test_message_json = test_message.as_json().unwrap();
+        assert_eq!(message_json, test_message_json);
     }
 }

@@ -73,6 +73,32 @@ pub enum Message {
 }
 
 impl Message {
+    /// New order message
+    pub fn new_order(
+        version: u8,
+        id: Option<Uuid>,
+        pubkey: Option<String>,
+        action: Action,
+        content: Option<Content>,
+    ) -> Self {
+        let kind = MessageKind::new(version, id, pubkey, action, content);
+
+        Self::Order(kind)
+    }
+
+    /// New dispute message
+    pub fn new_dispute(
+        version: u8,
+        id: Option<Uuid>,
+        pubkey: Option<String>,
+        action: Action,
+        content: Option<Content>,
+    ) -> Self {
+        let kind = MessageKind::new(version, id, pubkey, action, content);
+
+        Self::Dispute(kind)
+    }
+
     /// Get message from json string
     pub fn from_json(json: &str) -> Result<Self> {
         Ok(serde_json::from_str(json)?)
@@ -81,20 +107,6 @@ impl Message {
     /// Get message as json string
     pub fn as_json(&self) -> Result<String> {
         Ok(serde_json::to_string(&self)?)
-    }
-
-    pub fn get_order(&self) -> Option<&MessageKind> {
-        match self {
-            Message::Order(m) => Some(m),
-            _ => None,
-        }
-    }
-
-    pub fn get_dispute(&self) -> Option<&MessageKind> {
-        match self {
-            Message::Dispute(m) => Some(m),
-            _ => None,
-        }
     }
 
     // Get inner message kind
@@ -106,10 +118,18 @@ impl Message {
     }
 
     // Get action from the inner message
-    pub fn inner_action(&self) -> Option<Action>{
+    pub fn inner_action(&self) -> Option<Action> {
         match self {
             Message::Dispute(a) => Some(a.get_action()),
             Message::Order(a) => Some(a.get_action()),
+        }
+    }
+
+    /// Verify if is valid the inner message
+    pub fn verify(&self) -> bool {
+        match self {
+            Message::Order(m) => m.verify(),
+            Message::Dispute(m) => m.verify(),
         }
     }
 }
@@ -174,8 +194,6 @@ impl MessageKind {
     pub fn get_action(&self) -> Action {
         self.action.clone()
     }
-
-   
 
     /// Verify if is valid message
     pub fn verify(&self) -> bool {
