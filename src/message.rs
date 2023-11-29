@@ -96,6 +96,22 @@ impl Message {
             _ => None,
         }
     }
+
+    // Get inner message kind
+    pub fn get_inner_message_kind(&self) -> &MessageKind {
+        match self {
+            Message::Dispute(k) => k,
+            Message::Order(k) => k,
+        }
+    }
+
+    // Get action from the inner message
+    pub fn inner_action(&self) -> Option<Action>{
+        match self {
+            Message::Dispute(a) => Some(a.get_action()),
+            Message::Order(a) => Some(a.get_action()),
+        }
+    }
 }
 
 /// Use this Message to establish communication between users and Mostro
@@ -153,6 +169,13 @@ impl MessageKind {
     pub fn as_json(&self) -> Result<String> {
         Ok(serde_json::to_string(&self)?)
     }
+
+    // Get action from the inner message
+    pub fn get_action(&self) -> Action {
+        self.action.clone()
+    }
+
+   
 
     /// Verify if is valid message
     pub fn verify(&self) -> bool {
