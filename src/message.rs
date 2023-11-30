@@ -1,5 +1,5 @@
 use crate::order::{NewOrder, SmallOrder};
-use crate::{PROTOCOL_MAJOR_VER, PROTOCOL_MINOR_VER};
+use crate::PROTOCOL_VER;
 use anyhow::{Ok, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -170,7 +170,6 @@ impl Message {
 pub struct MessageKind {
     /// Message version
     pub version_major: u8,
-    pub version_minor: u8,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
@@ -205,8 +204,7 @@ impl MessageKind {
         content: Option<Content>,
     ) -> Self {
         Self {
-            version_major: PROTOCOL_MAJOR_VER,
-            version_minor: PROTOCOL_MINOR_VER,
+            version_major: PROTOCOL_VER,
             id,
             pubkey,
             action,
