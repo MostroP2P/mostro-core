@@ -1,4 +1,4 @@
-use crate::order::{NewOrder, SmallOrder};
+use crate::order::SmallOrder;
 use crate::{PROTOCOL_MAJOR_VER, PROTOCOL_MINOR_VER};
 use anyhow::{Ok, Result};
 use serde::{Deserialize, Serialize};
@@ -186,9 +186,8 @@ pub struct MessageKind {
 /// Message content
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum Content {
-    Order(NewOrder),
-    PaymentRequest(Option<NewOrder>, String),
-    SmallOrder(SmallOrder),
+    Order(SmallOrder),
+    PaymentRequest(Option<SmallOrder>, String),
     TextMessage(String),
     Peer(Peer),
     RatingUser(u8),
@@ -283,7 +282,7 @@ impl MessageKind {
         }
     }
 
-    pub fn get_order(&self) -> Option<&NewOrder> {
+    pub fn get_order(&self) -> Option<&SmallOrder> {
         if self.action != Action::NewOrder {
             return None;
         }
