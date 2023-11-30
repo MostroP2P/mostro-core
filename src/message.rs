@@ -52,7 +52,7 @@ pub enum Action {
     BuyerTookOrder,
     RateUser,
     CantDo,
-    Received,
+    VoteReceived,
     Dispute,
     AdminCancel,
     AdminSettle,
@@ -72,6 +72,7 @@ pub enum Message {
     Order(MessageKind),
     Dispute(MessageKind),
     CantDo(MessageKind),
+    Rate(MessageKind),
 }
 
 impl Message {
@@ -99,9 +100,26 @@ impl Message {
         Self::Dispute(kind)
     }
 
+    /// New rate user message
+    pub fn new_rate_user(
+        id: Option<Uuid>,
+        pubkey: Option<String>,
+        content: Option<Content>,
+    ) -> Self {
+        let kind = MessageKind::new(id, pubkey, Action::RateUser, content);
+
+        Self::Order(kind)
+    }
+
+    pub fn ack_rate_user(id: Option<Uuid>, pubkey: Option<String>) -> Self {
+        let kind = MessageKind::new(id, pubkey, Action::VoteReceived, None);
+
+        Self::Order(kind)
+    }
+
     /// New can't do template message message
-    pub fn cant_do(id: Option<Uuid>, pubkey: Option<String>) -> Self {
-        let kind = MessageKind::new(id, pubkey, Action::CantDo, None);
+    pub fn cant_do(id: Option<Uuid>, pubkey: Option<String>, content: Option<Content>) -> Self {
+        let kind = MessageKind::new(id, pubkey, Action::CantDo, content);
 
         Self::CantDo(kind)
     }
@@ -122,6 +140,7 @@ impl Message {
             Message::Dispute(k) => k,
             Message::Order(k) => k,
             Message::CantDo(k) => k,
+            Message::Rate(k) => k,
         }
     }
 
@@ -131,6 +150,7 @@ impl Message {
             Message::Dispute(a) => Some(a.get_action()),
             Message::Order(a) => Some(a.get_action()),
             Message::CantDo(a) => Some(a.get_action()),
+            Message::Rate(a) => Some(a.get_action()),
         }
     }
 
@@ -140,6 +160,7 @@ impl Message {
             Message::Order(m) => m.verify(),
             Message::Dispute(m) => m.verify(),
             Message::CantDo(m) => m.verify(),
+            Message::Rate(m) => m.verify(),
         }
     }
 }
@@ -255,7 +276,7 @@ impl MessageKind {
             | Action::DisputeInitiatedByYou
             | Action::DisputeInitiatedByPeer
             | Action::CooperativeCancelAccepted
-            | Action::Received
+            | Action::VoteReceived
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
             }
