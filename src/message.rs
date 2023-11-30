@@ -1,4 +1,5 @@
 use crate::order::{NewOrder, SmallOrder};
+use crate::{PROTOCOL_MAJOR_VER, PROTOCOL_MINOR_VER};
 use anyhow::{Ok, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -70,33 +71,39 @@ impl fmt::Display for Action {
 pub enum Message {
     Order(MessageKind),
     Dispute(MessageKind),
+    CantDo(MessageKind),
 }
 
 impl Message {
     /// New order message
     pub fn new_order(
-        version: u8,
         id: Option<Uuid>,
         pubkey: Option<String>,
         action: Action,
         content: Option<Content>,
     ) -> Self {
-        let kind = MessageKind::new(version, id, pubkey, action, content);
+        let kind = MessageKind::new(id, pubkey, action, content);
 
         Self::Order(kind)
     }
 
     /// New dispute message
     pub fn new_dispute(
-        version: u8,
         id: Option<Uuid>,
         pubkey: Option<String>,
         action: Action,
         content: Option<Content>,
     ) -> Self {
-        let kind = MessageKind::new(version, id, pubkey, action, content);
+        let kind = MessageKind::new(id, pubkey, action, content);
 
         Self::Dispute(kind)
+    }
+
+    /// New can't do template message message
+    pub fn cant_do(id: Option<Uuid>, pubkey: Option<String>) -> Self {
+        let kind = MessageKind::new(id, pubkey, Action::CantDo, None);
+
+        Self::CantDo(kind)
     }
 
     /// Get message from json string
@@ -114,6 +121,7 @@ impl Message {
         match self {
             Message::Dispute(k) => k,
             Message::Order(k) => k,
+            Message::CantDo(k) => k,
         }
     }
 
@@ -122,6 +130,7 @@ impl Message {
         match self {
             Message::Dispute(a) => Some(a.get_action()),
             Message::Order(a) => Some(a.get_action()),
+            Message::CantDo(a) => Some(a.get_action()),
         }
     }
 
@@ -130,6 +139,7 @@ impl Message {
         match self {
             Message::Order(m) => m.verify(),
             Message::Dispute(m) => m.verify(),
+            Message::CantDo(m) => m.verify(),
         }
     }
 }
@@ -138,7 +148,8 @@ impl Message {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct MessageKind {
     /// Message version
-    pub version: u8,
+    pub version_major: u8,
+    pub version_minor: u8,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
@@ -167,14 +178,14 @@ pub enum Content {
 impl MessageKind {
     /// New message
     pub fn new(
-        version: u8,
         id: Option<Uuid>,
         pubkey: Option<String>,
         action: Action,
         content: Option<Content>,
     ) -> Self {
         Self {
-            version,
+            version_major: PROTOCOL_MAJOR_VER,
+            version_minor: PROTOCOL_MINOR_VER,
             id,
             pubkey,
             action,

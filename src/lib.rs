@@ -7,6 +7,8 @@ pub mod user;
 /// All messages broadcasted by Mostro daemon are Parameterized Replaceable Events
 /// and use 30078 as event kind
 pub const NOSTR_REPLACEABLE_EVENT_KIND: u64 = 30078;
+pub const PROTOCOL_MAJOR_VER: u8 = 1;
+pub const PROTOCOL_MINOR_VER: u8 = 0;
 
 #[cfg(test)]
 mod test {
@@ -19,7 +21,6 @@ mod test {
     fn test_message_order() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let test_message = Message::Order(MessageKind::new(
-            0,
             Some(uuid),
             None,
             Action::NewOrder,
@@ -38,7 +39,7 @@ mod test {
                 1627371434,
             ))),
         ));
-        let sample_message = r#"{"Order":{"version":0,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"NewOrder","content":{"Order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"Sell","status":"Pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
+        let sample_message = r#"{"Order":{"version_major":1,"version_minor":0,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"NewOrder","content":{"Order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"Sell","status":"Pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
         let message = Message::from_json(sample_message).unwrap();
         assert!(message.verify());
         let message_json = message.as_json().unwrap();
