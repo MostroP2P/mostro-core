@@ -13,7 +13,7 @@ pub const PROTOCOL_VER: u8 = 1;
 mod test {
 
     use crate::message::{Action, Content, Message, MessageKind};
-    use crate::order::{Kind, NewOrder, Status};
+    use crate::order::{Kind, Status, SmallOrder};
     use uuid::uuid;
 
     #[test]
@@ -23,10 +23,10 @@ mod test {
             Some(uuid),
             None,
             Action::NewOrder,
-            Some(Content::Order(NewOrder::new(
+            Some(Content::Order(SmallOrder::new(
                 Some(uuid),
-                Kind::Sell,
-                Status::Pending,
+                Some(Kind::Sell),
+                Some(Status::Pending),
                 100,
                 "eur".to_string(),
                 100,
@@ -35,7 +35,7 @@ mod test {
                 None,
                 None,
                 None,
-                1627371434,
+                Some(1627371434),
             ))),
         ));
         let sample_message = r#"{"Order":{"version_major":1,"version_minor":0,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"NewOrder","content":{"Order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"Sell","status":"Pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
