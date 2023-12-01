@@ -119,11 +119,11 @@ pub struct Order {
 }
 
 impl Order {
-    pub fn as_new_order(&self) -> NewOrder {
-        NewOrder::new(
+    pub fn as_new_order(&self) -> SmallOrder {
+        SmallOrder::new(
             Some(self.id),
-            Kind::from_str(&self.kind).unwrap(),
-            Status::from_str(&self.status).unwrap(),
+            Some(Kind::from_str(&self.kind).unwrap()),
+            Some(Status::from_str(&self.status).unwrap()),
             self.amount,
             self.fiat_code.clone(),
             self.fiat_amount,
@@ -132,66 +132,18 @@ impl Order {
             None,
             None,
             self.buyer_invoice.clone(),
-            self.created_at,
+            Some(self.created_at),
         )
-    }
-}
-
-/// Small representation of an order
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct SmallOrder {
-    pub id: Uuid,
-    pub amount: i64,
-    pub fiat_code: String,
-    pub fiat_amount: i64,
-    pub payment_method: String,
-    pub premium: i64,
-    pub buyer_pubkey: Option<String>,
-    pub seller_pubkey: Option<String>,
-}
-
-#[allow(dead_code)]
-impl SmallOrder {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        id: Uuid,
-        amount: i64,
-        fiat_code: String,
-        fiat_amount: i64,
-        payment_method: String,
-        premium: i64,
-        buyer_pubkey: Option<String>,
-        seller_pubkey: Option<String>,
-    ) -> Self {
-        Self {
-            id,
-            amount,
-            fiat_code,
-            fiat_amount,
-            payment_method,
-            premium,
-            buyer_pubkey,
-            seller_pubkey,
-        }
-    }
-    /// New order from json string
-    pub fn from_json(json: &str) -> Result<Self> {
-        Ok(serde_json::from_str(json)?)
-    }
-
-    /// Get order as json string
-    pub fn as_json(&self) -> Result<String> {
-        Ok(serde_json::to_string(&self)?)
     }
 }
 
 /// We use this struct to create a new order
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct NewOrder {
+pub struct SmallOrder {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
-    pub kind: Kind,
-    pub status: Status,
+    pub kind: Option<Kind>,
+    pub status: Option<Status>,
     pub amount: i64,
     pub fiat_code: String,
     pub fiat_amount: i64,
@@ -203,16 +155,16 @@ pub struct NewOrder {
     pub master_seller_pubkey: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buyer_invoice: Option<String>,
-    pub created_at: i64,
+    pub created_at: Option<i64>,
 }
 
 #[allow(dead_code)]
-impl NewOrder {
+impl SmallOrder {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Option<Uuid>,
-        kind: Kind,
-        status: Status,
+        kind: Option<Kind>,
+        status: Option<Status>,
         amount: i64,
         fiat_code: String,
         fiat_amount: i64,
@@ -221,7 +173,7 @@ impl NewOrder {
         master_buyer_pubkey: Option<String>,
         master_seller_pubkey: Option<String>,
         buyer_invoice: Option<String>,
-        created_at: i64,
+        created_at: Option<i64>,
     ) -> Self {
         Self {
             id,
