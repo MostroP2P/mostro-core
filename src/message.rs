@@ -52,7 +52,7 @@ pub enum Action {
     BuyerTookOrder,
     RateUser,
     CantDo,
-    VoteReceived,
+    RateReceived,
     Dispute,
     AdminCancel,
     AdminSettle,
@@ -98,23 +98,6 @@ impl Message {
         let kind = MessageKind::new(id, pubkey, action, content);
 
         Self::Dispute(kind)
-    }
-
-    /// New rate user message
-    pub fn new_rate_user(
-        id: Option<Uuid>,
-        pubkey: Option<String>,
-        content: Option<Content>,
-    ) -> Self {
-        let kind = MessageKind::new(id, pubkey, Action::RateUser, content);
-
-        Self::Order(kind)
-    }
-
-    pub fn ack_rate_user(id: Option<Uuid>, pubkey: Option<String>) -> Self {
-        let kind = MessageKind::new(id, pubkey, Action::VoteReceived, None);
-
-        Self::Order(kind)
     }
 
     /// New can't do template message message
@@ -169,7 +152,7 @@ impl Message {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct MessageKind {
     /// Message version
-    pub version_major: u8,
+    pub version: u8,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
@@ -203,7 +186,7 @@ impl MessageKind {
         content: Option<Content>,
     ) -> Self {
         Self {
-            version_major: PROTOCOL_VER,
+            version: PROTOCOL_VER,
             id,
             pubkey,
             action,
@@ -273,7 +256,7 @@ impl MessageKind {
             | Action::DisputeInitiatedByYou
             | Action::DisputeInitiatedByPeer
             | Action::CooperativeCancelAccepted
-            | Action::VoteReceived
+            | Action::RateReceived
             | Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
             }
