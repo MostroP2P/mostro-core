@@ -38,7 +38,7 @@ mod test {
                 Some(1627371434),
             ))),
         ));
-        let sample_message = r#"{"Order":{"version":1,"version_minor":0,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"NewOrder","content":{"Order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"Sell","status":"Pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
+        let sample_message = r#"{"Order":{"version":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"NewOrder","content":{"Order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"Sell","status":"Pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
         let message = Message::from_json(sample_message).unwrap();
         assert!(message.verify());
         let message_json = message.as_json().unwrap();
