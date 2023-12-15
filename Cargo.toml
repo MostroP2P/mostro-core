@@ -1,6 +1,6 @@
 [package]
 name = "mostro-core"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 license = "MIT"
 authors = ["Francisco Calderón <negrunch@grunch.dev>"]
@@ -23,4 +23,4 @@ sqlx = { version = "0.6.2", features = [
   "chrono",
   "uuid",
 ] }
-sqlx-crud = { version = "0.3.2", features = ["runtime-tokio-rustls"] }
+sqlx-crud = { version = "0.4.0", features = ["runtime-tokio-rustls"] }

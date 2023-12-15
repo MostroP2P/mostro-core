@@ -138,7 +138,7 @@ impl Order {
 }
 
 /// We use this struct to create a new order
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct SmallOrder {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
