@@ -45,6 +45,7 @@ impl FromStr for Status {
 
 /// Database representation of a dispute
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, FromRow, SqlxCrud)]
+#[external_id]
 pub struct Dispute {
     pub id: Uuid,
     pub order_id: Uuid,

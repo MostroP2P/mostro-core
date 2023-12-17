@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 /// Database representation of an user
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, FromRow, SqlxCrud)]
+#[external_id]
 pub struct User {
     pub id: Uuid,
     pub pubkey: String,
