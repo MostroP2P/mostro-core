@@ -82,6 +82,7 @@ impl fmt::Display for Status {
 
 /// Database representation of an order
 #[derive(Debug, FromRow, SqlxCrud, Deserialize, Serialize, Clone)]
+#[external_id]
 pub struct Order {
     pub id: Uuid,
     pub kind: String,
