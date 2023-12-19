@@ -173,7 +173,6 @@ pub enum Content {
     TextMessage(String),
     Peer(Peer),
     RatingUser(u8),
-    Dispute(Uuid),
 }
 
 #[allow(dead_code)]
@@ -237,7 +236,10 @@ impl MessageKind {
                 true
             }
             Action::AdminTakeDispute => {
-                matches!(&self.content, Some(Content::Dispute(_)))
+                if self.id.is_none() {
+                    return false;
+                }
+                true
             }
             Action::RateUser => {
                 matches!(&self.content, Some(Content::RatingUser(_)))
