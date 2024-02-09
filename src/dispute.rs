@@ -8,10 +8,11 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 /// Each status that a dispute can have
-#[derive(Debug, Deserialize, Serialize, Type, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, Type, Clone, PartialEq, Eq)]
 pub enum Status {
     /// Dispute initiated and waiting to be taken by a solver
-    Pending,
+    #[default]
+    Initiated,
     /// Taken by a solver
     InProgress,
     /// Canceled by admin/solver and refunded to seller
@@ -33,7 +34,7 @@ impl FromStr for Status {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "Pending" => std::result::Result::Ok(Self::Pending),
+            "Initiated" => std::result::Result::Ok(Self::Initiated),
             "InProgress" => std::result::Result::Ok(Self::InProgress),
             "SellerRefunded" => std::result::Result::Ok(Self::SellerRefunded),
             "Settled" => std::result::Result::Ok(Self::Settled),
@@ -44,7 +45,7 @@ impl FromStr for Status {
 }
 
 /// Database representation of a dispute
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, FromRow, SqlxCrud)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq, FromRow, SqlxCrud)]
 #[external_id]
 pub struct Dispute {
     pub id: Uuid,
@@ -60,7 +61,7 @@ impl Dispute {
         Self {
             id: Uuid::new_v4(),
             order_id,
-            status: Status::Pending,
+            status: Status::Initiated,
             solver_pubkey: None,
             created_at: Utc::now().timestamp(),
             taken_at: 0,
