@@ -48,6 +48,7 @@ pub enum Status {
     WaitingBuyerInvoice,
     WaitingPayment,
     CooperativelyCanceled,
+    PaidHoldInvoice,
 }
 
 impl FromStr for Status {
@@ -69,6 +70,7 @@ impl FromStr for Status {
             "WaitingBuyerInvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
             "WaitingPayment" => std::result::Result::Ok(Self::WaitingPayment),
             "CooperativelyCanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
+            "PaidHoldInvoice" => std::result::Result::Ok(Self::PaidHoldInvoice),
             _ => Err(()),
         }
     }
@@ -117,6 +119,8 @@ pub struct Order {
     pub created_at: i64,
     pub buyer_sent_rate: bool,
     pub seller_sent_rate: bool,
+    pub failed_payment: bool,
+    pub payment_attempts: i64,
 }
 
 impl Order {
