@@ -117,6 +117,8 @@ pub struct Order {
     pub created_at: i64,
     pub buyer_sent_rate: bool,
     pub seller_sent_rate: bool,
+    pub failed_payment: bool,
+    pub payment_attempts: i64,
 }
 
 impl Order {
