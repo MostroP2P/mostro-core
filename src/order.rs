@@ -48,7 +48,6 @@ pub enum Status {
     WaitingBuyerInvoice,
     WaitingPayment,
     CooperativelyCanceled,
-    PaidHoldInvoice,
 }
 
 impl FromStr for Status {
@@ -70,7 +69,6 @@ impl FromStr for Status {
             "WaitingBuyerInvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
             "WaitingPayment" => std::result::Result::Ok(Self::WaitingPayment),
             "CooperativelyCanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
-            "PaidHoldInvoice" => std::result::Result::Ok(Self::PaidHoldInvoice),
             _ => Err(()),
         }
     }
