@@ -2,7 +2,6 @@ use anyhow::{Ok, Result};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use sqlx_crud::SqlxCrud;
-use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -25,9 +24,12 @@ impl FromStr for Kind {
     }
 }
 
-impl fmt::Display for Kind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{self:?}")
+impl ToString for Kind {
+    fn to_string(&self) -> String {
+        match self {
+            Kind::Sell => String::from("sell"),
+            Kind::Buy => String::from("buy"),
+        }
     }
 }
 
@@ -48,6 +50,27 @@ pub enum Status {
     WaitingBuyerInvoice,
     WaitingPayment,
     CooperativelyCanceled,
+}
+
+impl ToString for Status {
+    fn to_string(&self) -> String {
+        match self {
+            Status::Active => String::from("active"),
+            Status::Canceled => String::from("canceled"),
+            Status::CanceledByAdmin => String::from("canceledbyadmin"),
+            Status::SettledByAdmin => String::from("settledbyadmin"),
+            Status::CompletedByAdmin => String::from("completedbyadmin"),
+            Status::Dispute => String::from("dispute"),
+            Status::Expired => String::from("expired"),
+            Status::FiatSent => String::from("fiatsent"),
+            Status::SettledHoldInvoice => String::from("settledholdinvoice"),
+            Status::Pending => String::from("pending"),
+            Status::Success => String::from("success"),
+            Status::WaitingBuyerInvoice => String::from("waitingbuyerinvoice"),
+            Status::WaitingPayment => String::from("waitingpayment"),
+            Status::CooperativelyCanceled => String::from("cooperativelycanceled"),
+        }
+    }
 }
 
 impl FromStr for Status {
@@ -71,12 +94,6 @@ impl FromStr for Status {
             "cooperativelycanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
             _ => Err(()),
         }
-    }
-}
-
-impl fmt::Display for Status {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{self:?}")
     }
 }
 
