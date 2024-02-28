@@ -17,9 +17,9 @@ impl FromStr for Kind {
     type Err = ();
 
     fn from_str(kind: &str) -> std::result::Result<Self, Self::Err> {
-        match kind {
-            "Buy" => std::result::Result::Ok(Self::Buy),
-            "Sell" => std::result::Result::Ok(Self::Sell),
+        match kind.to_lowercase().as_str() {
+            "buy" => std::result::Result::Ok(Self::Buy),
+            "sell" => std::result::Result::Ok(Self::Sell),
             _ => Err(()),
         }
     }
@@ -54,21 +54,21 @@ impl FromStr for Status {
     type Err = ();
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "Active" => std::result::Result::Ok(Self::Active),
-            "Canceled" => std::result::Result::Ok(Self::Canceled),
-            "CanceledByAdmin" => std::result::Result::Ok(Self::CanceledByAdmin),
-            "SettledByAdmin" => std::result::Result::Ok(Self::SettledByAdmin),
-            "CompletedByAdmin" => std::result::Result::Ok(Self::CompletedByAdmin),
-            "Dispute" => std::result::Result::Ok(Self::Dispute),
-            "Expired" => std::result::Result::Ok(Self::Expired),
-            "FiatSent" => std::result::Result::Ok(Self::FiatSent),
-            "SettledHoldInvoice" => std::result::Result::Ok(Self::SettledHoldInvoice),
-            "Pending" => std::result::Result::Ok(Self::Pending),
-            "Success" => std::result::Result::Ok(Self::Success),
-            "WaitingBuyerInvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
-            "WaitingPayment" => std::result::Result::Ok(Self::WaitingPayment),
-            "CooperativelyCanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
+        match s.to_lowercase().as_str() {
+            "active" => std::result::Result::Ok(Self::Active),
+            "canceled" => std::result::Result::Ok(Self::Canceled),
+            "canceledbyadmin" => std::result::Result::Ok(Self::CanceledByAdmin),
+            "settledbyadmin" => std::result::Result::Ok(Self::SettledByAdmin),
+            "completedbyadmin" => std::result::Result::Ok(Self::CompletedByAdmin),
+            "dispute" => std::result::Result::Ok(Self::Dispute),
+            "expired" => std::result::Result::Ok(Self::Expired),
+            "fiatsent" => std::result::Result::Ok(Self::FiatSent),
+            "settledholdinvoice" => std::result::Result::Ok(Self::SettledHoldInvoice),
+            "pending" => std::result::Result::Ok(Self::Pending),
+            "success" => std::result::Result::Ok(Self::Success),
+            "waitingbuyerinvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
+            "waitingpayment" => std::result::Result::Ok(Self::WaitingPayment),
+            "cooperativelycanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
             _ => Err(()),
         }
     }
