@@ -15,6 +15,21 @@ mod test {
     use crate::message::{Action, Content, Message, MessageKind};
     use crate::order::{Kind, SmallOrder, Status};
     use uuid::uuid;
+    #[test]
+    fn test_status_string() {
+        assert_eq!(Status::Active.to_string(), "active");
+        assert_eq!(Status::CompletedByAdmin.to_string(), "completedbyadmin");
+        assert_eq!(Status::FiatSent.to_string(), "fiatsent");
+        assert_ne!(Status::Pending.to_string(), "Pending");
+    }
+
+    #[test]
+    fn test_kind_string() {
+        assert_ne!(Kind::Sell.to_string(), "active");
+        assert_eq!(Kind::Sell.to_string(), "sell");
+        assert_eq!(Kind::Buy.to_string(), "buy");
+        assert_ne!(Kind::Buy.to_string(), "active");
+    }
 
     #[test]
     fn test_message_order() {
