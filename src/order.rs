@@ -36,7 +36,7 @@ impl ToString for Kind {
 /// Each status that an order can have
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
-    Active,
+    Active = 1,
     Canceled,
     CanceledByAdmin,
     SettledByAdmin,
@@ -52,23 +52,64 @@ pub enum Status {
     CooperativelyCanceled,
 }
 
+impl Status {
+    pub fn to_int(&self) -> i32 {
+        match self {
+            Status::Active => 1,
+            Status::Canceled => 2,
+            Status::CanceledByAdmin => 3,
+            Status::SettledByAdmin => 4,
+            Status::CompletedByAdmin => 5,
+            Status::Dispute => 6,
+            Status::Expired => 7,
+            Status::FiatSent => 8,
+            Status::SettledHoldInvoice => 9,
+            Status::Pending => 10,
+            Status::Success => 11,
+            Status::WaitingBuyerInvoice => 12,
+            Status::WaitingPayment => 13,
+            Status::CooperativelyCanceled => 14,
+        }
+    }
+
+    pub fn from_int(status: i32) -> Self {
+        match status {
+            1 => Self::Active,
+            2 => Self::Canceled,
+            3 => Self::CanceledByAdmin,
+            4 => Self::SettledByAdmin,
+            5 => Self::CompletedByAdmin,
+            6 => Self::Dispute,
+            7 => Self::Expired,
+            8 => Self::FiatSent,
+            9 => Self::SettledHoldInvoice,
+            10 => Self::Pending,
+            11 => Self::Success,
+            12 => Self::WaitingBuyerInvoice,
+            13 => Self::WaitingPayment,
+            14 => Self::CooperativelyCanceled,
+            _ => Self::Active,
+        }
+    }
+}
+
 impl ToString for Status {
     fn to_string(&self) -> String {
         match self {
-            Status::Active => String::from("active"),
-            Status::Canceled => String::from("canceled"),
-            Status::CanceledByAdmin => String::from("canceledbyadmin"),
-            Status::SettledByAdmin => String::from("settledbyadmin"),
-            Status::CompletedByAdmin => String::from("completedbyadmin"),
-            Status::Dispute => String::from("dispute"),
-            Status::Expired => String::from("expired"),
-            Status::FiatSent => String::from("fiatsent"),
-            Status::SettledHoldInvoice => String::from("settledholdinvoice"),
-            Status::Pending => String::from("pending"),
-            Status::Success => String::from("success"),
-            Status::WaitingBuyerInvoice => String::from("waitingbuyerinvoice"),
-            Status::WaitingPayment => String::from("waitingpayment"),
-            Status::CooperativelyCanceled => String::from("cooperativelycanceled"),
+            Status::Active => String::from("Active"),
+            Status::Canceled => String::from("Canceled"),
+            Status::CanceledByAdmin => String::from("CanceledByAdmin"),
+            Status::SettledByAdmin => String::from("SettledByAdmin"),
+            Status::CompletedByAdmin => String::from("CompletedByAdmin"),
+            Status::Dispute => String::from("Dispute"),
+            Status::Expired => String::from("Expired"),
+            Status::FiatSent => String::from("FiatSent"),
+            Status::SettledHoldInvoice => String::from("SettledHoldInvoice"),
+            Status::Pending => String::from("Pending"),
+            Status::Success => String::from("Success"),
+            Status::WaitingBuyerInvoice => String::from("WaitingBuyerInvoice"),
+            Status::WaitingPayment => String::from("WaitingPayment"),
+            Status::CooperativelyCanceled => String::from("CooperativelyCanceled"),
         }
     }
 }
@@ -77,21 +118,21 @@ impl FromStr for Status {
     type Err = ();
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "active" => std::result::Result::Ok(Self::Active),
-            "canceled" => std::result::Result::Ok(Self::Canceled),
-            "canceledbyadmin" => std::result::Result::Ok(Self::CanceledByAdmin),
-            "settledbyadmin" => std::result::Result::Ok(Self::SettledByAdmin),
-            "completedbyadmin" => std::result::Result::Ok(Self::CompletedByAdmin),
-            "dispute" => std::result::Result::Ok(Self::Dispute),
-            "expired" => std::result::Result::Ok(Self::Expired),
-            "fiatsent" => std::result::Result::Ok(Self::FiatSent),
-            "settledholdinvoice" => std::result::Result::Ok(Self::SettledHoldInvoice),
-            "pending" => std::result::Result::Ok(Self::Pending),
-            "success" => std::result::Result::Ok(Self::Success),
-            "waitingbuyerinvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
-            "waitingpayment" => std::result::Result::Ok(Self::WaitingPayment),
-            "cooperativelycanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
+        match s {
+            "Active" => std::result::Result::Ok(Self::Active),
+            "Canceled" => std::result::Result::Ok(Self::Canceled),
+            "CanceledByAdmin" => std::result::Result::Ok(Self::CanceledByAdmin),
+            "SettledByAdmin" => std::result::Result::Ok(Self::SettledByAdmin),
+            "CompletedByAdmin" => std::result::Result::Ok(Self::CompletedByAdmin),
+            "Dispute" => std::result::Result::Ok(Self::Dispute),
+            "Expired" => std::result::Result::Ok(Self::Expired),
+            "FiatSent" => std::result::Result::Ok(Self::FiatSent),
+            "SettledHoldInvoice" => std::result::Result::Ok(Self::SettledHoldInvoice),
+            "Pending" => std::result::Result::Ok(Self::Pending),
+            "Success" => std::result::Result::Ok(Self::Success),
+            "WaitingBuyerInvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
+            "WaitingPayment" => std::result::Result::Ok(Self::WaitingPayment),
+            "CooperativelyCanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
             _ => Err(()),
         }
     }
