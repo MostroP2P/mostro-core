@@ -17,18 +17,26 @@ mod test {
     use uuid::uuid;
     #[test]
     fn test_status_string() {
-        assert_eq!(Status::Active.to_string(), "active");
-        assert_eq!(Status::CompletedByAdmin.to_string(), "completedbyadmin");
-        assert_eq!(Status::FiatSent.to_string(), "fiatsent");
-        assert_ne!(Status::Pending.to_string(), "Pending");
+        assert_eq!(Status::Active.to_string(), "Active");
+        assert_eq!(Status::CompletedByAdmin.to_string(), "CompletedByAdmin");
+        assert_eq!(Status::FiatSent.to_string(), "FiatSent");
+        assert_ne!(Status::Pending.to_string(), "pending");
+    }
+
+    #[test]
+    fn test_status_int() {
+        assert_eq!(Status::Active.to_int(), 1);
+        assert_eq!(Status::CompletedByAdmin.to_int(), 5);
+        assert_eq!(Status::FiatSent.to_int(), 8);
+        assert_ne!(Status::Pending.to_int(), 0);
     }
 
     #[test]
     fn test_kind_string() {
-        assert_ne!(Kind::Sell.to_string(), "active");
-        assert_eq!(Kind::Sell.to_string(), "sell");
-        assert_eq!(Kind::Buy.to_string(), "buy");
-        assert_ne!(Kind::Buy.to_string(), "active");
+        assert_ne!(Kind::Sell.to_string(), "sell");
+        assert_eq!(Kind::Sell.to_string(), "Sell");
+        assert_eq!(Kind::Buy.to_string(), "Buy");
+        assert_ne!(Kind::Buy.to_string(), "buy");
     }
 
     #[test]

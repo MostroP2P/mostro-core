@@ -8,17 +8,34 @@ use uuid::Uuid;
 /// Orders can be only Buy or Sell
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-    Buy,
-    Sell,
+    Buy = 1,
+    Sell = 2,
+}
+
+impl Kind {
+    pub fn to_int(&self) -> i32 {
+        match self {
+            Kind::Buy => 1,
+            Kind::Sell => 2,
+        }
+    }
+
+    pub fn from_int(kind: i32) -> Self {
+        match kind {
+            1 => Self::Buy,
+            2 => Self::Sell,
+            _ => Self::Buy,
+        }
+    }
 }
 
 impl FromStr for Kind {
     type Err = ();
 
     fn from_str(kind: &str) -> std::result::Result<Self, Self::Err> {
-        match kind.to_lowercase().as_str() {
-            "buy" => std::result::Result::Ok(Self::Buy),
-            "sell" => std::result::Result::Ok(Self::Sell),
+        match kind {
+            "Buy" => std::result::Result::Ok(Self::Buy),
+            "Sell" => std::result::Result::Ok(Self::Sell),
             _ => Err(()),
         }
     }
@@ -27,8 +44,8 @@ impl FromStr for Kind {
 impl ToString for Kind {
     fn to_string(&self) -> String {
         match self {
-            Kind::Sell => String::from("sell"),
-            Kind::Buy => String::from("buy"),
+            Kind::Buy => String::from("Buy"),
+            Kind::Sell => String::from("Sell"),
         }
     }
 }
@@ -37,19 +54,19 @@ impl ToString for Kind {
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Active = 1,
-    Canceled,
-    CanceledByAdmin,
-    SettledByAdmin,
-    CompletedByAdmin,
-    Dispute,
-    Expired,
-    FiatSent,
-    SettledHoldInvoice,
-    Pending,
-    Success,
-    WaitingBuyerInvoice,
-    WaitingPayment,
-    CooperativelyCanceled,
+    Canceled = 2,
+    CanceledByAdmin = 3,
+    SettledByAdmin = 4,
+    CompletedByAdmin = 5,
+    Dispute = 6,
+    Expired = 7,
+    FiatSent = 8,
+    SettledHoldInvoice = 9,
+    Pending = 10,
+    Success = 11,
+    WaitingBuyerInvoice = 12,
+    WaitingPayment = 13,
+    CooperativelyCanceled = 14,
 }
 
 impl Status {
@@ -153,7 +170,7 @@ pub struct Order {
     pub master_buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
     pub master_seller_pubkey: Option<String>,
-    pub status: String,
+    pub status: i32,
     pub price_from_api: bool,
     pub premium: i64,
     pub payment_method: String,
@@ -184,7 +201,7 @@ impl Order {
         SmallOrder::new(
             Some(self.id),
             Some(Kind::from_str(&self.kind).unwrap()),
-            Some(Status::from_str(&self.status).unwrap()),
+            Some(Status::from_int(self.status)),
             self.amount,
             self.fiat_code.clone(),
             self.fiat_amount,
