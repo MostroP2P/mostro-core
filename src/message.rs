@@ -169,7 +169,7 @@ pub struct MessageKind {
 
 /// Message content
 #[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum Content {
     Order(SmallOrder),
     PaymentRequest(Option<SmallOrder>, String),
