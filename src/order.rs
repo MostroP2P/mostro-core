@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 /// Orders can be only Buy or Sell
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub enum Kind {
     Buy,
     Sell,
@@ -35,6 +36,7 @@ impl ToString for Kind {
 
 /// Each status that an order can have
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub enum Status {
     Active,
     Canceled,
@@ -57,18 +59,18 @@ impl ToString for Status {
         match self {
             Status::Active => String::from("active"),
             Status::Canceled => String::from("canceled"),
-            Status::CanceledByAdmin => String::from("canceledbyadmin"),
-            Status::SettledByAdmin => String::from("settledbyadmin"),
-            Status::CompletedByAdmin => String::from("completedbyadmin"),
+            Status::CanceledByAdmin => String::from("canceled-by-admin"),
+            Status::SettledByAdmin => String::from("settled-by-admin"),
+            Status::CompletedByAdmin => String::from("completed-by-admin"),
             Status::Dispute => String::from("dispute"),
             Status::Expired => String::from("expired"),
             Status::FiatSent => String::from("fiatsent"),
-            Status::SettledHoldInvoice => String::from("settledholdinvoice"),
+            Status::SettledHoldInvoice => String::from("settled-hold-invoice"),
             Status::Pending => String::from("pending"),
             Status::Success => String::from("success"),
-            Status::WaitingBuyerInvoice => String::from("waitingbuyerinvoice"),
-            Status::WaitingPayment => String::from("waitingpayment"),
-            Status::CooperativelyCanceled => String::from("cooperativelycanceled"),
+            Status::WaitingBuyerInvoice => String::from("waiting-buyer-invoice"),
+            Status::WaitingPayment => String::from("waiting-payment"),
+            Status::CooperativelyCanceled => String::from("cooperatively-canceled"),
         }
     }
 }
@@ -80,18 +82,18 @@ impl FromStr for Status {
         match s.to_lowercase().as_str() {
             "active" => std::result::Result::Ok(Self::Active),
             "canceled" => std::result::Result::Ok(Self::Canceled),
-            "canceledbyadmin" => std::result::Result::Ok(Self::CanceledByAdmin),
-            "settledbyadmin" => std::result::Result::Ok(Self::SettledByAdmin),
-            "completedbyadmin" => std::result::Result::Ok(Self::CompletedByAdmin),
+            "canceled-by-admin" => std::result::Result::Ok(Self::CanceledByAdmin),
+            "settled-by-admin" => std::result::Result::Ok(Self::SettledByAdmin),
+            "completed-by-admin" => std::result::Result::Ok(Self::CompletedByAdmin),
             "dispute" => std::result::Result::Ok(Self::Dispute),
             "expired" => std::result::Result::Ok(Self::Expired),
             "fiatsent" => std::result::Result::Ok(Self::FiatSent),
-            "settledholdinvoice" => std::result::Result::Ok(Self::SettledHoldInvoice),
+            "settled-hold-invoice" => std::result::Result::Ok(Self::SettledHoldInvoice),
             "pending" => std::result::Result::Ok(Self::Pending),
             "success" => std::result::Result::Ok(Self::Success),
-            "waitingbuyerinvoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
-            "waitingpayment" => std::result::Result::Ok(Self::WaitingPayment),
-            "cooperativelycanceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
+            "waiting-buyer-invoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
+            "waiting-payment" => std::result::Result::Ok(Self::WaitingPayment),
+            "cooperatively-canceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
             _ => Err(()),
         }
     }

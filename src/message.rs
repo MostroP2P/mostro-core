@@ -27,6 +27,7 @@ impl Peer {
 
 /// Action is used to identify each message between Mostro and users
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub enum Action {
     NewOrder,
     TakeSell,
@@ -68,6 +69,7 @@ impl fmt::Display for Action {
 
 /// Use this Message to establish communication between users and Mostro
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Message {
     Order(MessageKind),
     Dispute(MessageKind),
@@ -167,6 +169,7 @@ pub struct MessageKind {
 
 /// Message content
 #[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub enum Content {
     Order(SmallOrder),
     PaymentRequest(Option<SmallOrder>, String),

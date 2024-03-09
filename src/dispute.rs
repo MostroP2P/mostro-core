@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 /// Each status that a dispute can have
 #[derive(Debug, Default, Deserialize, Serialize, Type, Clone, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub enum Status {
     /// Dispute initiated and waiting to be taken by a solver
     #[default]
@@ -34,11 +35,11 @@ impl FromStr for Status {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
-            "Initiated" => std::result::Result::Ok(Self::Initiated),
-            "InProgress" => std::result::Result::Ok(Self::InProgress),
-            "SellerRefunded" => std::result::Result::Ok(Self::SellerRefunded),
-            "Settled" => std::result::Result::Ok(Self::Settled),
-            "Released" => std::result::Result::Ok(Self::Released),
+            "initiated" => std::result::Result::Ok(Self::Initiated),
+            "in-progress" => std::result::Result::Ok(Self::InProgress),
+            "seller-refunded" => std::result::Result::Ok(Self::SellerRefunded),
+            "settled" => std::result::Result::Ok(Self::Settled),
+            "released" => std::result::Result::Ok(Self::Released),
             _ => Err(()),
         }
     }
