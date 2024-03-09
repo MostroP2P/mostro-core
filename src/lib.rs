@@ -18,7 +18,7 @@ mod test {
     #[test]
     fn test_status_string() {
         assert_eq!(Status::Active.to_string(), "active");
-        assert_eq!(Status::CompletedByAdmin.to_string(), "completedbyadmin");
+        assert_eq!(Status::CompletedByAdmin.to_string(), "completed-by-admin");
         assert_eq!(Status::FiatSent.to_string(), "fiatsent");
         assert_ne!(Status::Pending.to_string(), "Pending");
     }
@@ -53,7 +53,7 @@ mod test {
                 Some(1627371434),
             ))),
         ));
-        let sample_message = r#"{"Order":{"version":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"NewOrder","content":{"Order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"Sell","status":"Pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
+        let sample_message = r#"{"order":{"version":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"new-order","content":{"order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
         let message = Message::from_json(sample_message).unwrap();
         assert!(message.verify());
         let message_json = message.as_json().unwrap();
