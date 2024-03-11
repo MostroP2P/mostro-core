@@ -19,7 +19,7 @@ mod test {
     fn test_status_string() {
         assert_eq!(Status::Active.to_string(), "active");
         assert_eq!(Status::CompletedByAdmin.to_string(), "completed-by-admin");
-        assert_eq!(Status::FiatSent.to_string(), "fiatsent");
+        assert_eq!(Status::FiatSent.to_string(), "fiat-sent");
         assert_ne!(Status::Pending.to_string(), "Pending");
     }
 
