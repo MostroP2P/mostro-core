@@ -3,7 +3,6 @@ use sqlx::types::chrono::Utc;
 use sqlx::FromRow;
 use sqlx::Type;
 use sqlx_crud::SqlxCrud;
-use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -24,9 +23,15 @@ pub enum Status {
     Released,
 }
 
-impl fmt::Display for Status {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{self:?}")
+impl ToString for Status {
+    fn to_string(&self) -> String {
+        match self {
+            Status::Initiated => String::from("initiated"),
+            Status::InProgress => String::from("in-progress"),
+            Status::SellerRefunded => String::from("seller-refunded"),
+            Status::Settled => String::from("settled"),
+            Status::Released => String::from("released"),
+        }
     }
 }
 
