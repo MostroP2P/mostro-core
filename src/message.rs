@@ -279,11 +279,15 @@ impl MessageKind {
     }
 
     pub fn get_payment_request(&self) -> Option<String> {
-        if self.action != Action::TakeSell && self.action != Action::AddInvoice {
+        if self.action != Action::TakeSell
+            && self.action != Action::AddInvoice
+            && self.action != Action::NewOrder
+        {
             return None;
         }
         match &self.content {
             Some(Content::PaymentRequest(_, pr)) => Some(pr.to_owned()),
+            Some(Content::Order(ord)) => ord.buyer_invoice.to_owned(),
             _ => None,
         }
     }
