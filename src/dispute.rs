@@ -56,7 +56,7 @@ impl FromStr for Status {
 pub struct Dispute {
     pub id: Uuid,
     pub order_id: Uuid,
-    pub status: Status,
+    pub status: String,
     pub solver_pubkey: Option<String>,
     pub created_at: i64,
     pub taken_at: i64,
@@ -67,7 +67,7 @@ impl Dispute {
         Self {
             id: Uuid::new_v4(),
             order_id,
-            status: Status::Initiated,
+            status: Status::Initiated.to_string(),
             solver_pubkey: None,
             created_at: Utc::now().timestamp(),
             taken_at: 0,

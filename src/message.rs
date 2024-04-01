@@ -59,6 +59,7 @@ pub enum Action {
     AdminSettle,
     AdminAddSolver,
     AdminTakeDispute,
+    AdminAcceptDispute,
 }
 
 impl fmt::Display for Action {
@@ -238,7 +239,8 @@ impl MessageKind {
                 }
                 true
             }
-            Action::AdminTakeDispute => {
+            Action::AdminTakeDispute |
+            Action::AdminAcceptDispute => {
                 if self.id.is_none() {
                     return false;
                 }
