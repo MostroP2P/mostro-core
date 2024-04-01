@@ -34,15 +34,17 @@ pub enum Action {
     TakeBuy,
     PayInvoice,
     FiatSent,
+    FiatSentOk,
     Release,
+    Released,
     Cancel,
+    Canceled,
     CooperativeCancelInitiatedByYou,
     CooperativeCancelInitiatedByPeer,
     DisputeInitiatedByYou,
     DisputeInitiatedByPeer,
     CooperativeCancelAccepted,
     BuyerInvoiceAccepted,
-    SaleCompleted,
     PurchaseCompleted,
     HoldInvoicePaymentAccepted,
     HoldInvoicePaymentSettled,
@@ -51,15 +53,18 @@ pub enum Action {
     WaitingBuyerInvoice,
     AddInvoice,
     BuyerTookOrder,
+    Rate,
     RateUser,
-    CantDo,
     RateReceived,
+    CantDo,
     Dispute,
     AdminCancel,
+    AdminCanceled,
     AdminSettle,
+    AdminSettled,
     AdminAddSolver,
     AdminTakeDispute,
-    AdminAcceptDispute,
+    AdminTookDispute,
 }
 
 impl fmt::Display for Action {
@@ -223,11 +228,33 @@ impl MessageKind {
             Action::TakeSell
             | Action::TakeBuy
             | Action::FiatSent
+            | Action::FiatSentOk
             | Action::Release
+            | Action::Released
             | Action::Dispute
             | Action::AdminCancel
+            | Action::AdminCanceled
             | Action::AdminSettle
-            | Action::Cancel => {
+            | Action::AdminSettled
+            | Action::Rate
+            | Action::RateReceived
+            | Action::AdminTakeDispute
+            | Action::AdminTookDispute
+            | Action::DisputeInitiatedByYou
+            | Action::DisputeInitiatedByPeer
+            | Action::WaitingBuyerInvoice
+            | Action::PurchaseCompleted
+            | Action::HoldInvoicePaymentAccepted
+            | Action::HoldInvoicePaymentSettled
+            | Action::HoldInvoicePaymentCanceled
+            | Action::WaitingSellerToPay
+            | Action::BuyerTookOrder
+            | Action::BuyerInvoiceAccepted
+            | Action::CooperativeCancelInitiatedByYou
+            | Action::CooperativeCancelInitiatedByPeer
+            | Action::CooperativeCancelAccepted
+            | Action::Cancel
+            | Action::Canceled => {
                 if self.id.is_none() {
                     return false;
                 }
@@ -239,32 +266,10 @@ impl MessageKind {
                 }
                 true
             }
-            Action::AdminTakeDispute |
-            Action::AdminAcceptDispute => {
-                if self.id.is_none() {
-                    return false;
-                }
-                true
-            }
             Action::RateUser => {
                 matches!(&self.content, Some(Content::RatingUser(_)))
             }
-            Action::BuyerInvoiceAccepted
-            | Action::SaleCompleted
-            | Action::PurchaseCompleted
-            | Action::HoldInvoicePaymentAccepted
-            | Action::HoldInvoicePaymentSettled
-            | Action::HoldInvoicePaymentCanceled
-            | Action::WaitingSellerToPay
-            | Action::BuyerTookOrder
-            | Action::WaitingBuyerInvoice
-            | Action::CooperativeCancelInitiatedByYou
-            | Action::CooperativeCancelInitiatedByPeer
-            | Action::DisputeInitiatedByYou
-            | Action::DisputeInitiatedByPeer
-            | Action::CooperativeCancelAccepted
-            | Action::RateReceived
-            | Action::CantDo => {
+            Action::CantDo => {
                 matches!(&self.content, Some(Content::TextMessage(_)))
             }
         }
