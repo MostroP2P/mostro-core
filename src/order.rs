@@ -138,6 +138,7 @@ pub struct Order {
     pub seller_sent_rate: bool,
     pub failed_payment: bool,
     pub payment_attempts: i64,
+    pub expires_at: i64,
 }
 
 impl Order {
@@ -155,6 +156,7 @@ impl Order {
             None,
             self.buyer_invoice.clone(),
             Some(self.created_at),
+            Some(self.expires_at),
         )
     }
 }
@@ -178,6 +180,7 @@ pub struct SmallOrder {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buyer_invoice: Option<String>,
     pub created_at: Option<i64>,
+    pub expires_at: Option<i64>,
 }
 
 #[allow(dead_code)]
@@ -196,6 +199,7 @@ impl SmallOrder {
         master_seller_pubkey: Option<String>,
         buyer_invoice: Option<String>,
         created_at: Option<i64>,
+        expires_at: Option<i64>,
     ) -> Self {
         Self {
             id,
@@ -210,6 +214,7 @@ impl SmallOrder {
             master_seller_pubkey,
             buyer_invoice,
             created_at,
+            expires_at,
         }
     }
     /// New order from json string
