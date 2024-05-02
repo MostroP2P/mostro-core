@@ -65,6 +65,7 @@ pub enum Action {
     AdminAddSolver,
     AdminTakeDispute,
     AdminTookDispute,
+    Info,
 }
 
 impl fmt::Display for Action {
@@ -226,6 +227,7 @@ impl MessageKind {
                 matches!(&self.content, Some(Content::PaymentRequest(_, _)))
             }
             Action::TakeSell
+            | Action::Info
             | Action::TakeBuy
             | Action::FiatSent
             | Action::FiatSentOk
