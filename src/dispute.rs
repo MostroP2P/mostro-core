@@ -1,13 +1,15 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sqlx::types::chrono::Utc;
-use sqlx::FromRow;
-use sqlx::Type;
+#[cfg(feature = "sqlx")]
+use sqlx::{FromRow, Type};
+#[cfg(feature = "sqlx")]
 use sqlx_crud::SqlxCrud;
 use std::str::FromStr;
 use uuid::Uuid;
 
 /// Each status that a dispute can have
-#[derive(Debug, Default, Deserialize, Serialize, Type, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "sqlx", derive(Type))]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Status {
     /// Dispute initiated and waiting to be taken by a solver
@@ -51,8 +53,8 @@ impl FromStr for Status {
 }
 
 /// Database representation of a dispute
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq, FromRow, SqlxCrud)]
-#[external_id]
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct Dispute {
     pub id: Uuid,
     pub order_id: Uuid,

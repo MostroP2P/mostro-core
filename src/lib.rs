@@ -5,7 +5,7 @@ pub mod rating;
 pub mod user;
 
 /// All messages broadcasted by Mostro daemon are Parameterized Replaceable Events
-/// and use 30078 as event kind
+/// and use 38383 as event kind
 pub const NOSTR_REPLACEABLE_EVENT_KIND: u64 = 38383;
 pub const PROTOCOL_VER: u8 = 1;
 
@@ -51,6 +51,7 @@ mod test {
                 None,
                 None,
                 Some(1627371434),
+                None,
             ))),
         ));
         let sample_message = r#"{"order":{"version":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"new-order","content":{"order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
@@ -82,6 +83,7 @@ mod test {
                     None,
                     None,
                     Some(1627371434),
+                    None,
                 )),
                 "lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e".to_string(),
             )),
