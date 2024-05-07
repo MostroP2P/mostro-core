@@ -11,7 +11,6 @@ pub const PROTOCOL_VER: u8 = 1;
 
 #[cfg(test)]
 mod test {
-
     use crate::message::{Action, Content, Message, MessageKind};
     use crate::order::{Kind, SmallOrder, Status};
     use uuid::uuid;
