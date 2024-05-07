@@ -6,8 +6,10 @@ use sqlx::{FromRow, Type};
 use sqlx_crud::SqlxCrud;
 use std::str::FromStr;
 use uuid::Uuid;
+use wasm_bindgen::prelude::*;
 
 /// Each status that a dispute can have
+#[wasm_bindgen]
 #[cfg_attr(feature = "sqlx", derive(Type))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
