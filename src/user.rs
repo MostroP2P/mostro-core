@@ -1,12 +1,14 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sqlx::types::chrono::Utc;
+#[cfg(feature = "sqlx")]
 use sqlx::FromRow;
+#[cfg(feature = "sqlx")]
 use sqlx_crud::SqlxCrud;
 use uuid::Uuid;
 
 /// Database representation of an user
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, FromRow, SqlxCrud)]
-#[external_id]
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct User {
     pub id: Uuid,
     pub pubkey: String,

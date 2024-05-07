@@ -1,11 +1,15 @@
 use anyhow::{Ok, Result};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "sqlx")]
 use sqlx::FromRow;
+#[cfg(feature = "sqlx")]
 use sqlx_crud::SqlxCrud;
 use std::str::FromStr;
 use uuid::Uuid;
+use wasm_bindgen::prelude::*;
 
 /// Orders can be only Buy or Sell
+#[wasm_bindgen]
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Kind {
@@ -35,6 +39,7 @@ impl ToString for Kind {
 }
 
 /// Each status that an order can have
+#[wasm_bindgen]
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Status {
@@ -100,8 +105,8 @@ impl FromStr for Status {
 }
 
 /// Database representation of an order
-#[derive(Debug, Default, FromRow, SqlxCrud, Deserialize, Serialize, Clone)]
-#[external_id]
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct Order {
     pub id: Uuid,
     pub kind: String,
