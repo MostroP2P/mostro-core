@@ -4,7 +4,7 @@ pub mod order;
 pub mod rating;
 pub mod user;
 
-/// All messages broadcasted by Mostro daemon are Parameterized Replaceable Events
+/// All events broadcasted by Mostro daemon are Parameterized Replaceable Events
 /// and the event kind must be between 30000 and 39999
 pub const NOSTR_REPLACEABLE_EVENT_KIND: u64 = 38383;
 pub const PROTOCOL_VER: u8 = 1;
@@ -43,6 +43,8 @@ mod test {
                 Some(Status::Pending),
                 100,
                 "eur".to_string(),
+                None,
+                None,
                 100,
                 "SEPA".to_string(),
                 1,
@@ -75,6 +77,8 @@ mod test {
                     Some(Status::WaitingPayment),
                     100,
                     "eur".to_string(),
+                    None,
+                    None,
                     100,
                     "SEPA".to_string(),
                     1,
