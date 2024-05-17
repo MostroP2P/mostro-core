@@ -173,15 +173,18 @@ pub struct MessageKind {
     pub content: Option<Content>,
 }
 
+type Amount = u32;
+
 /// Message content
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum Content {
     Order(SmallOrder),
-    PaymentRequest(Option<SmallOrder>, String),
+    PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
     TextMessage(String),
     Peer(Peer),
     RatingUser(u8),
+    Amount(Amount),
 }
 
 #[allow(dead_code)]
@@ -223,7 +226,7 @@ impl MessageKind {
                 if self.id.is_none() {
                     return false;
                 }
-                matches!(&self.content, Some(Content::PaymentRequest(_, _)))
+                matches!(&self.content, Some(Content::PaymentRequest(_, _, _)))
             }
             Action::TakeSell
             | Action::TakeBuy
@@ -293,7 +296,7 @@ impl MessageKind {
             return None;
         }
         match &self.content {
-            Some(Content::PaymentRequest(_, pr)) => Some(pr.to_owned()),
+            Some(Content::PaymentRequest(_, pr, _)) => Some(pr.to_owned()),
             Some(Content::Order(ord)) => ord.buyer_invoice.to_owned(),
             _ => None,
         }
