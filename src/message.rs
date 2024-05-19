@@ -173,7 +173,7 @@ pub struct MessageKind {
     pub content: Option<Content>,
 }
 
-type Amount = u32;
+type Amount = i64;
 
 /// Message content
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -298,6 +298,16 @@ impl MessageKind {
         match &self.content {
             Some(Content::PaymentRequest(_, pr, _)) => Some(pr.to_owned()),
             Some(Content::Order(ord)) => ord.buyer_invoice.to_owned(),
+            _ => None,
+        }
+    }
+
+    pub fn get_amount(&self) -> Option<Amount> {
+        if self.action != Action::TakeSell && self.action != Action::TakeBuy {
+            return None;
+        }
+        match &self.content {
+            Some(Content::PaymentRequest(_, _, amount)) => *amount,
             _ => None,
         }
     }

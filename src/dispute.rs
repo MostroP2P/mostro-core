@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type};
 #[cfg(feature = "sqlx")]
 use sqlx_crud::SqlxCrud;
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 
 /// Each status that a dispute can have
@@ -25,14 +25,14 @@ pub enum Status {
     Released,
 }
 
-impl ToString for Status {
-    fn to_string(&self) -> String {
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Status::Initiated => String::from("initiated"),
-            Status::InProgress => String::from("in-progress"),
-            Status::SellerRefunded => String::from("seller-refunded"),
-            Status::Settled => String::from("settled"),
-            Status::Released => String::from("released"),
+            Status::Initiated => write!(f, "initiated"),
+            Status::InProgress => write!(f, "in-progress"),
+            Status::SellerRefunded => write!(f, "seller-refunded"),
+            Status::Settled => write!(f, "settled"),
+            Status::Released => write!(f, "released"),
         }
     }
 }
