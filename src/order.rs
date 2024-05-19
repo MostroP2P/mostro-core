@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 #[cfg(feature = "sqlx")]
 use sqlx_crud::SqlxCrud;
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
@@ -29,11 +29,11 @@ impl FromStr for Kind {
     }
 }
 
-impl ToString for Kind {
-    fn to_string(&self) -> String {
+impl Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Kind::Sell => String::from("sell"),
-            Kind::Buy => String::from("buy"),
+            Kind::Sell => write!(f, "sell"),
+            Kind::Buy => write!(f, "buy"),
         }
     }
 }
@@ -59,23 +59,23 @@ pub enum Status {
     CooperativelyCanceled,
 }
 
-impl ToString for Status {
-    fn to_string(&self) -> String {
+impl Display for Status {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Status::Active => String::from("active"),
-            Status::Canceled => String::from("canceled"),
-            Status::CanceledByAdmin => String::from("canceled-by-admin"),
-            Status::SettledByAdmin => String::from("settled-by-admin"),
-            Status::CompletedByAdmin => String::from("completed-by-admin"),
-            Status::Dispute => String::from("dispute"),
-            Status::Expired => String::from("expired"),
-            Status::FiatSent => String::from("fiat-sent"),
-            Status::SettledHoldInvoice => String::from("settled-hold-invoice"),
-            Status::Pending => String::from("pending"),
-            Status::Success => String::from("success"),
-            Status::WaitingBuyerInvoice => String::from("waiting-buyer-invoice"),
-            Status::WaitingPayment => String::from("waiting-payment"),
-            Status::CooperativelyCanceled => String::from("cooperatively-canceled"),
+            Status::Active => write!(f, "active"),
+            Status::Canceled => write!(f, "canceled"),
+            Status::CanceledByAdmin => write!(f, "canceled-by-admin"),
+            Status::SettledByAdmin => write!(f, "settled-by-admin"),
+            Status::CompletedByAdmin => write!(f, "completed-by-admin"),
+            Status::Dispute => write!(f, "dispute"),
+            Status::Expired => write!(f, "expired"),
+            Status::FiatSent => write!(f, "fiat-sent"),
+            Status::SettledHoldInvoice => write!(f, "settled-hold-invoice"),
+            Status::Pending => write!(f, "pending"),
+            Status::Success => write!(f, "success"),
+            Status::WaitingBuyerInvoice => write!(f, "waiting-buyer-invoice"),
+            Status::WaitingPayment => write!(f, "waiting-payment"),
+            Status::CooperativelyCanceled => write!(f, "cooperatively-canceled"),
         }
     }
 }
@@ -165,6 +165,10 @@ impl Order {
             Some(self.created_at),
             Some(self.expires_at),
         )
+    }
+
+    pub fn is_range_order(&self) -> bool {
+        self.min_amount.is_some() && self.max_amount.is_some()
     }
 }
 
