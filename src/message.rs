@@ -173,7 +173,7 @@ pub struct MessageKind {
     pub content: Option<Content>,
 }
 
-type Amount = i64;
+type Amount = u64;
 
 /// Message content
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -308,6 +308,7 @@ impl MessageKind {
         }
         match &self.content {
             Some(Content::PaymentRequest(_, _, amount)) => *amount,
+            Some(Content::Amount(amount)) => Some(*amount),
             _ => None,
         }
     }
