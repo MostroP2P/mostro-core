@@ -173,7 +173,7 @@ pub struct MessageKind {
     pub content: Option<Content>,
 }
 
-type Amount = u64;
+type Amount = i64;
 
 /// Message content
 #[derive(Debug, Deserialize, Serialize, Clone)]
