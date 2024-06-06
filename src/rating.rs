@@ -46,7 +46,7 @@ impl Rating {
             ("last_rating".to_string(), self.last_rating.to_string()),
             ("max_rate".to_string(), self.max_rate.to_string()),
             ("min_rate".to_string(), self.min_rate.to_string()),
-            ("data_label".to_string(), "rating".to_string()),
+            ("z".to_string(), "rating".to_string()),
         ];
 
         Ok(tags)
