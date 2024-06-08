@@ -6,7 +6,7 @@ pub mod user;
 
 /// All events broadcasted by Mostro daemon are Parameterized Replaceable Events
 /// and the event kind must be between 30000 and 39999
-pub const NOSTR_REPLACEABLE_EVENT_KIND: u64 = 38383;
+pub const NOSTR_REPLACEABLE_EVENT_KIND: u16 = 38383;
 pub const PROTOCOL_VER: u8 = 1;
 
 #[cfg(test)]
