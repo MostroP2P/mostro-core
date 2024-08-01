@@ -65,6 +65,16 @@ pub enum Action {
     AdminAddSolver,
     AdminTakeDispute,
     AdminTookDispute,
+    IsNotYourOrder,
+    NotAllowedByStatus,
+    OutOfRangeFiatAmount,
+    IsNotYourDispute,
+    NotFound,
+    IncorrectInvoiceAmount,
+    InvalidSatsAmount,
+    OutOfRangeSatsAmount,
+    PaymentFailed,
+    InvoiceUpdated,
 }
 
 impl fmt::Display for Action {
@@ -257,6 +267,16 @@ impl MessageKind {
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
             | Action::Cancel
+            | Action::IsNotYourOrder
+            | Action::NotAllowedByStatus
+            | Action::OutOfRangeFiatAmount
+            | Action::OutOfRangeSatsAmount
+            | Action::IsNotYourDispute
+            | Action::NotFound
+            | Action::IncorrectInvoiceAmount
+            | Action::InvalidSatsAmount
+            | Action::PaymentFailed
+            | Action::InvoiceUpdated
             | Action::Canceled => {
                 if self.id.is_none() {
                     return false;
