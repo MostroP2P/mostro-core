@@ -1,6 +1,6 @@
 [package]
 name = "mostro-core"
-version = "0.6.3"
+version = "0.6.4"
 edition = "2021"
 license = "MIT"
 authors = ["Francisco Calderón <negrunch@grunch.dev>"]
@@ -33,9 +33,6 @@ sqlx-crud = { version = "0.4.0", features = [
 ], optional = true }
 wasm-bindgen = { version = "0.2.92", optional = true }
 nostr-sdk = "0.32.0"
-
-[patch.crates-io]
-sqlx-crud = { git = "https://github.com/f3r10/sqlx-crud" }
 
 [features]
 default = ["wasm"]
