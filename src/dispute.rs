@@ -62,6 +62,8 @@ pub struct Dispute {
     pub solver_pubkey: Option<String>,
     pub created_at: i64,
     pub taken_at: i64,
+    pub buyer_token: Option<u16>,
+    pub seller_token: Option<u16>,
 }
 
 impl Dispute {
@@ -73,6 +75,8 @@ impl Dispute {
             solver_pubkey: None,
             created_at: Utc::now().timestamp(),
             taken_at: 0,
+            buyer_token: None,
+            seller_token: None,
         }
     }
 }

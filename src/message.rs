@@ -192,10 +192,10 @@ pub enum Content {
     Order(SmallOrder),
     PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
     TextMessage(String),
-    Peer(Peer, Option<u16>),
+    Peer(Peer),
     RatingUser(u8),
     Amount(Amount),
-    Dispute(Uuid),
+    Dispute(Uuid, Option<u16>),
 }
 
 #[allow(dead_code)]
