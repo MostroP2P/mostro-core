@@ -192,7 +192,7 @@ pub enum Content {
     Order(SmallOrder),
     PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
     TextMessage(String),
-    Peer(Peer),
+    Peer(Peer, Option<u16>),
     RatingUser(u8),
     Amount(Amount),
     Dispute(Uuid),
