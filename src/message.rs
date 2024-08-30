@@ -195,7 +195,7 @@ pub enum Content {
     Peer(Peer),
     RatingUser(u8),
     Amount(Amount),
-    Dispute(Uuid),
+    Dispute(Uuid, Option<u16>),
 }
 
 #[allow(dead_code)]
