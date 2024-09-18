@@ -35,7 +35,6 @@ mod test {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let test_message = Message::Order(MessageKind::new(
             Some(uuid),
-            None,
             Action::NewOrder,
             Some(Content::Order(SmallOrder::new(
                 Some(uuid),
@@ -70,7 +69,6 @@ mod test {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let test_message = Message::Order(MessageKind::new(
             Some(uuid),
-            None,
             Action::PayInvoice,
             Some(Content::PaymentRequest(
                 Some(SmallOrder::new(
