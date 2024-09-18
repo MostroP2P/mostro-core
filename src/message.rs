@@ -95,32 +95,22 @@ pub enum Message {
 
 impl Message {
     /// New order message
-    pub fn new_order(
-        id: Option<Uuid>,
-        pubkey: Option<String>,
-        action: Action,
-        content: Option<Content>,
-    ) -> Self {
-        let kind = MessageKind::new(id, pubkey, action, content);
+    pub fn new_order(id: Option<Uuid>, action: Action, content: Option<Content>) -> Self {
+        let kind = MessageKind::new(id, action, content);
 
         Self::Order(kind)
     }
 
     /// New dispute message
-    pub fn new_dispute(
-        id: Option<Uuid>,
-        pubkey: Option<String>,
-        action: Action,
-        content: Option<Content>,
-    ) -> Self {
-        let kind = MessageKind::new(id, pubkey, action, content);
+    pub fn new_dispute(id: Option<Uuid>, action: Action, content: Option<Content>) -> Self {
+        let kind = MessageKind::new(id, action, content);
 
         Self::Dispute(kind)
     }
 
     /// New can't do template message message
-    pub fn cant_do(id: Option<Uuid>, pubkey: Option<String>, content: Option<Content>) -> Self {
-        let kind = MessageKind::new(id, pubkey, Action::CantDo, content);
+    pub fn cant_do(id: Option<Uuid>, content: Option<Content>) -> Self {
+        let kind = MessageKind::new(id, Action::CantDo, content);
 
         Self::CantDo(kind)
     }
@@ -174,9 +164,6 @@ pub struct MessageKind {
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
-    /// Real pubkey of the user hidden in the encrypted message,
-    /// used with ephemeral identities
-    pub pubkey: Option<String>,
     /// Action to be taken
     pub action: Action,
     /// Message content
@@ -201,16 +188,10 @@ pub enum Content {
 #[allow(dead_code)]
 impl MessageKind {
     /// New message
-    pub fn new(
-        id: Option<Uuid>,
-        pubkey: Option<String>,
-        action: Action,
-        content: Option<Content>,
-    ) -> Self {
+    pub fn new(id: Option<Uuid>, action: Action, content: Option<Content>) -> Self {
         Self {
             version: PROTOCOL_VER,
             id,
-            pubkey,
             action,
             content,
         }
@@ -278,14 +259,9 @@ impl MessageKind {
             | Action::InvalidSatsAmount
             | Action::PaymentFailed
             | Action::InvoiceUpdated
+            | Action::AdminAddSolver
             | Action::Canceled => {
                 if self.id.is_none() {
-                    return false;
-                }
-                true
-            }
-            Action::AdminAddSolver => {
-                if self.pubkey.is_none() {
                     return false;
                 }
                 true
