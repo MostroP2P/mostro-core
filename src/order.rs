@@ -251,4 +251,22 @@ impl SmallOrder {
     pub fn as_json(&self) -> Result<String> {
         Ok(serde_json::to_string(&self)?)
     }
+
+    // Get the amount of sats or the string "Market price"
+    pub fn sats_amount(&self) -> String {
+        if self.amount == 0 {
+            "Market price".to_string()
+        } else {
+            self.amount.to_string()
+        }
+    }
+
+    // Get the fiat amount, if the order is a range order, return the range as min-max string
+    pub fn fiat_amount(&self) -> String {
+        if self.max_amount.is_some() {
+            format!("{}-{}", self.min_amount.unwrap(), self.max_amount.unwrap())
+        } else {
+            self.fiat_amount.to_string()
+        }
+    }
 }
