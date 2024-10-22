@@ -34,6 +34,7 @@ mod test {
     fn test_order_message() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let test_message = Message::Order(MessageKind::new(
+            1,
             Some(uuid),
             Action::NewOrder,
             Some(Content::Order(SmallOrder::new(
@@ -56,7 +57,7 @@ mod test {
                 None,
             ))),
         ));
-        let sample_message = r#"{"order":{"version":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"new-order","content":{"order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
+        let sample_message = r#"{"order":{"version":1,"request_id":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"new-order","content":{"order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
         let message = Message::from_json(sample_message).unwrap();
         assert!(message.verify());
         let message_json = message.as_json().unwrap();
@@ -68,6 +69,7 @@ mod test {
     fn test_payment_request_content_message() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let test_message = Message::Order(MessageKind::new(
+            1,
             Some(uuid),
             Action::PayInvoice,
             Some(Content::PaymentRequest(
@@ -94,7 +96,7 @@ mod test {
                 None,
             )),
         ));
-        let sample_message = r#"{"order":{"version":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"pay-invoice","content":{"payment_request":[{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"waiting-payment","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434},"lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e",null]}}}"#;
+        let sample_message = r#"{"order":{"version":1,"request_id":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"pay-invoice","content":{"payment_request":[{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"waiting-payment","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434},"lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e",null]}}}"#;
         let message = Message::from_json(sample_message).unwrap();
         assert!(message.verify());
         let message_json = message.as_json().unwrap();

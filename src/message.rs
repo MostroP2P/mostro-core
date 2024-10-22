@@ -95,22 +95,32 @@ pub enum Message {
 
 impl Message {
     /// New order message
-    pub fn new_order(id: Option<Uuid>, action: Action, content: Option<Content>) -> Self {
-        let kind = MessageKind::new(id, action, content);
+    pub fn new_order(
+        request_id: u64,
+        id: Option<Uuid>,
+        action: Action,
+        content: Option<Content>,
+    ) -> Self {
+        let kind = MessageKind::new(request_id, id, action, content);
 
         Self::Order(kind)
     }
 
     /// New dispute message
-    pub fn new_dispute(id: Option<Uuid>, action: Action, content: Option<Content>) -> Self {
-        let kind = MessageKind::new(id, action, content);
+    pub fn new_dispute(
+        request_id: u64,
+        id: Option<Uuid>,
+        action: Action,
+        content: Option<Content>,
+    ) -> Self {
+        let kind = MessageKind::new(request_id, id, action, content);
 
         Self::Dispute(kind)
     }
 
     /// New can't do template message message
-    pub fn cant_do(id: Option<Uuid>, content: Option<Content>) -> Self {
-        let kind = MessageKind::new(id, Action::CantDo, content);
+    pub fn cant_do(request_id: u64, id: Option<Uuid>, content: Option<Content>) -> Self {
+        let kind = MessageKind::new(request_id, id, Action::CantDo, content);
 
         Self::CantDo(kind)
     }
@@ -161,6 +171,8 @@ impl Message {
 pub struct MessageKind {
     /// Message version
     pub version: u8,
+    /// Request_id for test on client
+    pub request_id: u64,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
@@ -188,9 +200,15 @@ pub enum Content {
 #[allow(dead_code)]
 impl MessageKind {
     /// New message
-    pub fn new(id: Option<Uuid>, action: Action, content: Option<Content>) -> Self {
+    pub fn new(
+        request_id: u64,
+        id: Option<Uuid>,
+        action: Action,
+        content: Option<Content>,
+    ) -> Self {
         Self {
             version: PROTOCOL_VER,
+            request_id,
             id,
             action,
             content,
