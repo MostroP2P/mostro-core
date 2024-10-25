@@ -171,7 +171,7 @@ impl Message {
 pub struct MessageKind {
     /// Message version
     pub version: u8,
-    /// Request_id for test on client
+    /// Request id is echoed back to the user
     pub request_id: u64,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
