@@ -81,12 +81,18 @@ impl Rating {
 
         for tag in tags.into_iter() {
             let t = tag.to_vec();
-            match t.first().unwrap().as_str() {
-                "total_reviews" => total_reviews = t.get(1).unwrap().parse::<u64>()?,
-                "total_rating" => total_rating = t.get(1).unwrap().parse::<f64>()?,
-                "last_rating" => last_rating = t.get(1).unwrap().parse::<u8>()?,
-                "max_rate" => max_rate = t.get(1).unwrap().parse::<u8>()?,
-                "min_rate" => min_rate = t.get(1).unwrap().parse::<u8>()?,
+            let key = t
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("Missing tag key"))?;
+            let value = t
+                .get(1)
+                .ok_or_else(|| anyhow::anyhow!("Missing tag value"))?;
+            match key.as_str() {
+                "total_reviews" => total_reviews = value.parse::<u64>()?,
+                "total_rating" => total_rating = value.parse::<f64>()?,
+                "last_rating" => last_rating = value.parse::<u8>()?,
+                "max_rate" => max_rate = value.parse::<u8>()?,
+                "min_rate" => min_rate = value.parse::<u8>()?,
                 _ => {}
             }
         }
