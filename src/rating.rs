@@ -40,7 +40,7 @@ impl Rating {
     }
 
     /// Transform Rating struct to tuple vector to easily interact with Nostr
-    pub fn to_tags(&self) -> Result<Vec<Tag>> {
+    pub fn to_tags(&self) -> Result<Tags> {
         let tags = vec![
             Tag::custom(
                 TagKind::Custom(std::borrow::Cow::Borrowed("total_reviews")),
@@ -68,25 +68,25 @@ impl Rating {
             ),
         ];
 
-        Ok(tags)
+        Ok(Tags::new(tags))
     }
 
     /// Transform tuple vector to Rating struct
-    pub fn from_tags(tags: Vec<Tag>) -> Result<Self> {
+    pub fn from_tags(tags: Tags) -> Result<Self> {
         let mut total_reviews = 0;
         let mut total_rating = 0.0;
         let mut last_rating = 0;
         let mut max_rate = 0;
         let mut min_rate = 0;
 
-        for tag in tags {
+        for tag in tags.into_iter() {
             let t = tag.to_vec();
             match t.first().unwrap().as_str() {
-                "total_reviews" => total_reviews = t.get(1).unwrap().parse::<u64>().unwrap(),
-                "total_rating" => total_rating = t.get(1).unwrap().parse::<f64>().unwrap(),
-                "last_rating" => last_rating = t.get(1).unwrap().parse::<u8>().unwrap(),
-                "max_rate" => max_rate = t.get(1).unwrap().parse::<u8>().unwrap(),
-                "min_rate" => min_rate = t.get(1).unwrap().parse::<u8>().unwrap(),
+                "total_reviews" => total_reviews = t.get(1).unwrap().parse::<u64>()?,
+                "total_rating" => total_rating = t.get(1).unwrap().parse::<f64>()?,
+                "last_rating" => last_rating = t.get(1).unwrap().parse::<u8>()?,
+                "max_rate" => max_rate = t.get(1).unwrap().parse::<u8>()?,
+                "min_rate" => min_rate = t.get(1).unwrap().parse::<u8>()?,
                 _ => {}
             }
         }
