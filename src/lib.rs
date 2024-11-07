@@ -34,7 +34,7 @@ mod test {
     fn test_order_message() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let test_message = Message::Order(MessageKind::new(
-            1,
+            Some(1),
             Some(uuid),
             Action::NewOrder,
             Some(Content::Order(SmallOrder::new(
@@ -69,7 +69,7 @@ mod test {
     fn test_payment_request_content_message() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let test_message = Message::Order(MessageKind::new(
-            1,
+            Some(1),
             Some(uuid),
             Action::PayInvoice,
             Some(Content::PaymentRequest(

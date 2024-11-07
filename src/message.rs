@@ -96,7 +96,7 @@ pub enum Message {
 impl Message {
     /// New order message
     pub fn new_order(
-        request_id: u64,
+        request_id: Option<u64>,
         id: Option<Uuid>,
         action: Action,
         content: Option<Content>,
@@ -108,7 +108,7 @@ impl Message {
 
     /// New dispute message
     pub fn new_dispute(
-        request_id: u64,
+        request_id: Option<u64>,
         id: Option<Uuid>,
         action: Action,
         content: Option<Content>,
@@ -119,7 +119,7 @@ impl Message {
     }
 
     /// New can't do template message message
-    pub fn cant_do(request_id: u64, id: Option<Uuid>, content: Option<Content>) -> Self {
+    pub fn cant_do(request_id: Option<u64>, id: Option<Uuid>, content: Option<Content>) -> Self {
         let kind = MessageKind::new(request_id, id, Action::CantDo, content);
 
         Self::CantDo(kind)
@@ -171,8 +171,8 @@ impl Message {
 pub struct MessageKind {
     /// Message version
     pub version: u8,
-    /// Request id is echoed back to the user
-    pub request_id: u64,
+    /// Request_id for test on client
+    pub request_id: Option<u64>,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
@@ -201,7 +201,7 @@ pub enum Content {
 impl MessageKind {
     /// New message
     pub fn new(
-        request_id: u64,
+        request_id: Option<u64>,
         id: Option<Uuid>,
         action: Action,
         content: Option<Content>,
