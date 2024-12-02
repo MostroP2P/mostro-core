@@ -173,6 +173,8 @@ pub struct MessageKind {
     pub version: u8,
     /// Request_id for test on client
     pub request_id: Option<u64>,
+    /// Trade key index
+    pub trade_key_index: Option<u16>,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
