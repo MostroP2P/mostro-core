@@ -1,7 +1,13 @@
 use crate::order::SmallOrder;
 use crate::PROTOCOL_VER;
 use anyhow::{Ok, Result};
+use bitcoin::hashes::sha256::Hash as Sha256Hash;
+use bitcoin::hashes::Hash;
+use bitcoin::key::Secp256k1;
+use bitcoin::secp256k1::Message as BitcoinMessage;
+use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use std::fmt;
 use uuid::Uuid;
 
@@ -96,31 +102,41 @@ pub enum Message {
 impl Message {
     /// New order message
     pub fn new_order(
-        request_id: Option<u64>,
         id: Option<Uuid>,
+        request_id: Option<u64>,
+        trade_index: Option<u32>,
         action: Action,
         content: Option<Content>,
+        sig: Option<Signature>,
     ) -> Self {
-        let kind = MessageKind::new(request_id, id, action, content);
+        let kind = MessageKind::new(id, request_id, trade_index, action, content, sig);
 
         Self::Order(kind)
     }
 
     /// New dispute message
     pub fn new_dispute(
-        request_id: Option<u64>,
         id: Option<Uuid>,
+        request_id: Option<u64>,
+        trade_index: Option<u32>,
         action: Action,
         content: Option<Content>,
+        sig: Option<Signature>,
     ) -> Self {
-        let kind = MessageKind::new(request_id, id, action, content);
+        let kind = MessageKind::new(id, request_id, trade_index, action, content, sig);
 
         Self::Dispute(kind)
     }
 
     /// New can't do template message message
-    pub fn cant_do(request_id: Option<u64>, id: Option<Uuid>, content: Option<Content>) -> Self {
-        let kind = MessageKind::new(request_id, id, Action::CantDo, content);
+    pub fn cant_do(
+        id: Option<Uuid>,
+        request_id: Option<u64>,
+        trade_index: Option<u32>,
+        content: Option<Content>,
+        sig: Option<Signature>,
+    ) -> Self {
+        let kind = MessageKind::new(id, request_id, trade_index, Action::CantDo, content, sig);
 
         Self::CantDo(kind)
     }
@@ -174,14 +190,14 @@ pub struct MessageKind {
     /// Request_id for test on client
     pub request_id: Option<u64>,
     /// Trade key index
-    pub trade_key_index: Option<u16>,
+    pub trade_index: Option<u32>,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
     /// Action to be taken
     pub action: Action,
-    /// Message content
-    pub content: Option<Content>,
+    /// Tuple for Message content and its signature
+    pub content: (Option<Content>, Option<Signature>),
 }
 
 type Amount = i64;
@@ -203,17 +219,20 @@ pub enum Content {
 impl MessageKind {
     /// New message
     pub fn new(
-        request_id: Option<u64>,
         id: Option<Uuid>,
+        request_id: Option<u64>,
+        trade_index: Option<u32>,
         action: Action,
         content: Option<Content>,
+        sig: Option<Signature>,
     ) -> Self {
         Self {
             version: PROTOCOL_VER,
             request_id,
+            trade_index,
             id,
             action,
-            content,
+            content: (content, sig),
         }
     }
     /// Get message from json string
@@ -233,12 +252,12 @@ impl MessageKind {
     /// Verify if is valid message
     pub fn verify(&self) -> bool {
         match &self.action {
-            Action::NewOrder => matches!(&self.content, Some(Content::Order(_))),
+            Action::NewOrder => matches!(&self.content.0, Some(Content::Order(_))),
             Action::PayInvoice | Action::AddInvoice => {
                 if self.id.is_none() {
                     return false;
                 }
-                matches!(&self.content, Some(Content::PaymentRequest(_, _, _)))
+                matches!(&self.content.0, Some(Content::PaymentRequest(_, _, _)))
             }
             Action::TakeSell
             | Action::TakeBuy
@@ -287,10 +306,10 @@ impl MessageKind {
                 true
             }
             Action::RateUser => {
-                matches!(&self.content, Some(Content::RatingUser(_)))
+                matches!(&self.content.0, Some(Content::RatingUser(_)))
             }
             Action::CantDo => {
-                matches!(&self.content, Some(Content::TextMessage(_)))
+                matches!(&self.content.0, Some(Content::TextMessage(_)))
             }
         }
     }
@@ -299,7 +318,7 @@ impl MessageKind {
         if self.action != Action::NewOrder {
             return None;
         }
-        match &self.content {
+        match &self.content.0 {
             Some(Content::Order(o)) => Some(o),
             _ => None,
         }
@@ -312,7 +331,7 @@ impl MessageKind {
         {
             return None;
         }
-        match &self.content {
+        match &self.content.0 {
             Some(Content::PaymentRequest(_, pr, _)) => Some(pr.to_owned()),
             Some(Content::Order(ord)) => ord.buyer_invoice.to_owned(),
             _ => None,
@@ -323,7 +342,7 @@ impl MessageKind {
         if self.action != Action::TakeSell && self.action != Action::TakeBuy {
             return None;
         }
-        match &self.content {
+        match &self.content.0 {
             Some(Content::PaymentRequest(_, _, amount)) => *amount,
             Some(Content::Amount(amount)) => Some(*amount),
             _ => None,
@@ -331,6 +350,28 @@ impl MessageKind {
     }
 
     pub fn get_content(&self) -> Option<&Content> {
-        self.content.as_ref()
+        self.content.0.as_ref()
+    }
+
+    pub fn get_signature(&self) -> Option<&Signature> {
+        self.content.1.as_ref()
+    }
+
+    pub fn verify_content_signature(&self, pubkey: PublicKey) -> bool {
+        let content = match self.get_content() {
+            Some(c) => c,
+            _ => return false,
+        };
+        let json: Value = json!(content);
+        let content_str: String = json.to_string();
+        let hash: Sha256Hash = Sha256Hash::hash(content_str.as_bytes());
+        let hash = hash.to_byte_array();
+        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
+        let sig = match self.get_signature() {
+            Some(s) => s,
+            _ => return false,
+        };
+        let secp = Secp256k1::new();
+        pubkey.verify(&secp, &message, sig).is_ok()
     }
 }

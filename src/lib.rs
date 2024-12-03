@@ -11,9 +11,15 @@ pub const PROTOCOL_VER: u8 = 1;
 
 #[cfg(test)]
 mod test {
-    use crate::message::{Action, Content, Message, MessageKind};
+    use crate::message::{Action, Content, Message, MessageKind, Peer};
     use crate::order::{Kind, SmallOrder, Status};
+    use bitcoin::hashes::sha256::Hash as Sha256Hash;
+    use bitcoin::hashes::Hash;
+    use bitcoin::secp256k1::Message as BitcoinMessage;
+    use nostr_sdk::Keys;
+    use serde_json::{json, Value};
     use uuid::uuid;
+
     #[test]
     fn test_status_string() {
         assert_eq!(Status::Active.to_string(), "active");
@@ -33,31 +39,35 @@ mod test {
     #[test]
     fn test_order_message() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
-        let test_message = Message::Order(MessageKind::new(
-            Some(1),
+        let content = Content::Order(SmallOrder::new(
             Some(uuid),
-            Action::NewOrder,
-            Some(Content::Order(SmallOrder::new(
-                Some(uuid),
-                Some(Kind::Sell),
-                Some(Status::Pending),
-                100,
-                "eur".to_string(),
-                None,
-                None,
-                100,
-                "SEPA".to_string(),
-                1,
-                None,
-                None,
-                None,
-                Some(1627371434),
-                None,
-                None,
-                None,
-            ))),
+            Some(Kind::Sell),
+            Some(Status::Pending),
+            100,
+            "eur".to_string(),
+            None,
+            None,
+            100,
+            "SEPA".to_string(),
+            1,
+            None,
+            None,
+            None,
+            Some(1627371434),
+            None,
+            None,
+            None,
         ));
-        let sample_message = r#"{"order":{"version":1,"request_id":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"new-order","content":{"order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}}}}"#;
+
+        let test_message = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::NewOrder,
+            Some(content),
+            None,
+        ));
+        let sample_message = r#"{"order":{"version":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","request_id":1,"trade_index":2,"action":"new-order","content":[{"order":{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"pending","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434}},null]}}"#;
         let message = Message::from_json(sample_message).unwrap();
         assert!(message.verify());
         let message_json = message.as_json().unwrap();
@@ -69,8 +79,9 @@ mod test {
     fn test_payment_request_content_message() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let test_message = Message::Order(MessageKind::new(
-            Some(1),
             Some(uuid),
+            Some(1),
+            Some(3),
             Action::PayInvoice,
             Some(Content::PaymentRequest(
                 Some(SmallOrder::new(
@@ -95,12 +106,47 @@ mod test {
                 "lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e".to_string(),
                 None,
             )),
+            None,
         ));
-        let sample_message = r#"{"order":{"version":1,"request_id":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","pubkey":null,"action":"pay-invoice","content":{"payment_request":[{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"waiting-payment","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434},"lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e",null]}}}"#;
+        let sample_message = r#"{"order":{"version":1,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","request_id":1,"trade_index":3,"action":"pay-invoice","content":[{"payment_request":[{"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","kind":"sell","status":"waiting-payment","amount":100,"fiat_code":"eur","fiat_amount":100,"payment_method":"SEPA","premium":1,"created_at":1627371434},"lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e",null]},null]}}"#;
         let message = Message::from_json(sample_message).unwrap();
         assert!(message.verify());
         let message_json = message.as_json().unwrap();
         let test_message_json = test_message.as_json().unwrap();
         assert_eq!(message_json, test_message_json);
+    }
+
+    #[test]
+    fn test_message_content_signature() {
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let peer = Peer::new(
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
+        );
+        let content = Content::Peer(peer);
+        // content should be sha256 hashed
+        let json: Value = json!(content);
+        let content_str: String = json.to_string();
+        let hash: Sha256Hash = Sha256Hash::hash(content_str.as_bytes());
+        let hash = hash.to_byte_array();
+        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
+        // content should be signed with the trade keys
+        let trade_keys =
+            Keys::parse("110e43647eae221ab1da33ddc17fd6ff423f2b2f49d809b9ffa40794a2ab996c")
+                .unwrap();
+        let sig = trade_keys.sign_schnorr(&message);
+
+        let test_message = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::FiatSentOk,
+            Some(content),
+            Some(sig),
+        ));
+
+        assert!(test_message.verify());
+        assert!(test_message
+            .get_inner_message_kind()
+            .verify_content_signature(trade_keys.public_key()));
     }
 }
