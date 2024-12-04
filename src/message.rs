@@ -362,16 +362,19 @@ impl MessageKind {
             Some(c) => c,
             _ => return false,
         };
+        // Get signature or return false if None
+        let sig = match self.get_signature() {
+            Some(s) => s,
+            _ => return false,
+        }; // Create message hash
         let json: Value = json!(content);
         let content_str: String = json.to_string();
         let hash: Sha256Hash = Sha256Hash::hash(content_str.as_bytes());
         let hash = hash.to_byte_array();
         let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
-        let sig = match self.get_signature() {
-            Some(s) => s,
-            _ => return false,
-        };
-        let secp = Secp256k1::new();
+        // Create a verification-only context for better performance
+        let secp = Secp256k1::verification_only();
+        // Verify signature
         pubkey.verify(&secp, &message, sig).is_ok()
     }
 }
