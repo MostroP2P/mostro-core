@@ -17,6 +17,7 @@ pub struct User {
     pub is_banned: i64,
     pub category: i64,
     pub created_at: i64,
+    pub trade_index: u64,
 }
 
 impl User {
@@ -26,6 +27,7 @@ impl User {
         is_solver: i64,
         is_banned: i64,
         category: i64,
+        trade_index: u64
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -35,6 +37,7 @@ impl User {
             is_banned,
             category,
             created_at: Utc::now().timestamp(),
+            trade_index
         }
     }
 }
