@@ -104,7 +104,7 @@ impl Message {
     pub fn new_order(
         id: Option<Uuid>,
         request_id: Option<u64>,
-        trade_index: Option<u32>,
+        trade_index: Option<i64>,
         action: Action,
         content: Option<Content>,
         sig: Option<Signature>,
@@ -118,7 +118,7 @@ impl Message {
     pub fn new_dispute(
         id: Option<Uuid>,
         request_id: Option<u64>,
-        trade_index: Option<u32>,
+        trade_index: Option<i64>,
         action: Action,
         content: Option<Content>,
         sig: Option<Signature>,
@@ -132,7 +132,7 @@ impl Message {
     pub fn cant_do(
         id: Option<Uuid>,
         request_id: Option<u64>,
-        trade_index: Option<u32>,
+        trade_index: Option<i64>,
         content: Option<Content>,
         sig: Option<Signature>,
     ) -> Self {
@@ -190,7 +190,7 @@ pub struct MessageKind {
     /// Request_id for test on client
     pub request_id: Option<u64>,
     /// Trade key index
-    pub trade_index: Option<u32>,
+    pub trade_index: Option<i64>,
     /// Message id is not mandatory
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
@@ -221,7 +221,7 @@ impl MessageKind {
     pub fn new(
         id: Option<Uuid>,
         request_id: Option<u64>,
-        trade_index: Option<u32>,
+        trade_index: Option<i64>,
         action: Action,
         content: Option<Content>,
         sig: Option<Signature>,
@@ -355,6 +355,13 @@ impl MessageKind {
 
     pub fn get_signature(&self) -> Option<&Signature> {
         self.content.1.as_ref()
+    }
+
+    pub fn has_trade_index(&self) -> (bool, i64) {
+        if let Some(index) = self.trade_index{
+            return (true,index)
+        }
+        (false,0)
     }
 
     pub fn verify_content_signature(&self, pubkey: PublicKey) -> bool {

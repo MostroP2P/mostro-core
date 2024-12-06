@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 /// Database representation of an user
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct User {
     pub id: Uuid,
     pub pubkey: String,
@@ -17,7 +17,7 @@ pub struct User {
     pub is_banned: i64,
     pub category: i64,
     pub created_at: i64,
-    pub trade_index: u64,
+    pub trade_index: i64,
 }
 
 impl User {
@@ -27,7 +27,7 @@ impl User {
         is_solver: i64,
         is_banned: i64,
         category: i64,
-        trade_index: u64
+        trade_index: i64
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
