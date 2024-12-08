@@ -110,7 +110,6 @@ impl Message {
         sig: Option<Signature>,
     ) -> Self {
         let kind = MessageKind::new(id, request_id, trade_index, action, content, sig);
-
         Self::Order(kind)
     }
 
@@ -358,10 +357,10 @@ impl MessageKind {
     }
 
     pub fn has_trade_index(&self) -> (bool, i64) {
-        if let Some(index) = self.trade_index{
-            return (true,index)
+        if let Some(index) = self.trade_index {
+            return (true, index);
         }
-        (false,0)
+        (false, 0)
     }
 
     pub fn verify_content_signature(&self, pubkey: PublicKey) -> bool {

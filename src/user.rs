@@ -27,7 +27,7 @@ impl User {
         is_solver: i64,
         is_banned: i64,
         category: i64,
-        trade_index: i64
+        trade_index: i64,
     ) -> Self {
         Self {
             id: Uuid::new_v4(),
@@ -37,7 +37,7 @@ impl User {
             is_banned,
             category,
             created_at: Utc::now().timestamp(),
-            trade_index
+            trade_index,
         }
     }
 }
