@@ -58,6 +58,7 @@ mod test {
             None,
             None,
             None,
+            None,
         ));
 
         let test_message = Message::Order(MessageKind::new(
@@ -100,6 +101,7 @@ mod test {
                     None,
                     None,
                     Some(1627371434),
+                    None,
                     None,
                     None,
                     None,
