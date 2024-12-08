@@ -57,6 +57,7 @@ mod test {
             None,
             None,
             None,
+            None,
         ));
 
         let test_message = Message::Order(MessageKind::new(
@@ -101,7 +102,8 @@ mod test {
                     Some(1627371434),
                     None,
                     None,
-                    None
+                    None,
+                    None,
                 )),
                 "lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e".to_string(),
                 None,
