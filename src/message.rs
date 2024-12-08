@@ -131,11 +131,10 @@ impl Message {
     pub fn cant_do(
         id: Option<Uuid>,
         request_id: Option<u64>,
-        trade_index: Option<i64>,
         content: Option<Content>,
         sig: Option<Signature>,
     ) -> Self {
-        let kind = MessageKind::new(id, request_id, trade_index, Action::CantDo, content, sig);
+        let kind = MessageKind::new(id, request_id, None, Action::CantDo, content, sig);
 
         Self::CantDo(kind)
     }
