@@ -168,8 +168,6 @@ impl Order {
             Some(self.expires_at),
             None,
             None,
-            self.trade_index_seller,
-            self.trade_index_buyer,
         )
     }
 
@@ -202,8 +200,6 @@ pub struct SmallOrder {
     pub expires_at: Option<i64>,
     pub buyer_token: Option<u16>,
     pub seller_token: Option<u16>,
-    pub trade_index_seller: Option<i64>,
-    pub trade_index_buyer: Option<i64>,
 }
 
 #[allow(dead_code)]
@@ -227,8 +223,6 @@ impl SmallOrder {
         expires_at: Option<i64>,
         buyer_token: Option<u16>,
         seller_token: Option<u16>,
-        trade_index_seller: Option<i64>,
-        trade_index_buyer: Option<i64>,
     ) -> Self {
         Self {
             id,
@@ -248,8 +242,6 @@ impl SmallOrder {
             expires_at,
             buyer_token,
             seller_token,
-            trade_index_seller,
-            trade_index_buyer,
         }
     }
     /// New order from json string
