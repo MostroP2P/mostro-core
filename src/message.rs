@@ -106,10 +106,9 @@ impl Message {
         request_id: Option<u64>,
         trade_index: Option<i64>,
         action: Action,
-        content: Option<Content>,
-        sig: Option<Signature>,
+        payload: Option<Payload>,
     ) -> Self {
-        let kind = MessageKind::new(id, request_id, trade_index, action, content, sig);
+        let kind = MessageKind::new(id, request_id, trade_index, action, payload);
         Self::Order(kind)
     }
 
@@ -119,22 +118,16 @@ impl Message {
         request_id: Option<u64>,
         trade_index: Option<i64>,
         action: Action,
-        content: Option<Content>,
-        sig: Option<Signature>,
+        payload: Option<Payload>,
     ) -> Self {
-        let kind = MessageKind::new(id, request_id, trade_index, action, content, sig);
+        let kind = MessageKind::new(id, request_id, trade_index, action, payload);
 
         Self::Dispute(kind)
     }
 
     /// New can't do template message message
-    pub fn cant_do(
-        id: Option<Uuid>,
-        request_id: Option<u64>,
-        content: Option<Content>,
-        sig: Option<Signature>,
-    ) -> Self {
-        let kind = MessageKind::new(id, request_id, None, Action::CantDo, content, sig);
+    pub fn cant_do(id: Option<Uuid>, request_id: Option<u64>, payload: Option<Payload>) -> Self {
+        let kind = MessageKind::new(id, request_id, None, Action::CantDo, payload);
 
         Self::CantDo(kind)
     }
@@ -194,16 +187,16 @@ pub struct MessageKind {
     pub id: Option<Uuid>,
     /// Action to be taken
     pub action: Action,
-    /// Tuple for Message content and its signature
-    pub content: (Option<Content>, Option<Signature>),
+    /// Payload of the Message
+    pub payload: Option<Payload>,
 }
 
 type Amount = i64;
 
-/// Message content
+/// Message payload
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
-pub enum Content {
+pub enum Payload {
     Order(SmallOrder),
     PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
     TextMessage(String),
@@ -221,8 +214,7 @@ impl MessageKind {
         request_id: Option<u64>,
         trade_index: Option<i64>,
         action: Action,
-        content: Option<Content>,
-        sig: Option<Signature>,
+        payload: Option<Payload>,
     ) -> Self {
         Self {
             version: PROTOCOL_VER,
@@ -230,7 +222,7 @@ impl MessageKind {
             trade_index,
             id,
             action,
-            content: (content, sig),
+            payload,
         }
     }
     /// Get message from json string
@@ -250,12 +242,12 @@ impl MessageKind {
     /// Verify if is valid message
     pub fn verify(&self) -> bool {
         match &self.action {
-            Action::NewOrder => matches!(&self.content.0, Some(Content::Order(_))),
+            Action::NewOrder => matches!(&self.payload, Some(Payload::Order(_))),
             Action::PayInvoice | Action::AddInvoice => {
                 if self.id.is_none() {
                     return false;
                 }
-                matches!(&self.content.0, Some(Content::PaymentRequest(_, _, _)))
+                matches!(&self.payload, Some(Payload::PaymentRequest(_, _, _)))
             }
             Action::TakeSell
             | Action::TakeBuy
@@ -304,10 +296,10 @@ impl MessageKind {
                 true
             }
             Action::RateUser => {
-                matches!(&self.content.0, Some(Content::RatingUser(_)))
+                matches!(&self.payload, Some(Payload::RatingUser(_)))
             }
             Action::CantDo => {
-                matches!(&self.content.0, Some(Content::TextMessage(_)))
+                matches!(&self.payload, Some(Payload::TextMessage(_)))
             }
         }
     }
@@ -316,8 +308,8 @@ impl MessageKind {
         if self.action != Action::NewOrder {
             return None;
         }
-        match &self.content.0 {
-            Some(Content::Order(o)) => Some(o),
+        match &self.payload {
+            Some(Payload::Order(o)) => Some(o),
             _ => None,
         }
     }
@@ -329,9 +321,9 @@ impl MessageKind {
         {
             return None;
         }
-        match &self.content.0 {
-            Some(Content::PaymentRequest(_, pr, _)) => Some(pr.to_owned()),
-            Some(Content::Order(ord)) => ord.buyer_invoice.to_owned(),
+        match &self.payload {
+            Some(Payload::PaymentRequest(_, pr, _)) => Some(pr.to_owned()),
+            Some(Payload::Order(ord)) => ord.buyer_invoice.to_owned(),
             _ => None,
         }
     }
@@ -340,19 +332,15 @@ impl MessageKind {
         if self.action != Action::TakeSell && self.action != Action::TakeBuy {
             return None;
         }
-        match &self.content.0 {
-            Some(Content::PaymentRequest(_, _, amount)) => *amount,
-            Some(Content::Amount(amount)) => Some(*amount),
+        match &self.payload {
+            Some(Payload::PaymentRequest(_, _, amount)) => *amount,
+            Some(Payload::Amount(amount)) => Some(*amount),
             _ => None,
         }
     }
 
-    pub fn get_content(&self) -> Option<&Content> {
-        self.content.0.as_ref()
-    }
-
-    pub fn get_signature(&self) -> Option<&Signature> {
-        self.content.1.as_ref()
+    pub fn get_payload(&self) -> Option<&Payload> {
+        self.payload.as_ref()
     }
 
     pub fn has_trade_index(&self) -> (bool, i64) {
@@ -362,24 +350,24 @@ impl MessageKind {
         (false, 0)
     }
 
-    pub fn verify_content_signature(&self, pubkey: PublicKey) -> bool {
-        let content = match self.get_content() {
-            Some(c) => c,
-            _ => return false,
-        };
-        // Get signature or return false if None
-        let sig = match self.get_signature() {
-            Some(s) => s,
-            _ => return false,
-        }; // Create message hash
-        let json: Value = json!(content);
-        let content_str: String = json.to_string();
-        let hash: Sha256Hash = Sha256Hash::hash(content_str.as_bytes());
+    pub fn sign(&self, keys: &Keys) -> Signature {
+        let message = self.as_json().unwrap();
+        let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
+        let hash = hash.to_byte_array();
+        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
+
+        keys.sign_schnorr(&message)
+    }
+
+    pub fn verify_signature(&self, pubkey: PublicKey, sig: Signature) -> bool {
+        // Create message hash
+        let message = self.as_json().unwrap();
+        let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
         let hash = hash.to_byte_array();
         let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
         // Create a verification-only context for better performance
         let secp = Secp256k1::verification_only();
         // Verify signature
-        pubkey.verify(&secp, &message, sig).is_ok()
+        pubkey.verify(&secp, &message, &sig).is_ok()
     }
 }
