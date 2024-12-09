@@ -361,13 +361,10 @@ impl MessageKind {
 
     pub fn verify_signature(&self, pubkey: PublicKey, sig: Signature) -> bool {
         // Create message hash
-        let json: Value = json!(self);
-        let message: String = json.to_string();
+        let message = self.as_json().unwrap();
         let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
         let hash = hash.to_byte_array();
-        println!("hash: {:?}", hash);
         let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
-        println!("BitcoinMessage::from_digest: {:?}", message);
         // Create a verification-only context for better performance
         let secp = Secp256k1::verification_only();
         // Verify signature
