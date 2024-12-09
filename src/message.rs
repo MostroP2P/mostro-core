@@ -7,7 +7,6 @@ use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::Message as BitcoinMessage;
 use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use std::fmt;
 use uuid::Uuid;
 
