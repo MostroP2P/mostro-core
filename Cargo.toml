@@ -32,7 +32,7 @@ sqlx-crud = { version = "0.4.0", features = [
   "runtime-tokio-rustls",
 ], optional = true }
 wasm-bindgen = { version = "0.2.92", optional = true }
-nostr-sdk = "0.36.0"
+nostr-sdk = "0.37.0"
 bitcoin = "0.32.5"
 bitcoin_hashes = "0.15.0"
 
