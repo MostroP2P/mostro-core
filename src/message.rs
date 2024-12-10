@@ -312,7 +312,7 @@ impl MessageKind {
                 matches!(&self.payload, Some(Payload::RatingUser(_)))
             }
             Action::CantDo => {
-                matches!(&self.payload, Some(Payload::TextMessage(_)))
+                matches!(&self.payload, Some(Payload::CantDo(_)))
             }
         }
     }
