@@ -192,6 +192,19 @@ pub struct MessageKind {
 
 type Amount = i64;
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum CantDoReason {
+    InvalidSignature,
+    InvalidTradeIndex,
+    InvalidAmount,
+    InvalidInvoice,
+    InvalidPaymentRequest,
+    InvalidPeer,
+    InvalidRating,
+    InvalidTextMessage,
+}
+
 /// Message payload
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -203,6 +216,7 @@ pub enum Payload {
     RatingUser(u8),
     Amount(Amount),
     Dispute(Uuid, Option<u16>),
+    CantDo(Option<CantDoReason>),
 }
 
 #[allow(dead_code)]
