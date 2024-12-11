@@ -11,7 +11,7 @@ pub const PROTOCOL_VER: u8 = 1;
 
 #[cfg(test)]
 mod test {
-    use crate::message::{Action, Message, MessageKind, Payload, Peer};
+    use crate::message::{Action, CantDoReason, Message, MessageKind, Payload, Peer};
     use crate::order::{Kind, SmallOrder, Status};
     use nostr_sdk::Keys;
     use uuid::uuid;
@@ -134,5 +134,20 @@ mod test {
         assert!(test_message
             .get_inner_message_kind()
             .verify_signature(trade_keys.public_key(), sig));
+    }
+
+    #[test]
+    fn test_cant_do_reason_serialization() {
+        let cant_do = Message::CantDo(MessageKind::new(
+            None,
+            None,
+            None,
+            Action::CantDo,
+            Some(Payload::CantDo(Some(CantDoReason::InvalidSignature))),
+        ));
+        let json_cant_do_message = r#"{"cant-do":{"version":1,"request_id":null,"trade_index":null,"action":"cant-do","payload":{"cant_do":"invalid_signature"}}}"#;
+        let message = Message::from_json(json_cant_do_message).unwrap();
+        assert!(message.verify());
+        assert_eq!(message.as_json().unwrap(), cant_do.as_json().unwrap());
     }
 }

@@ -193,7 +193,7 @@ pub struct MessageKind {
 type Amount = i64;
 
 /// Represents specific reasons why a requested action cannot be performed
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum CantDoReason {
     /// The provided signature is invalid or missing
