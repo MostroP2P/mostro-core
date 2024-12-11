@@ -192,6 +192,28 @@ pub struct MessageKind {
 
 type Amount = i64;
 
+/// Represents specific reasons why a requested action cannot be performed
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CantDoReason {
+    /// The provided signature is invalid or missing
+    InvalidSignature,
+    /// The specified trade index does not exist or is invalid
+    InvalidTradeIndex,
+    /// The provided amount is invalid or out of acceptable range
+    InvalidAmount,
+    /// The provided invoice is malformed or expired
+    InvalidInvoice,
+    /// The payment request is invalid or cannot be processed
+    InvalidPaymentRequest,
+    /// The specified peer is invalid or not found
+    InvalidPeer,
+    /// The rating value is invalid or out of range
+    InvalidRating,
+    /// The text message is invalid or contains prohibited content
+    InvalidTextMessage,
+}
+
 /// Message payload
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -203,6 +225,7 @@ pub enum Payload {
     RatingUser(u8),
     Amount(Amount),
     Dispute(Uuid, Option<u16>),
+    CantDo(Option<CantDoReason>),
 }
 
 #[allow(dead_code)]
@@ -298,7 +321,7 @@ impl MessageKind {
                 matches!(&self.payload, Some(Payload::RatingUser(_)))
             }
             Action::CantDo => {
-                matches!(&self.payload, Some(Payload::TextMessage(_)))
+                matches!(&self.payload, Some(Payload::CantDo(_)))
             }
         }
     }

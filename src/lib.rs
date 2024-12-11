@@ -11,7 +11,7 @@ pub const PROTOCOL_VER: u8 = 1;
 
 #[cfg(test)]
 mod test {
-    use crate::message::{Action, Message, MessageKind, Payload, Peer};
+    use crate::message::{Action, CantDoReason, Message, MessageKind, Payload, Peer};
     use crate::order::{Kind, SmallOrder, Status};
     use nostr_sdk::Keys;
     use uuid::uuid;
@@ -134,5 +134,45 @@ mod test {
         assert!(test_message
             .get_inner_message_kind()
             .verify_signature(trade_keys.public_key(), sig));
+    }
+
+    #[test]
+    fn test_cant_do_message_serialization() {
+        // Test all CantDoReason variants
+        let reasons = vec![
+            CantDoReason::InvalidSignature,
+            CantDoReason::InvalidTradeIndex,
+            CantDoReason::InvalidAmount,
+            CantDoReason::InvalidInvoice,
+            CantDoReason::InvalidPaymentRequest,
+            CantDoReason::InvalidPeer,
+            CantDoReason::InvalidRating,
+            CantDoReason::InvalidTextMessage,
+        ];
+
+        for reason in reasons {
+            let cant_do = Message::CantDo(MessageKind::new(
+                None,
+                None,
+                None,
+                Action::CantDo,
+                Some(Payload::CantDo(Some(reason.clone()))),
+            ));
+            let message = Message::from_json(&cant_do.as_json().unwrap()).unwrap();
+            assert!(message.verify());
+            assert_eq!(message.as_json().unwrap(), cant_do.as_json().unwrap());
+        }
+
+        // Test None case
+        let cant_do = Message::CantDo(MessageKind::new(
+            None,
+            None,
+            None,
+            Action::CantDo,
+            Some(Payload::CantDo(None)),
+        ));
+        let message = Message::from_json(&cant_do.as_json().unwrap()).unwrap();
+        assert!(message.verify());
+        assert_eq!(message.as_json().unwrap(), cant_do.as_json().unwrap());
     }
 }
