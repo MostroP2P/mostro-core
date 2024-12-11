@@ -137,16 +137,41 @@ mod test {
     }
 
     #[test]
-    fn test_cant_do_reason_serialization() {
+    fn test_cant_do_message_serialization() {
+        // Test all CantDoReason variants
+        let reasons = vec![
+            CantDoReason::InvalidSignature,
+            CantDoReason::InvalidTradeIndex,
+            CantDoReason::InvalidAmount,
+            CantDoReason::InvalidInvoice,
+            CantDoReason::InvalidPaymentRequest,
+            CantDoReason::InvalidPeer,
+            CantDoReason::InvalidRating,
+            CantDoReason::InvalidTextMessage,
+        ];
+
+        for reason in reasons {
+            let cant_do = Message::CantDo(MessageKind::new(
+                None,
+                None,
+                None,
+                Action::CantDo,
+                Some(Payload::CantDo(Some(reason.clone()))),
+            ));
+            let message = Message::from_json(&cant_do.as_json().unwrap()).unwrap();
+            assert!(message.verify());
+            assert_eq!(message.as_json().unwrap(), cant_do.as_json().unwrap());
+        }
+
+        // Test None case
         let cant_do = Message::CantDo(MessageKind::new(
             None,
             None,
             None,
             Action::CantDo,
-            Some(Payload::CantDo(Some(CantDoReason::InvalidSignature))),
+            Some(Payload::CantDo(None)),
         ));
-        let json_cant_do_message = r#"{"cant-do":{"version":1,"request_id":null,"trade_index":null,"action":"cant-do","payload":{"cant_do":"invalid_signature"}}}"#;
-        let message = Message::from_json(json_cant_do_message).unwrap();
+        let message = Message::from_json(&cant_do.as_json().unwrap()).unwrap();
         assert!(message.verify());
         assert_eq!(message.as_json().unwrap(), cant_do.as_json().unwrap());
     }
