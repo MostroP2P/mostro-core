@@ -80,6 +80,7 @@ pub enum Action {
     OutOfRangeSatsAmount,
     PaymentFailed,
     InvoiceUpdated,
+    SendDm,
 }
 
 impl fmt::Display for Action {
@@ -96,6 +97,7 @@ pub enum Message {
     Dispute(MessageKind),
     CantDo(MessageKind),
     Rate(MessageKind),
+    Dm(MessageKind),
 }
 
 impl Message {
@@ -131,6 +133,18 @@ impl Message {
         Self::CantDo(kind)
     }
 
+    /// New DM message
+    pub fn new_dm(
+        id: Option<Uuid>,
+        request_id: Option<u64>,
+        action: Action,
+        payload: Option<Payload>,
+    ) -> Self {
+        let kind = MessageKind::new(id, request_id, None, action, payload);
+
+        Self::Dm(kind)
+    }
+
     /// Get message from json string
     pub fn from_json(json: &str) -> Result<Self> {
         Ok(serde_json::from_str(json)?)
@@ -144,30 +158,33 @@ impl Message {
     // Get inner message kind
     pub fn get_inner_message_kind(&self) -> &MessageKind {
         match self {
-            Message::Dispute(k) => k,
-            Message::Order(k) => k,
-            Message::CantDo(k) => k,
-            Message::Rate(k) => k,
+            Message::Dispute(k)
+            | Message::Order(k)
+            | Message::CantDo(k)
+            | Message::Rate(k)
+            | Message::Dm(k) => k,
         }
     }
 
     // Get action from the inner message
     pub fn inner_action(&self) -> Option<Action> {
         match self {
-            Message::Dispute(a) => Some(a.get_action()),
-            Message::Order(a) => Some(a.get_action()),
-            Message::CantDo(a) => Some(a.get_action()),
-            Message::Rate(a) => Some(a.get_action()),
+            Message::Dispute(a)
+            | Message::Order(a)
+            | Message::CantDo(a)
+            | Message::Rate(a)
+            | Message::Dm(a) => Some(a.get_action()),
         }
     }
 
     /// Verify if is valid the inner message
     pub fn verify(&self) -> bool {
         match self {
-            Message::Order(m) => m.verify(),
-            Message::Dispute(m) => m.verify(),
-            Message::CantDo(m) => m.verify(),
-            Message::Rate(m) => m.verify(),
+            Message::Order(m)
+            | Message::Dispute(m)
+            | Message::CantDo(m)
+            | Message::Rate(m)
+            | Message::Dm(m) => m.verify(),
         }
     }
 }
@@ -311,6 +328,7 @@ impl MessageKind {
             | Action::PaymentFailed
             | Action::InvoiceUpdated
             | Action::AdminAddSolver
+            | Action::SendDm
             | Action::Canceled => {
                 if self.id.is_none() {
                     return false;
