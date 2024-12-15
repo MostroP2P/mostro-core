@@ -229,6 +229,8 @@ pub enum CantDoReason {
     InvalidRating,
     /// The text message is invalid or contains prohibited content
     InvalidTextMessage,
+    /// The order kind is invalid
+    InvalidOrderKind,
 }
 
 /// Message payload
