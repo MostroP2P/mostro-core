@@ -32,7 +32,9 @@ sqlx-crud = { version = "0.4.0", features = [
   "runtime-tokio-rustls",
 ], optional = true }
 wasm-bindgen = { version = "0.2.92", optional = true }
-nostr-sdk = "0.37.0"
+# nostr-sdk = "0.37.0"
+nostr-sdk = { git  = "https://github.com/rust-nostr/nostr", features = ["nip06", "nip44", "nip59"], rev ="70db575d51965240aab1e1b3f1edab782c0ef625"}
+
 bitcoin = "0.32.5"
 bitcoin_hashes = "0.15.0"
 
