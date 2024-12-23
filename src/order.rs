@@ -191,9 +191,9 @@ pub struct SmallOrder {
     pub payment_method: String,
     pub premium: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub master_buyer_pubkey: Option<String>,
+    pub buyer_trade_pubkey: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub master_seller_pubkey: Option<String>,
+    pub seller_trade_pubkey: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buyer_invoice: Option<String>,
     pub created_at: Option<i64>,
@@ -216,8 +216,8 @@ impl SmallOrder {
         fiat_amount: i64,
         payment_method: String,
         premium: i64,
-        master_buyer_pubkey: Option<String>,
-        master_seller_pubkey: Option<String>,
+        buyer_trade_pubkey: Option<String>,
+        seller_trade_pubkey: Option<String>,
         buyer_invoice: Option<String>,
         created_at: Option<i64>,
         expires_at: Option<i64>,
@@ -235,8 +235,8 @@ impl SmallOrder {
             fiat_amount,
             payment_method,
             premium,
-            master_buyer_pubkey,
-            master_seller_pubkey,
+            buyer_trade_pubkey,
+            seller_trade_pubkey,
             buyer_invoice,
             created_at,
             expires_at,
