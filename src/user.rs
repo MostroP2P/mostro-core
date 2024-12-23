@@ -2,14 +2,11 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
-#[cfg(feature = "sqlx")]
-use sqlx_crud::SqlxCrud;
 
 /// Database representation of an user
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct User {
-    pub id: uuid::Uuid,
     pub pubkey: String,
     pub is_admin: i64,
     pub is_solver: i64,
@@ -36,7 +33,6 @@ impl User {
         trade_index: i64,
     ) -> Self {
         Self {
-            id: uuid::Uuid::new_v4(),
             pubkey,
             is_admin,
             is_solver,
