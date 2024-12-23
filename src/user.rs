@@ -5,7 +5,7 @@ use sqlx::FromRow;
 
 /// Database representation of an user
 #[cfg_attr(feature = "sqlx", derive(FromRow))]
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 pub struct User {
     pub pubkey: String,
     pub is_admin: i64,
@@ -16,7 +16,7 @@ pub struct User {
     /// the trade_index is greater than the one we have in database
     pub last_trade_index: i64,
     pub total_reviews: i64,
-    pub total_rating: i64,
+    pub total_rating: f64,
     pub last_rating: i64,
     pub max_rating: i64,
     pub min_rating: i64,
@@ -40,7 +40,7 @@ impl User {
             category,
             last_trade_index: trade_index,
             total_reviews: 0,
-            total_rating: 0,
+            total_rating: 0.0,
             last_rating: 0,
             max_rating: 0,
             min_rating: 0,
