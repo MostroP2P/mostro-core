@@ -231,6 +231,16 @@ pub enum CantDoReason {
     InvalidTextMessage,
     /// The order kind is invalid
     InvalidOrderKind,
+    /// The order status is invalid
+    InvalidOrderStatus,
+    /// Invalid pubkey
+    InvalidPubkey,
+    /// Invalid parameters
+    InvalidParameters,
+    /// The order is already canceled
+    OrderAlreadyCanceled,
+    /// Can't create user
+    CantCreateUser,
 }
 
 /// Message payload

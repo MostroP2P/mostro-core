@@ -148,6 +148,11 @@ mod test {
             CantDoReason::InvalidPeer,
             CantDoReason::InvalidRating,
             CantDoReason::InvalidTextMessage,
+            CantDoReason::InvalidOrderStatus,
+            CantDoReason::InvalidPubkey,
+            CantDoReason::InvalidParameters,
+            CantDoReason::OrderAlreadyCanceled,
+            CantDoReason::CantCreateUser,
         ];
 
         for reason in reasons {
