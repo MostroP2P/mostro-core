@@ -70,17 +70,10 @@ pub enum Action {
     AdminAddSolver,
     AdminTakeDispute,
     AdminTookDispute,
-    IsNotYourOrder,
-    NotAllowedByStatus,
-    OutOfRangeFiatAmount,
-    IsNotYourDispute,
-    NotFound,
-    IncorrectInvoiceAmount,
-    InvalidSatsAmount,
-    OutOfRangeSatsAmount,
     PaymentFailed,
     InvoiceUpdated,
     SendDm,
+    TradePubkey,
 }
 
 impl fmt::Display for Action {
@@ -241,6 +234,18 @@ pub enum CantDoReason {
     OrderAlreadyCanceled,
     /// Can't create user
     CantCreateUser,
+    /// For users trying to do actions on orders that are not theirs
+    IsNotYourOrder,
+    /// For users trying to do actions on orders not allowed by status
+    NotAllowedByStatus,
+    /// Fiat amount is out of range
+    OutOfRangeFiatAmount,
+    /// Sats amount is out of range
+    OutOfRangeSatsAmount,
+    /// For users trying to do actions on dispute that are not theirs
+    IsNotYourDispute,
+    /// Generic not found
+    NotFound,
 }
 
 /// Message payload
@@ -329,15 +334,8 @@ impl MessageKind {
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
             | Action::Cancel
-            | Action::IsNotYourOrder
-            | Action::NotAllowedByStatus
-            | Action::OutOfRangeFiatAmount
-            | Action::OutOfRangeSatsAmount
-            | Action::IsNotYourDispute
-            | Action::NotFound
-            | Action::IncorrectInvoiceAmount
-            | Action::InvalidSatsAmount
             | Action::PaymentFailed
+            | Action::TradePubkey
             | Action::InvoiceUpdated
             | Action::AdminAddSolver
             | Action::SendDm

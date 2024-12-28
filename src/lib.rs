@@ -153,6 +153,12 @@ mod test {
             CantDoReason::InvalidParameters,
             CantDoReason::OrderAlreadyCanceled,
             CantDoReason::CantCreateUser,
+            CantDoReason::IsNotYourOrder,
+            CantDoReason::NotAllowedByStatus,
+            CantDoReason::OutOfRangeFiatAmount,
+            CantDoReason::OutOfRangeSatsAmount,
+            CantDoReason::IsNotYourDispute,
+            CantDoReason::NotFound,
         ];
 
         for reason in reasons {
