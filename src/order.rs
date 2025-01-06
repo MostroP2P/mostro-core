@@ -1,4 +1,5 @@
-use anyhow::{Ok, Result};
+use anyhow::Result;
+use nostr_sdk::PublicKey;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
@@ -82,7 +83,7 @@ impl Display for Status {
 
 impl FromStr for Status {
     type Err = ();
-
+    /// Convert a string to a status
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "active" => std::result::Result::Ok(Self::Active),
@@ -149,6 +150,7 @@ pub struct Order {
 }
 
 impl Order {
+    /// Convert an order to a small order
     pub fn as_new_order(&self) -> SmallOrder {
         SmallOrder::new(
             Some(self.id),
@@ -171,6 +173,48 @@ impl Order {
         )
     }
 
+    /// Compare the status of the order
+    pub fn check_status(&self, status: Status) -> bool {
+        match Status::from_str(&self.status) {
+            Ok(s) => s == status,
+            Err(_) => false,
+        }
+    }
+
+    pub fn is_buy_order(&self) -> bool {
+        if self.kind != Kind::Buy.to_string() {
+            return false;
+        }
+        true
+    }
+
+    pub fn is_sell_order(&self) -> bool {
+        if self.kind != Kind::Sell.to_string() {
+            return false;
+        }
+        true
+    }
+
+    pub fn sent_from_maker(&self, sender: String) -> bool {
+        if self.creator_pubkey == sender {
+            return false;
+        }
+        true
+    }
+
+    pub fn get_buyer_pubkey(&self) -> Option<PublicKey> {
+        self.buyer_pubkey
+            .as_ref()
+            .map(|pk| PublicKey::from_str(pk).unwrap())
+    }
+
+    pub fn get_seller_pubkey(&self) -> Option<PublicKey> {
+        self.seller_pubkey
+            .as_ref()
+            .map(|pk| PublicKey::from_str(pk).unwrap())
+    }
+
+    /// Check if the order is a range order
     pub fn is_range_order(&self) -> bool {
         self.min_amount.is_some() && self.max_amount.is_some()
     }
@@ -254,7 +298,7 @@ impl SmallOrder {
         Ok(serde_json::to_string(&self)?)
     }
 
-    // Get the amount of sats or the string "Market price"
+    /// Get the amount of sats or the string "Market price"
     pub fn sats_amount(&self) -> String {
         if self.amount == 0 {
             "Market price".to_string()

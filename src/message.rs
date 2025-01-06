@@ -83,7 +83,7 @@ impl fmt::Display for Action {
 }
 
 /// Use this Message to establish communication between users and Mostro
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Message {
     Order(MessageKind),
@@ -183,7 +183,7 @@ impl Message {
 }
 
 /// Use this Message to establish communication between users and Mostro
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MessageKind {
     /// Message version
     pub version: u8,
