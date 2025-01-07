@@ -73,7 +73,6 @@ pub enum Action {
     PaymentFailed,
     InvoiceUpdated,
     SendDm,
-    TradePubkey,
 }
 
 impl fmt::Display for Action {
@@ -252,14 +251,26 @@ pub enum CantDoReason {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum Payload {
+    /// Order
     Order(SmallOrder),
+    /// Payment request
     PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
+    /// Use to send a message to another user
     TextMessage(String),
+    /// Peer information
     Peer(Peer),
+    /// Used to rate a user
     RatingUser(u8),
+    /// In some cases we need to send an amount
     Amount(Amount),
+    /// Dispute
     Dispute(Uuid, Option<u16>),
+    /// Here the reason why we can't do the action
     CantDo(Option<CantDoReason>),
+    /// This is used by the maker of a range order only on
+    /// messages with action release and fiat-sent
+    /// to inform the next trade pubkey and trade index
+    NextTrade(String, u32),
 }
 
 #[allow(dead_code)]
@@ -335,7 +346,6 @@ impl MessageKind {
             | Action::CooperativeCancelAccepted
             | Action::Cancel
             | Action::PaymentFailed
-            | Action::TradePubkey
             | Action::InvoiceUpdated
             | Action::AdminAddSolver
             | Action::SendDm
