@@ -3,6 +3,7 @@ pub mod message;
 pub mod order;
 pub mod rating;
 pub mod user;
+pub mod error;
 
 /// All events broadcasted by Mostro daemon are Parameterized Replaceable Events
 /// and the event kind must be between 30000 and 39999
