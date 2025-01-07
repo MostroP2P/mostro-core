@@ -1,4 +1,4 @@
-use crate::order::SmallOrder;
+use crate::{error::CantDoReason, order::SmallOrder};
 use crate::PROTOCOL_VER;
 use anyhow::{Ok, Result};
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
@@ -201,52 +201,6 @@ pub struct MessageKind {
 }
 
 type Amount = i64;
-
-/// Represents specific reasons why a requested action cannot be performed
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CantDoReason {
-    /// The provided signature is invalid or missing
-    InvalidSignature,
-    /// The specified trade index does not exist or is invalid
-    InvalidTradeIndex,
-    /// The provided amount is invalid or out of acceptable range
-    InvalidAmount,
-    /// The provided invoice is malformed or expired
-    InvalidInvoice,
-    /// The payment request is invalid or cannot be processed
-    InvalidPaymentRequest,
-    /// The specified peer is invalid or not found
-    InvalidPeer,
-    /// The rating value is invalid or out of range
-    InvalidRating,
-    /// The text message is invalid or contains prohibited content
-    InvalidTextMessage,
-    /// The order kind is invalid
-    InvalidOrderKind,
-    /// The order status is invalid
-    InvalidOrderStatus,
-    /// Invalid pubkey
-    InvalidPubkey,
-    /// Invalid parameters
-    InvalidParameters,
-    /// The order is already canceled
-    OrderAlreadyCanceled,
-    /// Can't create user
-    CantCreateUser,
-    /// For users trying to do actions on orders that are not theirs
-    IsNotYourOrder,
-    /// For users trying to do actions on orders not allowed by status
-    NotAllowedByStatus,
-    /// Fiat amount is out of range
-    OutOfRangeFiatAmount,
-    /// Sats amount is out of range
-    OutOfRangeSatsAmount,
-    /// For users trying to do actions on dispute that are not theirs
-    IsNotYourDispute,
-    /// Generic not found
-    NotFound,
-}
 
 /// Message payload
 #[derive(Debug, Deserialize, Serialize, Clone)]
