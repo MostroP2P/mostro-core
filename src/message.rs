@@ -73,7 +73,6 @@ pub enum Action {
     PaymentFailed,
     InvoiceUpdated,
     SendDm,
-    TradePubkey,
 }
 
 impl fmt::Display for Action {
@@ -260,6 +259,7 @@ pub enum Payload {
     Amount(Amount),
     Dispute(Uuid, Option<u16>),
     CantDo(Option<CantDoReason>),
+    NextTrade(String, u32),
 }
 
 #[allow(dead_code)]
@@ -335,7 +335,6 @@ impl MessageKind {
             | Action::CooperativeCancelAccepted
             | Action::Cancel
             | Action::PaymentFailed
-            | Action::TradePubkey
             | Action::InvoiceUpdated
             | Action::AdminAddSolver
             | Action::SendDm
