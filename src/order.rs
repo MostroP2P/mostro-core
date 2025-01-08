@@ -1,5 +1,5 @@
 use anyhow::Result;
-use nostr_sdk::PublicKey;
+use nostr_sdk::{PublicKey, Timestamp};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
@@ -8,6 +8,8 @@ use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
+
+use crate::error::CantDoReason;
 
 /// Orders can be only Buy or Sell
 #[wasm_bindgen]
@@ -174,18 +176,21 @@ impl Order {
     }
 
     /// Compare the status of the order
-    pub fn check_status(&self, status: Status) -> bool {
+    pub fn check_status(&self, status: Status) -> Result<(), CantDoReason> {
         match Status::from_str(&self.status) {
-            Ok(s) => s == status,
-            Err(_) => false,
+            Ok(s) => match s == status {
+                true => Ok(()),
+                false => Err(CantDoReason::InvalidOrderStatus),
+            }
+            Err(_) => Err(CantDoReason::InvalidOrderStatus),
         }
     }
 
-    pub fn is_buy_order(&self) -> bool {
+    pub fn is_buy_order(&self) -> Result<(), CantDoReason> {
         if self.kind != Kind::Buy.to_string() {
-            return false;
+            return Err(CantDoReason::InvalidOrderKind)
         }
-        true
+        Ok(())
     }
 
     pub fn is_sell_order(&self) -> bool {
@@ -195,11 +200,11 @@ impl Order {
         true
     }
 
-    pub fn sent_from_maker(&self, sender: String) -> bool {
+    pub fn sent_from_maker(&self, sender: String) -> Result<(), CantDoReason> {
         if self.creator_pubkey == sender {
-            return false;
+            return Err(CantDoReason::InvalidPubkey);
         }
-        true
+        Ok(())
     }
 
     pub fn get_buyer_pubkey(&self) -> Option<PublicKey> {
@@ -218,6 +223,18 @@ impl Order {
     pub fn is_range_order(&self) -> bool {
         self.min_amount.is_some() && self.max_amount.is_some()
     }
+
+    /// Check if the order is a range order
+    pub fn has_no_amount(&self) -> bool {
+        self.amount == 0
+    }
+
+    /// Check if the order is a range order
+    pub fn set_timestamp_now(&mut self) {
+        self.taken_at = Timestamp::now().as_u64() as i64
+    }
+
+
 }
 
 /// We use this struct to create a new order
