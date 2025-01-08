@@ -193,11 +193,11 @@ impl Order {
         Ok(())
     }
 
-    pub fn is_sell_order(&self) -> bool {
+    pub fn is_sell_order(&self) -> Result<(), CantDoReason> {
         if self.kind != Kind::Sell.to_string() {
-            return false;
+            return Err(CantDoReason::InvalidOrderKind)
         }
-        true
+        Ok(())
     }
 
     pub fn sent_from_maker(&self, sender: String) -> Result<(), CantDoReason> {

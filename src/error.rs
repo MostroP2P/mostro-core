@@ -66,6 +66,9 @@ pub enum ServiceError {
     LnNodeError(String),
     InvalidOrderId,
     DbAccessError,
+    InvalidPubkey,
+    HoldInvoiceError,
+    UpdateOrderStatusError,
 }
 
 
@@ -105,7 +108,10 @@ impl fmt::Display for ServiceError {
             ServiceError::LnPaymentError(e) => write!(f, "Lightning payment failure cause: {}",e),
             ServiceError::LnNodeError(e) => write!(f, "Lightning node connection failure caused by: {}",e),
             ServiceError::InvalidOrderId => write!(f, "Order id not present in database"),
+            ServiceError::InvalidPubkey => write!(f, "Invalid pubkey"),
             ServiceError::DbAccessError => write!(f, "Error in database access"),
+            ServiceError::HoldInvoiceError => write!(f, "Error holding invoice"),
+            ServiceError::UpdateOrderStatusError => write!(f, "Error updating order status"),
         }
     }
 }
