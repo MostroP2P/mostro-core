@@ -9,7 +9,7 @@ use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
-use crate::error::CantDoReason;
+use crate::error::{CantDoReason, ServiceError};
 
 /// Orders can be only Buy or Sell
 #[wasm_bindgen]
@@ -151,6 +151,55 @@ pub struct Order {
     pub trade_index_buyer: Option<i64>,
 }
 
+impl From<SmallOrder> for Order {
+    fn from(small_order: SmallOrder) -> Self {
+        let id = if small_order.id.is_some() {
+            small_order.id
+        } else {
+            None
+        };
+        let kind = if small_order.kind.is_some() {
+            small_order.kind
+        } else {
+            None
+        };
+        let status = if small_order.status.is_some() {
+            small_order.status
+        } else {
+            None
+        };
+        let amount = small_order.amount;
+        let fiat_code = small_order.fiat_code;
+        let min_amount = if small_order.min_amount.is_some() {
+            small_order.min_amount
+        } else {
+            None
+        };
+        let max_amount = if small_order.max_amount.is_some() {
+            small_order.max_amount
+        } else {
+            None
+        };
+        let fiat_amount = small_order.fiat_amount;
+        let payment_method = small_order.payment_method;
+        let premium = small_order.premium;
+
+        Self {
+            id: id.unwrap(),
+            kind: kind.unwrap().to_string(),
+            status: status.unwrap().to_string(),
+            amount,
+            fiat_code,
+            min_amount,
+            max_amount,
+            fiat_amount,
+            payment_method,
+            premium,
+            ..Default::default()
+        }
+    }
+}
+
 impl Order {
     /// Convert an order to a small order
     pub fn as_new_order(&self) -> SmallOrder {
@@ -174,6 +223,23 @@ impl Order {
             None,
         )
     }
+    /// Get the kind of the order
+    pub fn get_order_kind(&self) -> Result<Kind, ServiceError> {
+        if let Ok(kind) = Kind::from_str(&self.kind) {
+            Ok(kind)
+        } else {
+            Err(ServiceError::InvalidOrderKind)
+        }
+    }
+
+    /// Get the status of the order in case
+    pub fn get_order_status(&self) -> Result<Status, ServiceError> {
+        if let Ok(status) = Status::from_str(&self.status) {
+            Ok(status)
+        } else {
+            Err(ServiceError::InvalidOrderStatus)
+        }
+    }
 
     /// Compare the status of the order
     pub fn check_status(&self, status: Status) -> Result<(), CantDoReason> {
@@ -181,25 +247,27 @@ impl Order {
             Ok(s) => match s == status {
                 true => Ok(()),
                 false => Err(CantDoReason::InvalidOrderStatus),
-            }
+            },
             Err(_) => Err(CantDoReason::InvalidOrderStatus),
         }
     }
 
+    /// Check if the order is a buy order
     pub fn is_buy_order(&self) -> Result<(), CantDoReason> {
         if self.kind != Kind::Buy.to_string() {
-            return Err(CantDoReason::InvalidOrderKind)
+            return Err(CantDoReason::InvalidOrderKind);
         }
         Ok(())
     }
-
+    /// Check if the order is a sell order
     pub fn is_sell_order(&self) -> Result<(), CantDoReason> {
         if self.kind != Kind::Sell.to_string() {
-            return Err(CantDoReason::InvalidOrderKind)
+            return Err(CantDoReason::InvalidOrderKind);
         }
         Ok(())
     }
 
+    /// Check if the sender is the creator of the order
     pub fn sent_from_maker(&self, sender: String) -> Result<(), CantDoReason> {
         if self.creator_pubkey == sender {
             return Err(CantDoReason::InvalidPubkey);
@@ -207,12 +275,13 @@ impl Order {
         Ok(())
     }
 
+    /// Get the buyer pubkey
     pub fn get_buyer_pubkey(&self) -> Option<PublicKey> {
         self.buyer_pubkey
             .as_ref()
             .map(|pk| PublicKey::from_str(pk).unwrap())
     }
-
+    /// Get the seller pubkey
     pub fn get_seller_pubkey(&self) -> Option<PublicKey> {
         self.seller_pubkey
             .as_ref()
@@ -224,17 +293,15 @@ impl Order {
         self.min_amount.is_some() && self.max_amount.is_some()
     }
 
-    /// Check if the order is a range order
+    /// Check if the order has no amount
     pub fn has_no_amount(&self) -> bool {
         self.amount == 0
     }
 
-    /// Check if the order is a range order
+    /// Set the timestamp to now
     pub fn set_timestamp_now(&mut self) {
         self.taken_at = Timestamp::now().as_u64() as i64
     }
-
-
 }
 
 /// We use this struct to create a new order
@@ -330,6 +397,64 @@ impl SmallOrder {
             format!("{}-{}", self.min_amount.unwrap(), self.max_amount.unwrap())
         } else {
             self.fiat_amount.to_string()
+        }
+    }
+}
+
+impl From<Order> for SmallOrder {
+    fn from(order: Order) -> Self {
+        let id = Some(order.id);
+        let kind = Kind::from_str(&order.kind).unwrap();
+        let status = Status::from_str(&order.status).unwrap();
+        let amount = order.amount;
+        let fiat_code = order.fiat_code.clone();
+        let min_amount = if let Some(min) = order.min_amount {
+            Some(min)
+        } else {
+            None
+        };
+        let max_amount = if let Some(max) = order.max_amount {
+            Some(max)
+        } else {
+            None
+        };
+        let fiat_amount = order.fiat_amount;
+        let payment_method = order.payment_method.clone();
+        let premium = order.premium;
+        let buyer_trade_pubkey = if let Some(pk) = order.buyer_pubkey.clone() {
+            Some(pk)
+        } else {
+            None
+        };
+        let seller_trade_pubkey = if let Some(pk) = order.seller_pubkey.clone() {
+            Some(pk)
+        } else {
+            None
+        };
+        let buyer_invoice = if let Some(buyer_invoice) = order.buyer_invoice {
+            Some(buyer_invoice)
+        } else {
+            None
+        };
+
+        Self {
+            id,
+            kind: Some(kind),
+            status: Some(status),
+            amount,
+            fiat_code,
+            min_amount,
+            max_amount,
+            fiat_amount,
+            payment_method,
+            premium,
+            buyer_trade_pubkey,
+            seller_trade_pubkey,
+            buyer_invoice,
+            created_at: None,
+            expires_at: None,
+            buyer_token: None,
+            seller_token: None,
         }
     }
 }

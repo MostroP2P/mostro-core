@@ -1,5 +1,5 @@
-use crate::{error::CantDoReason, order::SmallOrder};
 use crate::PROTOCOL_VER;
+use crate::{error::CantDoReason, order::SmallOrder};
 use anyhow::{Ok, Result};
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
 use bitcoin::hashes::Hash;

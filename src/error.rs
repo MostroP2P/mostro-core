@@ -1,5 +1,5 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize,Deserialize};
 
 /// Represents specific reasons why a requested action cannot be performed
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -67,24 +67,25 @@ pub enum ServiceError {
     InvalidOrderId,
     DbAccessError,
     InvalidPubkey,
-    HoldInvoiceError,
+    HoldInvoiceError(String),
     UpdateOrderStatusError,
+    InvalidOrderStatus,
+    InvalidOrderKind,
 }
-
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum MostroError {
     MostroInternalErr(ServiceError),
-    MostroCantDo(CantDoReason)
+    MostroCantDo(CantDoReason),
 }
 
 impl std::error::Error for MostroError {}
 
-impl fmt::Display for MostroError{
+impl fmt::Display for MostroError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MostroError::MostroInternalErr(m) => write!(f, "Error caused by {}",m),
-            MostroError::MostroCantDo(m) => write!(f, "Sending cantDo message to user for {:?}",m),
+            MostroError::MostroInternalErr(m) => write!(f, "Error caused by {}", m),
+            MostroError::MostroCantDo(m) => write!(f, "Sending cantDo message to user for {:?}", m),
         }
     }
 }
@@ -110,8 +111,10 @@ impl fmt::Display for ServiceError {
             ServiceError::InvalidOrderId => write!(f, "Order id not present in database"),
             ServiceError::InvalidPubkey => write!(f, "Invalid pubkey"),
             ServiceError::DbAccessError => write!(f, "Error in database access"),
-            ServiceError::HoldInvoiceError => write!(f, "Error holding invoice"),
+            ServiceError::HoldInvoiceError(e) => write!(f, "Error holding invoice: {}",e),
             ServiceError::UpdateOrderStatusError => write!(f, "Error updating order status"),
+            ServiceError::InvalidOrderStatus => write!(f, "Invalid order status"),
+            ServiceError::InvalidOrderKind => write!(f, "Invalid order kind"),
         }
     }
 }
