@@ -223,6 +223,7 @@ impl Order {
             None,
         )
     }
+
     /// Get the kind of the order
     pub fn get_order_kind(&self) -> Result<Kind, ServiceError> {
         if let Ok(kind) = Kind::from_str(&self.kind) {
@@ -291,6 +292,15 @@ impl Order {
     /// Check if the order is a range order
     pub fn is_range_order(&self) -> bool {
         self.min_amount.is_some() && self.max_amount.is_some()
+    }
+
+    pub fn count_failed_payment(&mut self, retries_number: i64) {
+        if !self.failed_payment {
+            self.failed_payment = true;
+            self.payment_attempts = 0;
+        } else if self.payment_attempts < retries_number {
+            self.payment_attempts += 1;
+        }
     }
 
     /// Check if the order has no amount
@@ -390,6 +400,33 @@ impl SmallOrder {
             self.amount.to_string()
         }
     }
+    /// Check if the order has a zero amount and a premium or fiat amount
+    pub fn check_zero_amount_with_premium(&self) -> Result<(), CantDoReason> {
+        let premium = (self.premium != 0).then_some(self.premium);
+        let fiat_amount = (self.fiat_amount != 0).then_some(self.fiat_amount);
+
+        if premium.is_some() && fiat_amount.is_some() {
+            return Err(CantDoReason::InvalidParameters);
+        }
+        Ok(())
+    }
+    /// Check if the order is a range order and if the amount is zero
+    pub fn check_range_order_limits(&self, amounts: &mut Vec<i64>) -> Result<(), CantDoReason> {
+        if let (Some(min), Some(max)) = (self.min_amount, self.max_amount) {
+            if min >= max {
+                return Err(CantDoReason::InvalidAmount);
+            }
+            if self.amount != 0 {
+                return Err(CantDoReason::InvalidAmount);
+            }
+            amounts.clear();
+            amounts.push(min);
+            amounts.push(max);
+            Ok(())
+        } else {
+            Err(CantDoReason::InvalidAmount)
+        }
+    }
 
     // Get the fiat amount, if the order is a range order, return the range as min-max string
     pub fn fiat_amount(&self) -> String {
@@ -408,34 +445,14 @@ impl From<Order> for SmallOrder {
         let status = Status::from_str(&order.status).unwrap();
         let amount = order.amount;
         let fiat_code = order.fiat_code.clone();
-        let min_amount = if let Some(min) = order.min_amount {
-            Some(min)
-        } else {
-            None
-        };
-        let max_amount = if let Some(max) = order.max_amount {
-            Some(max)
-        } else {
-            None
-        };
+        let min_amount = order.min_amount;
+        let max_amount = order.max_amount;
         let fiat_amount = order.fiat_amount;
         let payment_method = order.payment_method.clone();
         let premium = order.premium;
-        let buyer_trade_pubkey = if let Some(pk) = order.buyer_pubkey.clone() {
-            Some(pk)
-        } else {
-            None
-        };
-        let seller_trade_pubkey = if let Some(pk) = order.seller_pubkey.clone() {
-            Some(pk)
-        } else {
-            None
-        };
-        let buyer_invoice = if let Some(buyer_invoice) = order.buyer_invoice {
-            Some(buyer_invoice)
-        } else {
-            None
-        };
+        let buyer_trade_pubkey = order.buyer_pubkey.clone();
+        let seller_trade_pubkey = order.seller_pubkey.clone();
+        let buyer_invoice = order.buyer_invoice.clone();
 
         Self {
             id,
