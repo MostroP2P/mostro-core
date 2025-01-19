@@ -277,16 +277,36 @@ impl Order {
     }
 
     /// Get the buyer pubkey
-    pub fn get_buyer_pubkey(&self) -> Option<PublicKey> {
-        self.buyer_pubkey
-            .as_ref()
-            .map(|pk| PublicKey::from_str(pk).unwrap())
+    pub fn get_buyer_pubkey(&self) -> Result<PublicKey, ServiceError> {
+        if let Some(pk) = self.buyer_pubkey.as_ref() {
+            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+        } else {
+            Err(ServiceError::InvalidPubkey)
+        }
     }
     /// Get the seller pubkey
-    pub fn get_seller_pubkey(&self) -> Option<PublicKey> {
-        self.seller_pubkey
-            .as_ref()
-            .map(|pk| PublicKey::from_str(pk).unwrap())
+    pub fn get_seller_pubkey(&self) -> Result<PublicKey, ServiceError> {
+        if let Some(pk) = self.seller_pubkey.as_ref() {
+            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+        } else {
+            Err(ServiceError::InvalidPubkey)
+        }
+    }
+    /// Get the master buyer pubkey
+    pub fn get_master_buyer_pubkey(&self) -> Result<PublicKey, ServiceError> {
+        if let Some(pk) = self.master_buyer_pubkey.as_ref() {
+            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+        } else {
+            Err(ServiceError::InvalidPubkey)
+        }
+    }
+    /// Get the master seller pubkey
+    pub fn get_master_seller_pubkey(&self) -> Result<PublicKey, ServiceError> {
+        if let Some(pk) = self.master_seller_pubkey.as_ref() {
+            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+        } else {
+            Err(ServiceError::InvalidPubkey)
+        }
     }
 
     /// Check if the order is a range order
@@ -311,6 +331,36 @@ impl Order {
     /// Set the timestamp to now
     pub fn set_timestamp_now(&mut self) {
         self.taken_at = Timestamp::now().as_u64() as i64
+    }
+    /// Setup the dispute status
+    ///
+    /// If the pubkey is the buyer, set the buyer dispute to true
+    /// If the pubkey is the seller, set the seller dispute to true
+    pub fn setup_dispute(&mut self, is_buyer_dispute: bool) -> Result<(), CantDoReason> {
+        // Get the opposite dispute status
+        let is_seller_dispute = !is_buyer_dispute;
+
+        // Update dispute flags based on who initiated
+        let mut update_seller_dispute = false;
+        let mut update_buyer_dispute = false;
+
+        if is_seller_dispute && !self.seller_dispute {
+            update_seller_dispute = true;
+            self.seller_dispute = update_seller_dispute;
+        } else if is_buyer_dispute && !self.buyer_dispute {
+            update_buyer_dispute = true;
+            self.buyer_dispute = update_buyer_dispute;
+        };
+        // Set the status to dispute
+        self.status = Status::Dispute.to_string();
+
+        // Update the database with dispute information
+        // Save the dispute to DB
+        if !update_buyer_dispute && !update_seller_dispute {
+            return Err(CantDoReason::DisputeCreationError);
+        }
+
+        Ok(())
     }
 }
 

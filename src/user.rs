@@ -47,4 +47,29 @@ impl User {
             created_at: Utc::now().timestamp(),
         }
     }
+
+    /// Update user rating
+    pub fn update_rating(&mut self, rating: u8) {
+        // Update user reputation
+        // increment first
+        self.total_reviews += 1;
+        let old_rating = self.total_rating as f64;
+        // recompute new rating
+        if self.total_reviews <= 1 {
+            self.total_rating = rating.into();
+            self.max_rating = rating.into();
+            self.min_rating = rating.into();
+        } else {
+            self.total_rating =
+                old_rating + ((self.last_rating as f64) - old_rating) / (self.total_reviews as f64);
+            if self.max_rating < rating.into() {
+                self.max_rating = rating.into();
+            }
+            if self.min_rating > rating.into() {
+                self.min_rating = rating.into();
+            }
+        }
+        // Store last rating
+        self.last_rating = rating.into();
+    }
 }

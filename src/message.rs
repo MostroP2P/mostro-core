@@ -1,6 +1,7 @@
+use crate::error::ServiceError;
 use crate::PROTOCOL_VER;
 use crate::{error::CantDoReason, order::SmallOrder};
-use anyhow::{Ok, Result};
+use anyhow::Result;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
@@ -218,6 +219,9 @@ pub enum Payload {
 
 #[allow(dead_code)]
 impl MessageKind {
+    // Max rating
+    pub const MAX_RATING: u8 = 5;
+    pub const MIN_RATING: u8 = 1;
     /// New message
     pub fn new(
         id: Option<Uuid>,
@@ -247,6 +251,17 @@ impl MessageKind {
     // Get action from the inner message
     pub fn get_action(&self) -> Action {
         self.action.clone()
+    }
+
+    pub fn get_rating(&self) -> Result<u8, ServiceError> {
+        if let Some(Payload::RatingUser(v)) = self.payload.to_owned() {
+            if !(Self::MIN_RATING..=Self::MAX_RATING).contains(&v) {
+                return Err(ServiceError::InvalidRatingValue);
+            }
+            return Ok(v);
+        } else {
+            return Err(ServiceError::InvalidRating);
+        }
     }
 
     /// Verify if is valid message

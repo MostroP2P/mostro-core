@@ -1,4 +1,5 @@
 use chrono::Utc;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::{FromRow, Type};
@@ -78,5 +79,20 @@ impl Dispute {
             buyer_token: None,
             seller_token: None,
         }
+    }
+
+    /// Create new dispute record and generate security tokens
+    /// Returns a tuple of the initiator's token and the counterpart's token
+    pub fn create_tokens(&mut self, is_buyer_dispute: bool) -> (Option<u16>, Option<u16>) {
+        let mut rng = rand::thread_rng();
+        self.buyer_token = Some(rng.gen_range(100..=999));
+        self.seller_token = Some(rng.gen_range(100..=999));
+
+        let (initiator_token, counterpart_token) = match is_buyer_dispute {
+            true => (self.buyer_token, self.seller_token),
+            false => (self.seller_token, self.buyer_token),
+        };
+
+        (initiator_token, counterpart_token)
     }
 }

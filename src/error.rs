@@ -43,12 +43,17 @@ pub enum CantDoReason {
     OutOfRangeSatsAmount,
     /// For users trying to do actions on dispute that are not theirs
     IsNotYourDispute,
+    /// For users trying to create a dispute on an order that is not in dispute
+    DisputeCreationError,
     /// Generic not found
     NotFound,
+    /// Invalid dispute status
+    InvalidDisputeStatus,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ServiceError {
+    NostrError(String),
     ParsingInvoiceError,
     ParsingNumberError,
     InvoiceExpiredError,
@@ -71,6 +76,13 @@ pub enum ServiceError {
     UpdateOrderStatusError,
     InvalidOrderStatus,
     InvalidOrderKind,
+    DisputeAlreadyExists,
+    DisputeEventError,
+    InvalidRating,
+    InvalidRatingValue,
+    MessageSerializationError,
+    InvalidDisputeId,
+    InvalidDisputeStatus,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -115,6 +127,14 @@ impl fmt::Display for ServiceError {
             ServiceError::UpdateOrderStatusError => write!(f, "Error updating order status"),
             ServiceError::InvalidOrderStatus => write!(f, "Invalid order status"),
             ServiceError::InvalidOrderKind => write!(f, "Invalid order kind"),
+            ServiceError::DisputeAlreadyExists => write!(f, "Dispute already exists"),
+            ServiceError::DisputeEventError => write!(f, "Error publishing dispute event"),
+            ServiceError::NostrError(e) => write!(f, "Error in nostr: {}",e),
+            ServiceError::InvalidRating => write!(f, "Invalid rating message"),
+            ServiceError::InvalidRatingValue => write!(f, "Invalid rating value"),
+            ServiceError::MessageSerializationError => write!(f, "Error serializing message"),
+            ServiceError::InvalidDisputeId => write!(f, "Invalid dispute id"),
+            ServiceError::InvalidDisputeStatus => write!(f, "Invalid dispute status"),
         }
     }
 }
