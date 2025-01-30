@@ -11,6 +11,12 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
 
+// Max rating
+pub const MAX_RATING: u8 = 5;
+// Min rating
+pub const MIN_RATING: u8 = 1;
+
+
 /// One party of the trade
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
@@ -219,9 +225,6 @@ pub enum Payload {
 
 #[allow(dead_code)]
 impl MessageKind {
-    // Max rating
-    pub const MAX_RATING: u8 = 5;
-    pub const MIN_RATING: u8 = 1;
     /// New message
     pub fn new(
         id: Option<Uuid>,
@@ -255,7 +258,7 @@ impl MessageKind {
 
     pub fn get_rating(&self) -> Result<u8, ServiceError> {
         if let Some(Payload::RatingUser(v)) = self.payload.to_owned() {
-            if !(Self::MIN_RATING..=Self::MAX_RATING).contains(&v) {
+            if !(MIN_RATING..=MAX_RATING).contains(&v) {
                 return Err(ServiceError::InvalidRatingValue);
             }
             return Ok(v);

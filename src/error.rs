@@ -49,6 +49,8 @@ pub enum CantDoReason {
     NotFound,
     /// Invalid dispute status
     InvalidDisputeStatus,
+    /// Invalid action
+    InvalidAction,
 }
 
 #[derive(Debug, PartialEq, Eq)]
