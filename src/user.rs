@@ -53,7 +53,7 @@ impl User {
         // Update user reputation
         // increment first
         self.total_reviews += 1;
-        let old_rating = self.total_rating as f64;
+        let old_rating = self.total_rating;
         // recompute new rating
         if self.total_reviews <= 1 {
             self.total_rating = rating.into();

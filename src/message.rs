@@ -266,14 +266,22 @@ impl MessageKind {
         self.action.clone()
     }
 
+    /// Get the next trade keys when order is settled
+    pub fn get_next_trade_key(&self) -> Result<(String, u32), ServiceError> {
+        match &self.payload {
+            Some(Payload::NextTrade(pubkey, index)) => Ok((pubkey.clone(), *index)),
+            _ => Err(ServiceError::InvalidPubkey),
+        }
+    }
+
     pub fn get_rating(&self) -> Result<u8, ServiceError> {
         if let Some(Payload::RatingUser(v)) = self.payload.to_owned() {
             if !(MIN_RATING..=MAX_RATING).contains(&v) {
                 return Err(ServiceError::InvalidRatingValue);
             }
-            return Ok(v);
+            Ok(v)
         } else {
-            return Err(ServiceError::InvalidRating);
+            Err(ServiceError::InvalidRating)
         }
     }
 

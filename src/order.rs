@@ -271,11 +271,20 @@ impl Order {
     }
 
     /// Check if the sender is the creator of the order
-    pub fn sent_from_maker(&self, sender: String) -> Result<(), CantDoReason> {
+    pub fn sent_from_maker(&self, sender: PublicKey) -> Result<(), CantDoReason> {
+        let sender = sender.to_string();
         if self.creator_pubkey == sender {
             return Err(CantDoReason::InvalidPubkey);
         }
         Ok(())
+    }
+
+    /// Get the creator pubkey
+    pub fn get_creator_pubkey(&self) -> Result<PublicKey, ServiceError> {
+        match PublicKey::from_str(self.creator_pubkey.as_ref()) {
+            Ok(pk) => Ok(pk),
+            Err(_) => Err(ServiceError::InvalidPubkey),
+        }
     }
 
     /// Get the buyer pubkey
