@@ -149,6 +149,8 @@ pub struct Order {
     pub expires_at: i64,
     pub trade_index_seller: Option<i64>,
     pub trade_index_buyer: Option<i64>,
+    pub next_trade_pubkey: Option<String>,
+    pub next_trade_index: Option<i64>,
 }
 
 impl From<SmallOrder> for Order {
