@@ -79,6 +79,7 @@ pub enum Action {
     PaymentFailed,
     InvoiceUpdated,
     SendDm,
+    TradePubkey,
 }
 
 impl fmt::Display for Action {
@@ -328,6 +329,7 @@ impl MessageKind {
             | Action::InvoiceUpdated
             | Action::AdminAddSolver
             | Action::SendDm
+            | Action::TradePubkey
             | Action::Canceled => {
                 if self.id.is_none() {
                     return false;

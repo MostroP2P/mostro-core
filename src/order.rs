@@ -155,11 +155,6 @@ pub struct Order {
 
 impl From<SmallOrder> for Order {
     fn from(small_order: SmallOrder) -> Self {
-        let id = if small_order.id.is_some() {
-            small_order.id
-        } else {
-            None
-        };
         let kind = if small_order.kind.is_some() {
             small_order.kind
         } else {
@@ -187,7 +182,7 @@ impl From<SmallOrder> for Order {
         let premium = small_order.premium;
 
         Self {
-            id: id.unwrap(),
+            id: Uuid::new_v4(),
             kind: kind.unwrap().to_string(),
             status: status.unwrap().to_string(),
             amount,
