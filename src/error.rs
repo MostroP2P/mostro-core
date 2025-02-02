@@ -85,6 +85,7 @@ pub enum ServiceError {
     MessageSerializationError,
     InvalidDisputeId,
     InvalidDisputeStatus,
+    InvalidPayload,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -137,6 +138,7 @@ impl fmt::Display for ServiceError {
             ServiceError::MessageSerializationError => write!(f, "Error serializing message"),
             ServiceError::InvalidDisputeId => write!(f, "Invalid dispute id"),
             ServiceError::InvalidDisputeStatus => write!(f, "Invalid dispute status"),
+            ServiceError::InvalidPayload => write!(f, "Invalid payload"),
         }
     }
 }

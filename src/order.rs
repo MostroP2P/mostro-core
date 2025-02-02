@@ -468,6 +468,7 @@ impl SmallOrder {
     }
     /// Check if the order is a range order and if the amount is zero
     pub fn check_range_order_limits(&self, amounts: &mut Vec<i64>) -> Result<(), CantDoReason> {
+        // Check if the min and max amount are valid and update the vector
         if let (Some(min), Some(max)) = (self.min_amount, self.max_amount) {
             if min >= max {
                 return Err(CantDoReason::InvalidAmount);
@@ -478,10 +479,8 @@ impl SmallOrder {
             amounts.clear();
             amounts.push(min);
             amounts.push(max);
-            Ok(())
-        } else {
-            Err(CantDoReason::InvalidAmount)
         }
+        Ok(())
     }
 
     // Get the fiat amount, if the order is a range order, return the range as min-max string
