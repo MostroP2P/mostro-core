@@ -270,7 +270,7 @@ impl MessageKind {
     /// Get the next trade keys when order is settled
     pub fn get_next_trade_key(&self) -> Result<Option<(String, u32)>, ServiceError> {
         match &self.payload {
-            Some(Payload::NextTrade(pubkey, index)) => Ok(Some((pubkey.clone(), *index))),
+            Some(Payload::NextTrade(key, index)) => Ok(Some((key.to_string(), *index))),
             None => Ok(None),
             _ => Err(ServiceError::InvalidPayload),
         }
