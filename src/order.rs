@@ -268,7 +268,7 @@ impl Order {
     /// Check if the sender is the creator of the order
     pub fn sent_from_maker(&self, sender: PublicKey) -> Result<(), CantDoReason> {
         let sender = sender.to_string();
-        if self.creator_pubkey == sender {
+        if self.creator_pubkey != sender {
             return Err(CantDoReason::InvalidPubkey);
         }
         Ok(())
