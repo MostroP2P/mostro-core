@@ -1,6 +1,7 @@
-use crate::order::SmallOrder;
+use crate::error::ServiceError;
 use crate::PROTOCOL_VER;
-use anyhow::{Ok, Result};
+use crate::{error::CantDoReason, order::SmallOrder};
+use anyhow::Result;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
@@ -9,6 +10,11 @@ use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use uuid::Uuid;
+
+// Max rating
+pub const MAX_RATING: u8 = 5;
+// Min rating
+pub const MIN_RATING: u8 = 1;
 
 /// One party of the trade
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -73,6 +79,7 @@ pub enum Action {
     PaymentFailed,
     InvoiceUpdated,
     SendDm,
+    TradePubkey,
 }
 
 impl fmt::Display for Action {
@@ -82,7 +89,7 @@ impl fmt::Display for Action {
 }
 
 /// Use this Message to establish communication between users and Mostro
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Message {
     Order(MessageKind),
@@ -182,7 +189,7 @@ impl Message {
 }
 
 /// Use this Message to establish communication between users and Mostro
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MessageKind {
     /// Message version
     pub version: u8,
@@ -200,52 +207,6 @@ pub struct MessageKind {
 }
 
 type Amount = i64;
-
-/// Represents specific reasons why a requested action cannot be performed
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum CantDoReason {
-    /// The provided signature is invalid or missing
-    InvalidSignature,
-    /// The specified trade index does not exist or is invalid
-    InvalidTradeIndex,
-    /// The provided amount is invalid or out of acceptable range
-    InvalidAmount,
-    /// The provided invoice is malformed or expired
-    InvalidInvoice,
-    /// The payment request is invalid or cannot be processed
-    InvalidPaymentRequest,
-    /// The specified peer is invalid or not found
-    InvalidPeer,
-    /// The rating value is invalid or out of range
-    InvalidRating,
-    /// The text message is invalid or contains prohibited content
-    InvalidTextMessage,
-    /// The order kind is invalid
-    InvalidOrderKind,
-    /// The order status is invalid
-    InvalidOrderStatus,
-    /// Invalid pubkey
-    InvalidPubkey,
-    /// Invalid parameters
-    InvalidParameters,
-    /// The order is already canceled
-    OrderAlreadyCanceled,
-    /// Can't create user
-    CantCreateUser,
-    /// For users trying to do actions on orders that are not theirs
-    IsNotYourOrder,
-    /// For users trying to do actions on orders not allowed by status
-    NotAllowedByStatus,
-    /// Fiat amount is out of range
-    OutOfRangeFiatAmount,
-    /// Sats amount is out of range
-    OutOfRangeSatsAmount,
-    /// For users trying to do actions on dispute that are not theirs
-    IsNotYourDispute,
-    /// Generic not found
-    NotFound,
-}
 
 /// Message payload
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -306,6 +267,26 @@ impl MessageKind {
         self.action.clone()
     }
 
+    /// Get the next trade keys when order is settled
+    pub fn get_next_trade_key(&self) -> Result<Option<(String, u32)>, ServiceError> {
+        match &self.payload {
+            Some(Payload::NextTrade(key, index)) => Ok(Some((key.to_string(), *index))),
+            None => Ok(None),
+            _ => Err(ServiceError::InvalidPayload),
+        }
+    }
+
+    pub fn get_rating(&self) -> Result<u8, ServiceError> {
+        if let Some(Payload::RatingUser(v)) = self.payload.to_owned() {
+            if !(MIN_RATING..=MAX_RATING).contains(&v) {
+                return Err(ServiceError::InvalidRatingValue);
+            }
+            Ok(v)
+        } else {
+            Err(ServiceError::InvalidRating)
+        }
+    }
+
     /// Verify if is valid message
     pub fn verify(&self) -> bool {
         match &self.action {
@@ -349,6 +330,7 @@ impl MessageKind {
             | Action::InvoiceUpdated
             | Action::AdminAddSolver
             | Action::SendDm
+            | Action::TradePubkey
             | Action::Canceled => {
                 if self.id.is_none() {
                     return false;

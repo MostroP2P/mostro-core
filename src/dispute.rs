@@ -1,4 +1,5 @@
 use chrono::Utc;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::{FromRow, Type};
@@ -6,6 +7,9 @@ use sqlx::{FromRow, Type};
 use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
+
+const TOKEN_MIN: u16 = 100;
+const TOKEN_MAX: u16 = 999;
 
 /// Each status that a dispute can have
 #[cfg_attr(feature = "sqlx", derive(Type))]
@@ -78,5 +82,32 @@ impl Dispute {
             buyer_token: None,
             seller_token: None,
         }
+    }
+
+    /// Create new dispute record and generate security tokens
+    /// Returns a tuple of the initiator's token and the counterpart's token
+    pub fn create_tokens(&mut self, is_buyer_dispute: bool) -> (Option<u16>, Option<u16>) {
+        let mut rng = rand::thread_rng();
+        let mut buyer_token;
+        let mut seller_token;
+
+        // Ensure tokens are unique
+        loop {
+            buyer_token = rng.gen_range(TOKEN_MIN..=TOKEN_MAX);
+            seller_token = rng.gen_range(TOKEN_MIN..=TOKEN_MAX);
+            if buyer_token != seller_token {
+                break;
+            }
+        }
+
+        self.buyer_token = Some(buyer_token);
+        self.seller_token = Some(seller_token);
+
+        let (initiator_token, counterpart_token) = match is_buyer_dispute {
+            true => (self.buyer_token, self.seller_token),
+            false => (self.seller_token, self.buyer_token),
+        };
+
+        (initiator_token, counterpart_token)
     }
 }
