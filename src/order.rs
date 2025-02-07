@@ -155,43 +155,32 @@ pub struct Order {
 
 impl From<SmallOrder> for Order {
     fn from(small_order: SmallOrder) -> Self {
-        let kind = if small_order.kind.is_some() {
-            small_order.kind
-        } else {
-            None
-        };
-        let status = if small_order.status.is_some() {
-            small_order.status
-        } else {
-            None
-        };
-        let amount = small_order.amount;
-        let fiat_code = small_order.fiat_code;
-        let min_amount = if small_order.min_amount.is_some() {
-            small_order.min_amount
-        } else {
-            None
-        };
-        let max_amount = if small_order.max_amount.is_some() {
-            small_order.max_amount
-        } else {
-            None
-        };
-        let fiat_amount = small_order.fiat_amount;
-        let payment_method = small_order.payment_method;
-        let premium = small_order.premium;
-
         Self {
             id: Uuid::new_v4(),
-            kind: kind.unwrap().to_string(),
-            status: status.unwrap().to_string(),
-            amount,
-            fiat_code,
-            min_amount,
-            max_amount,
-            fiat_amount,
-            payment_method,
-            premium,
+            // order will be overwritten with the real one before publishing
+            kind: small_order
+                .kind
+                .map_or_else(|| Kind::Buy.to_string(), |k| k.to_string()),
+            status: small_order
+                .status
+                .map_or_else(|| Status::Active.to_string(), |s| s.to_string()),
+            amount: small_order.amount,
+            fiat_code: small_order.fiat_code,
+            min_amount: small_order.min_amount,
+            max_amount: small_order.max_amount,
+            fiat_amount: small_order.fiat_amount,
+            payment_method: small_order.payment_method,
+            premium: small_order.premium,
+            event_id: String::new(),
+            creator_pubkey: String::new(),
+            price_from_api: false,
+            fee: 0,
+            routing_fee: 0,
+            invoice_held_at: 0,
+            taken_at: 0,
+            created_at: small_order.created_at.unwrap_or(0),
+            expires_at: small_order.expires_at.unwrap_or(0),
+            payment_attempts: 0,
             ..Default::default()
         }
     }
@@ -470,6 +459,9 @@ impl SmallOrder {
     pub fn check_range_order_limits(&self, amounts: &mut Vec<i64>) -> Result<(), CantDoReason> {
         // Check if the min and max amount are valid and update the vector
         if let (Some(min), Some(max)) = (self.min_amount, self.max_amount) {
+            if min < 0 || max < 0 {
+                return Err(CantDoReason::InvalidAmount);
+            }
             if min >= max {
                 return Err(CantDoReason::InvalidAmount);
             }

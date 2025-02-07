@@ -8,6 +8,9 @@ use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 
+const TOKEN_MIN: u16 = 100;
+const TOKEN_MAX: u16 = 999;
+
 /// Each status that a dispute can have
 #[cfg_attr(feature = "sqlx", derive(Type))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -85,8 +88,20 @@ impl Dispute {
     /// Returns a tuple of the initiator's token and the counterpart's token
     pub fn create_tokens(&mut self, is_buyer_dispute: bool) -> (Option<u16>, Option<u16>) {
         let mut rng = rand::thread_rng();
-        self.buyer_token = Some(rng.gen_range(100..=999));
-        self.seller_token = Some(rng.gen_range(100..=999));
+        let mut buyer_token;
+        let mut seller_token;
+
+        // Ensure tokens are unique
+        loop {
+            buyer_token = rng.gen_range(TOKEN_MIN..=TOKEN_MAX);
+            seller_token = rng.gen_range(TOKEN_MIN..=TOKEN_MAX);
+            if buyer_token != seller_token {
+                break;
+            }
+        }
+
+        self.buyer_token = Some(buyer_token);
+        self.seller_token = Some(seller_token);
 
         let (initiator_token, counterpart_token) = match is_buyer_dispute {
             true => (self.buyer_token, self.seller_token),
