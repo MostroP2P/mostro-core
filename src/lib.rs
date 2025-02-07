@@ -12,7 +12,8 @@ pub const PROTOCOL_VER: u8 = 1;
 
 #[cfg(test)]
 mod test {
-    use crate::message::{Action, CantDoReason, Message, MessageKind, Payload, Peer};
+    use crate::error::CantDoReason;
+    use crate::message::{Action, Message, MessageKind, Payload, Peer};
     use crate::order::{Kind, SmallOrder, Status};
     use nostr_sdk::Keys;
     use uuid::uuid;
