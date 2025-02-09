@@ -86,6 +86,7 @@ pub enum ServiceError {
     InvalidDisputeId,
     InvalidDisputeStatus,
     InvalidPayload,
+    UnexpectedError(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -139,6 +140,7 @@ impl fmt::Display for ServiceError {
             ServiceError::InvalidDisputeId => write!(f, "Invalid dispute id"),
             ServiceError::InvalidDisputeStatus => write!(f, "Invalid dispute status"),
             ServiceError::InvalidPayload => write!(f, "Invalid payload"),
+            ServiceError::UnexpectedError(e) => write!(f, "Unexpected error: {}", e),
         }
     }
 }
