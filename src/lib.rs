@@ -125,15 +125,18 @@ mod test {
             Some(payload),
         ));
         assert!(test_message.verify());
+        let test_message_json = test_message.as_json().unwrap();
         // Message should be signed with the trade keys
         let trade_keys =
             Keys::parse("110e43647eae221ab1da33ddc17fd6ff423f2b2f49d809b9ffa40794a2ab996c")
                 .unwrap();
-        let sig = test_message.get_inner_message_kind().sign(&trade_keys);
+        let sig = Message::sign(test_message_json.clone(), &trade_keys);
 
-        assert!(test_message
-            .get_inner_message_kind()
-            .verify_signature(trade_keys.public_key(), sig));
+        assert!(Message::verify_signature(
+            test_message_json,
+            trade_keys.public_key(),
+            sig
+        ));
     }
 
     #[test]

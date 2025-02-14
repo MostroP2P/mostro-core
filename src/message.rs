@@ -179,6 +179,27 @@ impl Message {
             | Message::Dm(m) => m.verify(),
         }
     }
+
+    pub fn sign(message: String, keys: &Keys) -> Signature {
+        let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
+        let hash = hash.to_byte_array();
+        let hash_str = hex::encode(hash);
+        println!("hash en sign() en core: {:?}", hash_str);
+        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
+
+        keys.sign_schnorr(&message)
+    }
+
+    pub fn verify_signature(message: String, pubkey: PublicKey, sig: Signature) -> bool {
+        // Create payload hash
+        let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
+        let hash = hash.to_byte_array();
+        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
+        // Create a verification-only context for better performance
+        let secp = Secp256k1::verification_only();
+        // Verify signature
+        pubkey.verify(&secp, &message, &sig).is_ok()
+    }
 }
 
 /// Use this Message to establish communication between users and Mostro
@@ -408,26 +429,5 @@ impl MessageKind {
             return (true, index);
         }
         (false, 0)
-    }
-
-    pub fn sign(&self, keys: &Keys) -> Signature {
-        let message = self.as_json().unwrap();
-        let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
-        let hash = hash.to_byte_array();
-        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
-
-        keys.sign_schnorr(&message)
-    }
-
-    pub fn verify_signature(&self, pubkey: PublicKey, sig: Signature) -> bool {
-        // Create message hash
-        let message = self.as_json().unwrap();
-        let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
-        let hash = hash.to_byte_array();
-        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
-        // Create a verification-only context for better performance
-        let secp = Secp256k1::verification_only();
-        // Verify signature
-        pubkey.verify(&secp, &message, &sig).is_ok()
     }
 }
