@@ -190,8 +190,6 @@ impl Message {
     pub fn sign(message: String, keys: &Keys) -> Signature {
         let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
         let hash = hash.to_byte_array();
-        let hash_str = hex::encode(hash);
-        println!("hash en sign() en core: {:?}", hash_str);
         let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
 
         keys.sign_schnorr(&message)
