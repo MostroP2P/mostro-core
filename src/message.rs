@@ -410,4 +410,11 @@ impl MessageKind {
         }
         (false, 0)
     }
+
+    pub fn trade_index(&self) -> i64 {
+        if let Some(index) = self.trade_index {
+            return index;
+        }
+        0
+    }
 }
