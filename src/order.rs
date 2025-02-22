@@ -457,9 +457,9 @@ impl SmallOrder {
     /// Check if the order has a zero amount and a premium or fiat amount
     pub fn check_zero_amount_with_premium(&self) -> Result<(), CantDoReason> {
         let premium = (self.premium != 0).then_some(self.premium);
-        let fiat_amount = (self.fiat_amount != 0).then_some(self.fiat_amount);
+        let sats_amount = (self.amount != 0).then_some(self.amount);
 
-        if premium.is_some() && fiat_amount.is_some() {
+        if premium.is_some() && sats_amount.is_some() {
             return Err(CantDoReason::InvalidParameters);
         }
         Ok(())
