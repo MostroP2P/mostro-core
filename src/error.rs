@@ -51,6 +51,8 @@ pub enum CantDoReason {
     InvalidDisputeStatus,
     /// Invalid action
     InvalidAction,
+    /// Pending order exists
+    PendingOrderExists,
 }
 
 #[derive(Debug, PartialEq, Eq)]
