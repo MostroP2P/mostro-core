@@ -89,6 +89,8 @@ pub enum ServiceError {
     InvalidDisputeStatus,
     InvalidPayload,
     UnexpectedError(String),
+    EnvVarError(String),
+    IOError(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -143,30 +145,8 @@ impl fmt::Display for ServiceError {
             ServiceError::InvalidDisputeStatus => write!(f, "Invalid dispute status"),
             ServiceError::InvalidPayload => write!(f, "Invalid payload"),
             ServiceError::UnexpectedError(e) => write!(f, "Unexpected error: {}", e),
+            ServiceError::EnvVarError(e) => write!(f, "Environment variable error: {}", e),
+            ServiceError::IOError(e) => write!(f, "IO error: {}", e),
         }
     }
 }
-
-// impl From<lightning_invoice::Bolt11ParseError> for MostroError {
-//     fn from(_: lightning_invoice::Bolt11ParseError) -> Self {
-//         MostroError::ParsingInvoiceError
-//     }
-// }
-
-// impl From<lightning_invoice::ParseOrSemanticError> for MostroError {
-//     fn from(_: lightning_invoice::ParseOrSemanticError) -> Self {
-//         MostroError::ParsingInvoiceError
-//     }
-// }
-
-// impl From<std::num::ParseIntError> for MostroError {
-//     fn from(_: std::num::ParseIntError) -> Self {
-//         MostroError::ParsingNumberError
-//     }
-// }
-
-// impl From<reqwest::Error> for MostroError {
-//     fn from(_: reqwest::Error) -> Self {
-//         MostroError::NoAPIResponse
-//     }
-// }
