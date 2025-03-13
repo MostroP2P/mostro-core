@@ -71,7 +71,7 @@ pub struct Dispute {
     pub seller_token: Option<u16>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct SolverDisputeInfo {
     pub id: Uuid,
     pub kind: String,
