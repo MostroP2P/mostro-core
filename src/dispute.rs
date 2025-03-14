@@ -1,4 +1,4 @@
-use crate::order::Order;
+use crate::{order::Order, user::User};
 use chrono::Utc;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -78,12 +78,15 @@ pub struct SolverDisputeInfo {
     pub status: String,
     pub hash: Option<String>,
     pub preimage: Option<String>,
+    pub initiator_pubkey: String,
     pub buyer_pubkey: Option<String>,
     pub buyer_token: Option<u16>,
     pub seller_pubkey: Option<String>,
     pub seller_token: Option<u16>,
     pub counterpart_rating: f64,
+    pub counterpart_reviews: i64,
     pub initiator_rating: f64,
+    pub initiator_reviews: i64,
     pub initiator_operating_days: u64,
     pub counterpart_operating_days: u64,
     pub premium: i64,
@@ -102,8 +105,8 @@ impl SolverDisputeInfo {
     pub fn new(
         order: &Order,
         dispute: &Dispute,
-        counterpart_rating: f64,
-        initiator_rating: f64,
+        counterpart: &User,
+        initiator: &User,
         initiator_operating_days: u64,
         counterpart_operating_days: u64,
     ) -> Self {
@@ -113,12 +116,15 @@ impl SolverDisputeInfo {
             status: order.status.clone(),
             hash: order.hash.clone(),
             preimage: order.preimage.clone(),
+            initiator_pubkey: initiator.pubkey.clone(),
             buyer_pubkey: order.buyer_pubkey.clone(),
             buyer_token: dispute.buyer_token,
             seller_pubkey: order.seller_pubkey.clone(),
             seller_token: dispute.seller_token,
-            counterpart_rating,
-            initiator_rating,
+            counterpart_rating: counterpart.total_rating,
+            counterpart_reviews: counterpart.total_reviews,
+            initiator_rating: initiator.total_rating,
+            initiator_reviews: initiator.total_reviews,
             initiator_operating_days,
             counterpart_operating_days,
             premium: order.premium,
