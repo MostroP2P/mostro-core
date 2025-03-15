@@ -204,7 +204,11 @@ impl Message {
         // Create a verification-only context for better performance
         let secp = Secp256k1::verification_only();
         // Verify signature
-        pubkey.verify(&secp, &message, &sig).is_ok()
+        pubkey
+            .xonly()
+            .unwrap()
+            .verify(&secp, &message, &sig)
+            .is_ok()
     }
 }
 
