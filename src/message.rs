@@ -206,9 +206,8 @@ impl Message {
         // Verify signature
         pubkey
             .xonly()
-            .unwrap()
-            .verify(&secp, &message, &sig)
-            .is_ok()
+            .map(|xonly| xonly.verify(&secp, &message, &sig).is_ok())
+            .unwrap_or(false)
     }
 }
 
