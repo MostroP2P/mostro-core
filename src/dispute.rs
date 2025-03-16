@@ -105,6 +105,7 @@ impl SolverDisputeInfo {
     pub fn new(
         order: &Order,
         dispute: &Dispute,
+        initiator_tradekey: String,
         counterpart: &User,
         initiator: &User,
         initiator_operating_days: u64,
@@ -116,7 +117,7 @@ impl SolverDisputeInfo {
             status: order.status.clone(),
             hash: order.hash.clone(),
             preimage: order.preimage.clone(),
-            initiator_pubkey: initiator.pubkey.clone(),
+            initiator_pubkey: initiator_tradekey,
             buyer_pubkey: order.buyer_pubkey.clone(),
             buyer_token: dispute.buyer_token,
             seller_pubkey: order.seller_pubkey.clone(),
