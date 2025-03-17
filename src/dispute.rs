@@ -105,6 +105,7 @@ impl SolverDisputeInfo {
     pub fn new(
         order: &Order,
         dispute: &Dispute,
+        initiator_tradekey: String,
         counterpart: &User,
         initiator: &User,
         initiator_operating_days: u64,
@@ -116,7 +117,7 @@ impl SolverDisputeInfo {
             status: order.status.clone(),
             hash: order.hash.clone(),
             preimage: order.preimage.clone(),
-            initiator_pubkey: initiator.pubkey.clone(),
+            initiator_pubkey: initiator_tradekey,
             buyer_pubkey: order.buyer_pubkey.clone(),
             buyer_token: dispute.buyer_token,
             seller_pubkey: order.seller_pubkey.clone(),
@@ -158,14 +159,14 @@ impl Dispute {
     /// Create new dispute record and generate security tokens
     /// Returns a tuple of the initiator's token and the counterpart's token
     pub fn create_tokens(&mut self, is_buyer_dispute: bool) -> (Option<u16>, Option<u16>) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut buyer_token;
         let mut seller_token;
 
         // Ensure tokens are unique
         loop {
-            buyer_token = rng.gen_range(TOKEN_MIN..=TOKEN_MAX);
-            seller_token = rng.gen_range(TOKEN_MIN..=TOKEN_MAX);
+            buyer_token = rng.random_range(TOKEN_MIN..=TOKEN_MAX);
+            seller_token = rng.random_range(TOKEN_MIN..=TOKEN_MAX);
             if buyer_token != seller_token {
                 break;
             }
