@@ -158,14 +158,14 @@ impl Dispute {
     /// Create new dispute record and generate security tokens
     /// Returns a tuple of the initiator's token and the counterpart's token
     pub fn create_tokens(&mut self, is_buyer_dispute: bool) -> (Option<u16>, Option<u16>) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut buyer_token;
         let mut seller_token;
 
         // Ensure tokens are unique
         loop {
-            buyer_token = rng.gen_range(TOKEN_MIN..=TOKEN_MAX);
-            seller_token = rng.gen_range(TOKEN_MIN..=TOKEN_MAX);
+            buyer_token = rng.random_range(TOKEN_MIN..=TOKEN_MAX);
+            seller_token = rng.random_range(TOKEN_MIN..=TOKEN_MAX);
             if buyer_token != seller_token {
                 break;
             }
