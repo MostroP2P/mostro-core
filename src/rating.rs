@@ -1,5 +1,6 @@
 use anyhow::{Ok, Result};
 use nostr_sdk::prelude::*;
+use nostr_sdk::Tags;
 use serde::{Deserialize, Serialize};
 
 /// We use this struct to create a user reputation
@@ -68,7 +69,7 @@ impl Rating {
             ),
         ];
 
-        Ok(Tags::new(tags))
+        Ok(Tags::from_list(tags))
     }
 
     /// Transform tuple vector to Rating struct
