@@ -204,10 +204,7 @@ impl Message {
         // Create a verification-only context for better performance
         let secp = Secp256k1::verification_only();
         // Verify signature
-        pubkey
-            .xonly()
-            .map(|xonly| xonly.verify(&secp, &message, &sig).is_ok())
-            .unwrap_or(false)
+        pubkey.verify(&secp, &message, &sig).is_ok()
     }
 }
 
