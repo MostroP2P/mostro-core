@@ -68,7 +68,9 @@ impl Rating {
             ),
         ];
 
-        Ok(Tags::new(tags))
+        let tags = Tags::from_list(tags);
+
+        Ok(tags)
     }
 
     /// Transform tuple vector to Rating struct
