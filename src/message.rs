@@ -201,10 +201,15 @@ impl Message {
         let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
         let hash = hash.to_byte_array();
         let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
+
         // Create a verification-only context for better performance
         let secp = Secp256k1::verification_only();
         // Verify signature
-        pubkey.verify(&secp, &message, &sig).is_ok()
+        if let Ok(xonlykey) = pubkey.xonly() {
+            xonlykey.verify(&secp, &message, &sig).is_ok()
+        } else {
+            false
+        }
     }
 }
 
