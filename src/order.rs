@@ -60,6 +60,7 @@ pub enum Status {
     WaitingBuyerInvoice,
     WaitingPayment,
     CooperativelyCanceled,
+    InProgress,
 }
 
 impl Display for Status {
@@ -79,6 +80,7 @@ impl Display for Status {
             Status::WaitingBuyerInvoice => write!(f, "waiting-buyer-invoice"),
             Status::WaitingPayment => write!(f, "waiting-payment"),
             Status::CooperativelyCanceled => write!(f, "cooperatively-canceled"),
+            Status::InProgress => write!(f, "in-progress"),
         }
     }
 }
@@ -102,6 +104,7 @@ impl FromStr for Status {
             "waiting-buyer-invoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
             "waiting-payment" => std::result::Result::Ok(Self::WaitingPayment),
             "cooperatively-canceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
+            "in-progress" => std::result::Result::Ok(Self::InProgress),
             _ => Err(()),
         }
     }
