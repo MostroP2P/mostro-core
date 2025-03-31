@@ -339,6 +339,28 @@ impl Order {
     pub fn set_timestamp_now(&mut self) {
         self.taken_at = Timestamp::now().as_u64() as i64
     }
+
+    /// check if a user is creating a full privacy order so he doesn't to have reputation
+    pub fn is_full_privacy_order(&self) -> (bool, bool) {
+        let (mut full_privacy_buyer, mut full_privacy_seller) = (false, false);
+
+        // Find full privacy users in this trade
+        if self.buyer_pubkey.is_some()
+            && self.master_buyer_pubkey.is_some()
+            && self.master_buyer_pubkey == self.buyer_pubkey
+        {
+            full_privacy_buyer = true;
+        }
+
+        if self.seller_pubkey.is_some()
+            && self.master_seller_pubkey.is_some()
+            && self.master_seller_pubkey == self.seller_pubkey
+        {
+            full_privacy_seller = true;
+        }
+
+        (full_privacy_buyer, full_privacy_seller)
+    }
     /// Setup the dispute status
     ///
     /// If the pubkey is the buyer, set the buyer dispute to true
