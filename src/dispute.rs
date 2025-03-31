@@ -1,5 +1,6 @@
 use crate::{order::Order, user::User};
 use chrono::Utc;
+use nostr_sdk::Timestamp;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
@@ -8,7 +9,6 @@ use sqlx::{FromRow, Type};
 use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
-
 const TOKEN_MIN: u16 = 100;
 const TOKEN_MAX: u16 = 999;
 
@@ -72,6 +72,14 @@ pub struct Dispute {
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
+
+pub struct UserDisputeInfo {
+    pub rating: f64,
+    pub reviews: i64,
+    pub operating_days: u64,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct SolverDisputeInfo {
     pub id: Uuid,
     pub kind: String,
@@ -83,12 +91,10 @@ pub struct SolverDisputeInfo {
     pub buyer_token: Option<u16>,
     pub seller_pubkey: Option<String>,
     pub seller_token: Option<u16>,
-    pub counterpart_rating: f64,
-    pub counterpart_reviews: i64,
-    pub initiator_rating: f64,
-    pub initiator_reviews: i64,
-    pub initiator_operating_days: u64,
-    pub counterpart_operating_days: u64,
+    pub initiator_full_privacy: bool,
+    pub counterpart_full_privacy: bool,
+    pub initiator_info: Option<UserDisputeInfo>,
+    pub counterpart_info: Option<UserDisputeInfo>,
     pub premium: i64,
     pub payment_method: String,
     pub amount: i64,
@@ -106,11 +112,36 @@ impl SolverDisputeInfo {
         order: &Order,
         dispute: &Dispute,
         initiator_tradekey: String,
-        counterpart: &User,
-        initiator: &User,
-        initiator_operating_days: u64,
-        counterpart_operating_days: u64,
+        counterpart: Option<User>,
+        initiator: Option<User>,
     ) -> Self {
+        // Get initiator and counterpart info if not in full privacy mode
+        let mut initiator_info = None;
+        let mut counterpart_info = None;
+        let mut initiator_full_privacy = true;
+        let mut counterpart_full_privacy = true;
+
+        if let Some(initiator) = initiator {
+            let now = Timestamp::now();
+            let initiator_operating_days = (now.as_u64() - initiator.created_at as u64) / 86400;
+            initiator_info = Some(UserDisputeInfo {
+                rating: initiator.total_rating,
+                reviews: initiator.total_reviews,
+                operating_days: initiator_operating_days,
+            });
+            initiator_full_privacy = false;
+        }
+        if let Some(counterpart) = counterpart {
+            let now = Timestamp::now();
+            let couterpart_operating_days = (now.as_u64() - counterpart.created_at as u64) / 86400;
+            counterpart_info = Some(UserDisputeInfo {
+                rating: counterpart.total_rating,
+                reviews: counterpart.total_reviews,
+                operating_days: couterpart_operating_days,
+            });
+            counterpart_full_privacy = false;
+        }
+
         Self {
             id: order.id,
             kind: order.kind.clone(),
@@ -122,12 +153,10 @@ impl SolverDisputeInfo {
             buyer_token: dispute.buyer_token,
             seller_pubkey: order.seller_pubkey.clone(),
             seller_token: dispute.seller_token,
-            counterpart_rating: counterpart.total_rating,
-            counterpart_reviews: counterpart.total_reviews,
-            initiator_rating: initiator.total_rating,
-            initiator_reviews: initiator.total_reviews,
-            initiator_operating_days,
-            counterpart_operating_days,
+            initiator_full_privacy,
+            counterpart_full_privacy,
+            counterpart_info,
+            initiator_info,
             premium: order.premium,
             payment_method: order.payment_method.clone(),
             amount: order.amount,

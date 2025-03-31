@@ -60,6 +60,7 @@ pub enum Status {
     WaitingBuyerInvoice,
     WaitingPayment,
     CooperativelyCanceled,
+    InProgress,
 }
 
 impl Display for Status {
@@ -79,6 +80,7 @@ impl Display for Status {
             Status::WaitingBuyerInvoice => write!(f, "waiting-buyer-invoice"),
             Status::WaitingPayment => write!(f, "waiting-payment"),
             Status::CooperativelyCanceled => write!(f, "cooperatively-canceled"),
+            Status::InProgress => write!(f, "in-progress"),
         }
     }
 }
@@ -102,6 +104,7 @@ impl FromStr for Status {
             "waiting-buyer-invoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
             "waiting-payment" => std::result::Result::Ok(Self::WaitingPayment),
             "cooperatively-canceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
+            "in-progress" => std::result::Result::Ok(Self::InProgress),
             _ => Err(()),
         }
     }
@@ -335,6 +338,28 @@ impl Order {
     /// Set the timestamp to now
     pub fn set_timestamp_now(&mut self) {
         self.taken_at = Timestamp::now().as_u64() as i64
+    }
+
+    /// check if a user is creating a full privacy order so he doesn't to have reputation
+    pub fn is_full_privacy_order(&self) -> (bool, bool) {
+        let (mut full_privacy_buyer, mut full_privacy_seller) = (false, false);
+
+        // Find full privacy users in this trade
+        if self.buyer_pubkey.is_some()
+            && self.master_buyer_pubkey.is_some()
+            && self.master_buyer_pubkey == self.buyer_pubkey
+        {
+            full_privacy_buyer = true;
+        }
+
+        if self.seller_pubkey.is_some()
+            && self.master_seller_pubkey.is_some()
+            && self.master_seller_pubkey == self.seller_pubkey
+        {
+            full_privacy_seller = true;
+        }
+
+        (full_privacy_buyer, full_privacy_seller)
     }
     /// Setup the dispute status
     ///
