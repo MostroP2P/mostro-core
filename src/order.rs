@@ -345,10 +345,17 @@ impl Order {
         let (mut full_privacy_buyer, mut full_privacy_seller) = (false, false);
 
         // Find full privacy users in this trade
-        if self.master_buyer_pubkey == self.buyer_pubkey {
+        if self.buyer_pubkey.is_some()
+            && self.master_buyer_pubkey.is_some()
+            && self.master_buyer_pubkey == self.buyer_pubkey
+        {
             full_privacy_buyer = true;
         }
-        if self.master_seller_pubkey == self.seller_pubkey {
+
+        if self.seller_pubkey.is_some()
+            && self.master_seller_pubkey.is_some()
+            && self.master_seller_pubkey == self.seller_pubkey
+        {
             full_privacy_seller = true;
         }
 
