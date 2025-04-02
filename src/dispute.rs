@@ -61,21 +61,34 @@ impl FromStr for Status {
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct Dispute {
+    /// Unique identifier for the dispute
     pub id: Uuid,
+    /// Order ID that the dispute is related to
     pub order_id: Uuid,
+    /// Status of the dispute
     pub status: String,
+    /// Previous status of the order before the dispute was created
+    pub order_previous_status: String,
+    /// Public key of the solver
     pub solver_pubkey: Option<String>,
+    /// Timestamp when the dispute was created
     pub created_at: i64,
+    /// Timestamp when the dispute was taken by a solver
     pub taken_at: i64,
+    /// Security token for the buyer
     pub buyer_token: Option<u16>,
+    /// Security token for the seller
     pub seller_token: Option<u16>,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 
 pub struct UserDisputeInfo {
+    /// User's rating
     pub rating: f64,
+    /// User's total reviews
     pub reviews: i64,
+    /// User's operating days
     pub operating_days: u64,
 }
 
@@ -86,6 +99,7 @@ pub struct SolverDisputeInfo {
     pub status: String,
     pub hash: Option<String>,
     pub preimage: Option<String>,
+    pub order_previous_status: String,
     pub initiator_pubkey: String,
     pub buyer_pubkey: Option<String>,
     pub buyer_token: Option<u16>,
@@ -148,6 +162,7 @@ impl SolverDisputeInfo {
             status: order.status.clone(),
             hash: order.hash.clone(),
             preimage: order.preimage.clone(),
+            order_previous_status: dispute.order_previous_status.clone(),
             initiator_pubkey: initiator_tradekey,
             buyer_pubkey: order.buyer_pubkey.clone(),
             buyer_token: dispute.buyer_token,
@@ -172,11 +187,12 @@ impl SolverDisputeInfo {
 }
 
 impl Dispute {
-    pub fn new(order_id: Uuid) -> Self {
+    pub fn new(order_id: Uuid, order_status: String) -> Self {
         Self {
             id: Uuid::new_v4(),
             order_id,
             status: Status::Initiated.to_string(),
+            order_previous_status: order_status,
             solver_pubkey: None,
             created_at: Utc::now().timestamp(),
             taken_at: 0,
