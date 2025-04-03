@@ -1,4 +1,5 @@
 use crate::dispute::SolverDisputeInfo;
+use crate::dispute::UserDisputeInfo;
 use crate::error::ServiceError;
 use crate::PROTOCOL_VER;
 use crate::{error::CantDoReason, order::SmallOrder};
@@ -21,11 +22,12 @@ pub const MIN_RATING: u8 = 1;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
     pub pubkey: String,
+    pub reputation: Option<UserDisputeInfo>,
 }
 
 impl Peer {
-    pub fn new(pubkey: String) -> Self {
-        Self { pubkey }
+    pub fn new(pubkey: String, reputation: Option<UserDisputeInfo>) -> Self {
+        Self { pubkey, reputation }
     }
 
     pub fn from_json(json: &str) -> Result<Self> {
