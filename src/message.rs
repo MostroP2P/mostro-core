@@ -426,3 +426,148 @@ impl MessageKind {
         0
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::dispute::UserDisputeInfo;
+    use crate::message::{Action, Message, MessageKind, Payload, Peer};
+    use nostr_sdk::Keys;
+    use uuid::uuid;
+
+    #[test]
+    fn test_peer_with_reputation() {
+        // Test creating a Peer with reputation information
+        let reputation = UserDisputeInfo {
+            rating: 4.5,
+            reviews: 10,
+            operating_days: 30,
+        };
+        let peer = Peer::new(
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
+            Some(reputation.clone()),
+        );
+
+        // Assert the fields are set correctly
+        assert_eq!(
+            peer.pubkey,
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8"
+        );
+        assert!(peer.reputation.is_some());
+        let peer_reputation = peer.reputation.clone().unwrap();
+        assert_eq!(peer_reputation.rating, 4.5);
+        assert_eq!(peer_reputation.reviews, 10);
+        assert_eq!(peer_reputation.operating_days, 30);
+
+        // Test JSON serialization and deserialization
+        let json = peer.as_json().unwrap();
+        let deserialized_peer = Peer::from_json(&json).unwrap();
+        assert_eq!(deserialized_peer.pubkey, peer.pubkey);
+        assert!(deserialized_peer.reputation.is_some());
+        let deserialized_reputation = deserialized_peer.reputation.unwrap();
+        assert_eq!(deserialized_reputation.rating, 4.5);
+        assert_eq!(deserialized_reputation.reviews, 10);
+        assert_eq!(deserialized_reputation.operating_days, 30);
+    }
+
+    #[test]
+    fn test_peer_without_reputation() {
+        // Test creating a Peer without reputation information
+        let peer = Peer::new(
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
+            None,
+        );
+
+        // Assert the reputation field is None
+        assert_eq!(
+            peer.pubkey,
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8"
+        );
+        assert!(peer.reputation.is_none());
+
+        // Test JSON serialization and deserialization
+        let json = peer.as_json().unwrap();
+        let deserialized_peer = Peer::from_json(&json).unwrap();
+        assert_eq!(deserialized_peer.pubkey, peer.pubkey);
+        assert!(deserialized_peer.reputation.is_none());
+    }
+
+    #[test]
+    fn test_peer_in_message() {
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+
+        // Test with reputation
+        let reputation = UserDisputeInfo {
+            rating: 4.5,
+            reviews: 10,
+            operating_days: 30,
+        };
+        let peer_with_reputation = Peer::new(
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
+            Some(reputation),
+        );
+        let payload_with_reputation = Payload::Peer(peer_with_reputation);
+        let message_with_reputation = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::FiatSentOk,
+            Some(payload_with_reputation),
+        ));
+
+        // Verify message with reputation
+        assert!(message_with_reputation.verify());
+        let message_json = message_with_reputation.as_json().unwrap();
+        let deserialized_message = Message::from_json(&message_json).unwrap();
+        assert!(deserialized_message.verify());
+
+        // Test without reputation
+        let peer_without_reputation = Peer::new(
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
+            None,
+        );
+        let payload_without_reputation = Payload::Peer(peer_without_reputation);
+        let message_without_reputation = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::FiatSentOk,
+            Some(payload_without_reputation),
+        ));
+
+        // Verify message without reputation
+        assert!(message_without_reputation.verify());
+        let message_json = message_without_reputation.as_json().unwrap();
+        let deserialized_message = Message::from_json(&message_json).unwrap();
+        assert!(deserialized_message.verify());
+    }
+
+    #[test]
+    fn test_message_payload_signature() {
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let peer = Peer::new(
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
+            None, // Add None for the reputation parameter
+        );
+        let payload = Payload::Peer(peer);
+        let test_message = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::FiatSentOk,
+            Some(payload),
+        ));
+        assert!(test_message.verify());
+        let test_message_json = test_message.as_json().unwrap();
+        // Message should be signed with the trade keys
+        let trade_keys =
+            Keys::parse("110e43647eae221ab1da33ddc17fd6ff423f2b2f49d809b9ffa40794a2ab996c")
+                .unwrap();
+        let sig = Message::sign(test_message_json.clone(), &trade_keys);
+
+        assert!(Message::verify_signature(
+            test_message_json,
+            trade_keys.public_key(),
+            sig
+        ));
+    }
+}
