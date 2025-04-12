@@ -1,5 +1,5 @@
 use crate::dispute::SolverDisputeInfo;
-use crate::dispute::UserDisputeInfo;
+use crate::dispute::UserInfo;
 use crate::error::ServiceError;
 use crate::PROTOCOL_VER;
 use crate::{error::CantDoReason, order::SmallOrder};
@@ -22,11 +22,11 @@ pub const MIN_RATING: u8 = 1;
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
     pub pubkey: String,
-    pub reputation: Option<UserDisputeInfo>,
+    pub reputation: Option<UserInfo>,
 }
 
 impl Peer {
-    pub fn new(pubkey: String, reputation: Option<UserDisputeInfo>) -> Self {
+    pub fn new(pubkey: String, reputation: Option<UserInfo>) -> Self {
         Self { pubkey, reputation }
     }
 
@@ -429,7 +429,7 @@ impl MessageKind {
 
 #[cfg(test)]
 mod test {
-    use crate::dispute::UserDisputeInfo;
+    use crate::dispute::UserInfo;
     use crate::message::{Action, Message, MessageKind, Payload, Peer};
     use nostr_sdk::Keys;
     use uuid::uuid;
@@ -437,7 +437,7 @@ mod test {
     #[test]
     fn test_peer_with_reputation() {
         // Test creating a Peer with reputation information
-        let reputation = UserDisputeInfo {
+        let reputation = UserInfo {
             rating: 4.5,
             reviews: 10,
             operating_days: 30,
@@ -496,7 +496,7 @@ mod test {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
 
         // Test with reputation
-        let reputation = UserDisputeInfo {
+        let reputation = UserInfo {
             rating: 4.5,
             reviews: 10,
             operating_days: 30,
