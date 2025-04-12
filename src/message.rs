@@ -1,6 +1,6 @@
 use crate::dispute::SolverDisputeInfo;
-use crate::dispute::UserInfo;
 use crate::error::ServiceError;
+use crate::user::UserInfo;
 use crate::PROTOCOL_VER;
 use crate::{error::CantDoReason, order::SmallOrder};
 use anyhow::Result;

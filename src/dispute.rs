@@ -1,4 +1,4 @@
-use crate::{order::Order, user::User};
+use crate::{order::Order, user::User, user::UserInfo};
 use chrono::Utc;
 use nostr_sdk::Timestamp;
 use rand::Rng;
@@ -79,17 +79,6 @@ pub struct Dispute {
     pub buyer_token: Option<u16>,
     /// Security token for the seller
     pub seller_token: Option<u16>,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
-
-pub struct UserInfo {
-    /// User's rating
-    pub rating: f64,
-    /// User's total reviews
-    pub reviews: i64,
-    /// User's operating days
-    pub operating_days: u64,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
