@@ -1,4 +1,4 @@
-use crate::{order::Order, user::User};
+use crate::{order::Order, user::User, user::UserInfo};
 use chrono::Utc;
 use nostr_sdk::Timestamp;
 use rand::Rng;
@@ -82,17 +82,6 @@ pub struct Dispute {
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
-
-pub struct UserDisputeInfo {
-    /// User's rating
-    pub rating: f64,
-    /// User's total reviews
-    pub reviews: i64,
-    /// User's operating days
-    pub operating_days: u64,
-}
-
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct SolverDisputeInfo {
     pub id: Uuid,
     pub kind: String,
@@ -107,8 +96,8 @@ pub struct SolverDisputeInfo {
     pub seller_token: Option<u16>,
     pub initiator_full_privacy: bool,
     pub counterpart_full_privacy: bool,
-    pub initiator_info: Option<UserDisputeInfo>,
-    pub counterpart_info: Option<UserDisputeInfo>,
+    pub initiator_info: Option<UserInfo>,
+    pub counterpart_info: Option<UserInfo>,
     pub premium: i64,
     pub payment_method: String,
     pub amount: i64,
@@ -138,7 +127,7 @@ impl SolverDisputeInfo {
         if let Some(initiator) = initiator {
             let now = Timestamp::now();
             let initiator_operating_days = (now.as_u64() - initiator.created_at as u64) / 86400;
-            initiator_info = Some(UserDisputeInfo {
+            initiator_info = Some(UserInfo {
                 rating: initiator.total_rating,
                 reviews: initiator.total_reviews,
                 operating_days: initiator_operating_days,
@@ -148,7 +137,7 @@ impl SolverDisputeInfo {
         if let Some(counterpart) = counterpart {
             let now = Timestamp::now();
             let couterpart_operating_days = (now.as_u64() - counterpart.created_at as u64) / 86400;
-            counterpart_info = Some(UserDisputeInfo {
+            counterpart_info = Some(UserInfo {
                 rating: counterpart.total_rating,
                 reviews: counterpart.total_reviews,
                 operating_days: couterpart_operating_days,

@@ -3,6 +3,17 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
 
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+
+pub struct UserInfo {
+    /// User's rating
+    pub rating: f64,
+    /// User's total reviews
+    pub reviews: i64,
+    /// User's operating days
+    pub operating_days: u64,
+}
+
 /// Database representation of an user
 #[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
