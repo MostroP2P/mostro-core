@@ -117,6 +117,7 @@ mod test {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let peer = Peer::new(
             "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
+            None,
         );
         let payload = Payload::Peer(peer);
         let test_message = Message::Order(MessageKind::new(
