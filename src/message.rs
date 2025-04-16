@@ -429,7 +429,7 @@ impl MessageKind {
 
 #[cfg(test)]
 mod test {
-    use crate::dispute::UserInfo;
+    use crate::user::UserInfo;
     use crate::message::{Action, Message, MessageKind, Payload, Peer};
     use nostr_sdk::Keys;
     use uuid::uuid;
