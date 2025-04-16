@@ -91,6 +91,8 @@ pub enum ServiceError {
     UnexpectedError(String),
     EnvVarError(String),
     IOError(String),
+    EncryptionError(String),
+    DecryptionError(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -147,6 +149,8 @@ impl fmt::Display for ServiceError {
             ServiceError::UnexpectedError(e) => write!(f, "Unexpected error: {}", e),
             ServiceError::EnvVarError(e) => write!(f, "Environment variable error: {}", e),
             ServiceError::IOError(e) => write!(f, "IO error: {}", e),
+            ServiceError::EncryptionError(e) => write!(f, "Encryption error: {}", e),
+            ServiceError::DecryptionError(e) => write!(f, "Decryption error: {}", e),
         }
     }
 }
