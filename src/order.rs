@@ -3,6 +3,9 @@ use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
     Algorithm, Argon2, Params, PasswordHasher, Version,
 };
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
@@ -15,11 +18,62 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 #[cfg(feature = "sqlx")]
 use sqlx_crud::SqlxCrud;
+use std::collections::{HashMap, VecDeque};
+use std::sync::LazyLock;
+use std::sync::Mutex;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
 use crate::error::{CantDoReason, ServiceError};
+
+// 🔐 Cache: global static or pass it explicitly
+static KEY_CACHE: LazyLock<Mutex<SimpleCache>> = LazyLock::new(|| Mutex::new(SimpleCache::new()));
+
+// ----- SIMPLE FIXED-SIZE CACHE -----
+const MAX_CACHE_SIZE: usize = 50;
+
+struct SimpleCache {
+    map: HashMap<u64, [u8; 32]>,
+    order: VecDeque<u64>,
+}
+
+impl SimpleCache {
+    fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn get(&mut self, key: u64) -> Option<[u8; 32]> {
+        if let Some(value) = self.map.get(&key) {
+            self.order.retain(|&k| k != key);
+            self.order.push_back(key);
+            Some(*value)
+        } else {
+            None
+        }
+    }
+
+    fn put(&mut self, key: u64, value: [u8; 32]) {
+        if !self.map.contains_key(&key) && self.map.len() >= MAX_CACHE_SIZE {
+            if let Some(oldest_key) = self.order.pop_front() {
+                self.map.remove(&oldest_key);
+            }
+        }
+        self.order.retain(|&k| k != key);
+        self.order.push_back(key);
+        self.map.insert(key, value);
+    }
+}
+
+fn make_cache_key(password: &str, salt: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    password.hash(&mut hasher);
+    salt.hash(&mut hasher);
+    hasher.finish()
+}
 
 /// Orders can be only Buy or Sell
 #[wasm_bindgen]
@@ -140,32 +194,51 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
     let (nonce, data) = encrypted_bytes.split_at(NONCE_SIZE);
     let nonce: [u8; NONCE_SIZE] = nonce.try_into().unwrap();
     let (salt, ciphertext) = data.split_at(SALT_SIZE);
-    // Decode salt from base64 to bytes
+
+    // Enecode salt from base64 to bytes
     let salt = SaltString::encode_b64(salt)
         .map_err(|_| ServiceError::DecryptionError("Error decoding salt".to_string()))?;
-    // Hash the password
-    let params = Params::new(
-        16 * 1024,
-        Params::MIN_T_COST,
-        Params::DEFAULT_P_COST * 2,
-        Some(Params::DEFAULT_OUTPUT_LEN),
-    )
-    .unwrap();
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
 
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| ServiceError::DecryptionError("Error hashing password".to_string()))?;
+    // get hash value from salt and password
+    let cache_key = make_cache_key(&password, salt.as_str().as_bytes());
+    let mut cache = KEY_CACHE
+        .lock()
+        .map_err(|_| ServiceError::DecryptionError("Error in key cache".to_string()))?;
+    // Check if the key is already in the cache
+    // If the key is in the cache, use it
+    let key_bytes = if let Some(cached_key) = cache.get(cache_key) {
+        cached_key
+    } else {
+        // Hash the password
+        let params = Params::new(
+            16 * 1024,
+            Params::MIN_T_COST,
+            Params::DEFAULT_P_COST * 2,
+            Some(Params::DEFAULT_OUTPUT_LEN),
+        )
+        .unwrap();
+        // Create Argon2 instance
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+        // Hash the password with the salt
+        let password_hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|_| ServiceError::DecryptionError("Error hashing password".to_string()))?;
 
-    let key = password_hash.hash.unwrap();
-    let key_bytes = key.as_bytes();
-    if key_bytes.len() != 32 {
-        return Err(ServiceError::DecryptionError(
-            "Key length is not 32 bytes".to_string(),
-        ));
-    }
+        let key = password_hash.hash.unwrap();
+        let key_bytes = key.as_bytes();
+        if key_bytes.len() != 32 {
+            return Err(ServiceError::DecryptionError(
+                "Key length is not 32 bytes".to_string(),
+            ));
+        }
+        let mut key_array = [0u8; 32];
+        key_array.copy_from_slice(key_bytes);
+        cache.put(cache_key, key_array);
+        key_array
+    };
+
     // Create cipher
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key_bytes));
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
 
     // Decrypt the data
     let decrypted = cipher
@@ -182,6 +255,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
 pub async fn store_encrypted(
     idkey: &str,
     password: Option<&SecretString>,
+    salt: Option<&str>,
 ) -> Result<String, ServiceError> {
     // Salt size and nonce size
     const SALT_SIZE: usize = 16;
@@ -194,7 +268,13 @@ pub async fn store_encrypted(
     };
 
     // Salt generation
-    let salt = SaltString::generate(&mut OsRng);
+    let salt = if let Some(salt) = salt {
+        SaltString::encode_b64(salt.as_bytes()).unwrap()
+    } else {
+        SaltString::generate(&mut OsRng)
+    };
+
+    println!("Salt: {}", salt);
     // Buffer to decode salt
     let buf = &mut [0u8; Salt::RECOMMENDED_LENGTH];
     // Decode salt from base64 to bytes
