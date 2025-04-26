@@ -212,7 +212,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
     } else {
         // Hash the password
         let params = Params::new(
-            16 * 1024,
+            Params::DEFAULT_M_COST,
             Params::MIN_T_COST,
             Params::DEFAULT_P_COST * 2,
             Some(Params::DEFAULT_OUTPUT_LEN),
@@ -285,12 +285,13 @@ pub async fn store_encrypted(
         .map_err(|_| ServiceError::EncryptionError("Error decoding salt".to_string()))?;
 
     let params = Params::new(
-        16 * 1024,
+        Params::DEFAULT_M_COST,
         Params::MIN_T_COST,
         Params::DEFAULT_P_COST * 2,
         Some(Params::DEFAULT_OUTPUT_LEN),
     )
-    .unwrap();
+    .map_err(|_| ServiceError::EncryptionError("Error creating params".to_string()))?;
+
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt)
