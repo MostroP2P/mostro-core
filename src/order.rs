@@ -258,7 +258,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
 pub async fn store_encrypted(
     idkey: &str,
     password: Option<&SecretString>,
-    salt: Option<&str>,
+    #[cfg(test)] salt: &str,
 ) -> Result<String, ServiceError> {
     // Salt size and nonce size
     const SALT_SIZE: usize = 16;
@@ -271,11 +271,10 @@ pub async fn store_encrypted(
     };
 
     // Salt generation
-    let salt = if let Some(salt) = salt {
-        SaltString::encode_b64(salt.as_bytes()).unwrap()
-    } else {
-        SaltString::generate(&mut OsRng)
-    };
+    #[cfg(test)]
+    let salt = SaltString::encode_b64(salt.as_bytes()).unwrap();
+    #[cfg(not(test))]
+    let salt = SaltString::generate(&mut OsRng);
 
     // Buffer to decode salt
     let buf = &mut [0u8; Salt::RECOMMENDED_LENGTH];
@@ -297,7 +296,9 @@ pub async fn store_encrypted(
         .hash_password(password.as_bytes(), &salt)
         .map_err(|_| ServiceError::EncryptionError("Error hashing password".to_string()))?;
 
-    let key = password_hash.hash.unwrap();
+    let key = password_hash
+        .hash
+        .ok_or_else(|| ServiceError::EncryptionError("Error getting hash".to_string()))?;
     let key_bytes = key.as_bytes();
     if key_bytes.len() != 32 {
         return Err(ServiceError::EncryptionError(
@@ -516,17 +517,23 @@ impl Order {
         }
     }
     /// Get the master buyer pubkey
-    pub fn get_master_buyer_pubkey(&self) -> Result<PublicKey, ServiceError> {
+    pub fn get_master_buyer_pubkey(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<String, ServiceError> {
         if let Some(pk) = self.master_buyer_pubkey.as_ref() {
-            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+            decrypt_data(pk.clone(), password).map_err(|_| ServiceError::InvalidPubkey)
         } else {
             Err(ServiceError::InvalidPubkey)
         }
     }
     /// Get the master seller pubkey
-    pub fn get_master_seller_pubkey(&self) -> Result<PublicKey, ServiceError> {
+    pub fn get_master_seller_pubkey(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<String, ServiceError> {
         if let Some(pk) = self.master_seller_pubkey.as_ref() {
-            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+            decrypt_data(pk.clone(), password).map_err(|_| ServiceError::InvalidPubkey)
         } else {
             Err(ServiceError::InvalidPubkey)
         }
