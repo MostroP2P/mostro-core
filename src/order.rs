@@ -258,7 +258,6 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
 pub async fn store_encrypted(
     idkey: &str,
     password: Option<&SecretString>,
-    #[cfg(test)] salt: &str,
 ) -> Result<String, ServiceError> {
     // Salt size and nonce size
     const SALT_SIZE: usize = 16;
@@ -272,7 +271,7 @@ pub async fn store_encrypted(
 
     // Salt generation
     #[cfg(test)]
-    let salt = SaltString::encode_b64(salt.as_bytes()).unwrap();
+    let salt = SaltString::encode_b64(b"1H/aaYsf8&asduA0").unwrap();
     #[cfg(not(test))]
     let salt = SaltString::generate(&mut OsRng);
 
