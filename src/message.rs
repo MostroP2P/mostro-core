@@ -1,7 +1,6 @@
 use crate::dispute::SolverDisputeInfo;
 use crate::error::ServiceError;
 use crate::user::UserInfo;
-use crate::PROTOCOL_VER;
 use crate::{error::CantDoReason, order::SmallOrder};
 use anyhow::Result;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
@@ -17,6 +16,11 @@ use uuid::Uuid;
 pub const MAX_RATING: u8 = 5;
 // Min rating
 pub const MIN_RATING: u8 = 1;
+
+/// All events broadcasted by Mostro daemon are Parameterized Replaceable Events
+/// and the event kind must be between 30000 and 39999
+pub const NOSTR_REPLACEABLE_EVENT_KIND: u16 = 38383;
+pub const PROTOCOL_VER: u8 = 1;
 
 /// One party of the trade
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -429,8 +433,8 @@ impl MessageKind {
 
 #[cfg(test)]
 mod test {
-    use crate::user::UserInfo;
     use crate::message::{Action, Message, MessageKind, Payload, Peer};
+    use crate::user::UserInfo;
     use nostr_sdk::Keys;
     use uuid::uuid;
 

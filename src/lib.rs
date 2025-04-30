@@ -2,13 +2,9 @@ pub mod dispute;
 pub mod error;
 pub mod message;
 pub mod order;
+pub mod prelude;
 pub mod rating;
 pub mod user;
-
-/// All events broadcasted by Mostro daemon are Parameterized Replaceable Events
-/// and the event kind must be between 30000 and 39999
-pub const NOSTR_REPLACEABLE_EVENT_KIND: u16 = 38383;
-pub const PROTOCOL_VER: u8 = 1;
 
 #[cfg(test)]
 mod test {
