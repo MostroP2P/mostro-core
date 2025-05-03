@@ -1,5 +1,8 @@
-/// This module re-exports commonly used types and traits for convenience.
-/// It allows users to import everything they need from a single module
+// This module re-exports commonly used types and traits for convenience.
+// It allows users to import everything they need from a single module
+// 
+//! Prelude
+
 pub use crate::error::{CantDoReason, MostroError, ServiceError};
 pub use crate::dispute::{Dispute, SolverDisputeInfo, Status as DisputeStatus};
 pub use crate::message::{
