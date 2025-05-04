@@ -16,11 +16,8 @@ crate-type = ["cdylib", "lib"]
 publish = false
 # (Default: true) Set to false to prevent automatically pushing commits and tags to the Git remote.
 push = false
-pre-release-hook = ["git", "cliff", "--latest", "--output", "CHANGELOG.md"]
 # (Default: true) Run `cargo test` before release? Highly recommended.
 verify = true
-# (Default: false) Prepend "v" to the Git tag name? (e.g., v0.2.1 instead of 0.2.1) Common practice.
-tag-prefix = "v"
 # (Default: true) Create a Git tag for the release (e.g., v0.2.1)? You usually want this.
 tag = true
 # (Default: false) Sign the release commit with GPG?
@@ -28,7 +25,9 @@ sign-commit = true
 # (Default: false) Sign the release tag with GPG?
 sign-tag = true
 # Use 'allow-branch' if you release from other branches. Check defaults if needed.
-allow-branch = ["main", "changelog"]
+allow-branch = ["main"]
+# Git cliff to generate the changelog
+pre-release-hook = ["git", "cliff", "--unreleased", "-o", "CHANGELOG.md", "--tag", "{{version}}" ]
 
 [dependencies]
 chrono = "0.4.38"
