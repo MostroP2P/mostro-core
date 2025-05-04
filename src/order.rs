@@ -1,4 +1,3 @@
-use anyhow::Result;
 use nostr_sdk::{PublicKey, Timestamp};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
@@ -462,13 +461,13 @@ impl SmallOrder {
         }
     }
     /// New order from json string
-    pub fn from_json(json: &str) -> Result<Self> {
-        Ok(serde_json::from_str(json)?)
+    pub fn from_json(json: &str) -> Result<Self, ServiceError> {
+        serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
     }
 
     /// Get order as json string
-    pub fn as_json(&self) -> Result<String> {
-        Ok(serde_json::to_string(&self)?)
+    pub fn as_json(&self) -> Result<String, ServiceError> {
+        serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
     }
 
     /// Get the amount of sats or the string "Market price"

@@ -3,7 +3,6 @@ use crate::error::ServiceError;
 use crate::user::UserInfo;
 use crate::PROTOCOL_VER;
 use crate::{error::CantDoReason, order::SmallOrder};
-use anyhow::Result;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
@@ -429,8 +428,8 @@ impl MessageKind {
 
 #[cfg(test)]
 mod test {
-    use crate::user::UserInfo;
     use crate::message::{Action, Message, MessageKind, Payload, Peer};
+    use crate::user::UserInfo;
     use nostr_sdk::Keys;
     use uuid::uuid;
 
