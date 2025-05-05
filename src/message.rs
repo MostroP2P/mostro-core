@@ -2,7 +2,6 @@ use crate::dispute::SolverDisputeInfo;
 use crate::error::ServiceError;
 use crate::user::UserInfo;
 use crate::{error::CantDoReason, order::SmallOrder};
-use anyhow::Result;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;

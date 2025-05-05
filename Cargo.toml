@@ -1,16 +1,17 @@
 [package]
 name = "mostro-core"
-version = "0.6.39"
+version = "0.6.38"
 edition = "2021"
 license = "MIT"
 authors = ["Francisco Calderón <negrunch@grunch.dev>"]
 description = "Mostro Core library"
+homepage = "https://mostro.network"
+repository = "https://github.com/MostroP2P/mostro-core"
 
 [lib]
 crate-type = ["cdylib", "lib"]
 
 [dependencies]
-anyhow = "1.0.66"
 chrono = "0.4.38"
 serde = { version = "1.0.149", features = ["derive"] }
 serde_json = "1.0.89"

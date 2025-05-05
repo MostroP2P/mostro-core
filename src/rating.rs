@@ -1,6 +1,7 @@
-use anyhow::{Ok, Result};
 use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::error::ServiceError;
 
 /// We use this struct to create a user reputation
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -74,7 +75,7 @@ impl Rating {
     }
 
     /// Transform tuple vector to Rating struct
-    pub fn from_tags(tags: Tags) -> Result<Self> {
+    pub fn from_tags(tags: Tags) -> Result<Self, ServiceError> {
         let mut total_reviews = 0;
         let mut total_rating = 0.0;
         let mut last_rating = 0;
@@ -85,16 +86,36 @@ impl Rating {
             let t = tag.to_vec();
             let key = t
                 .first()
-                .ok_or_else(|| anyhow::anyhow!("Missing tag key"))?;
+                .ok_or_else(|| ServiceError::NostrError("Missing tag key".to_string()))?;
             let value = t
                 .get(1)
-                .ok_or_else(|| anyhow::anyhow!("Missing tag value"))?;
+                .ok_or_else(|| ServiceError::NostrError("Missing tag value".to_string()))?;
             match key.as_str() {
-                "total_reviews" => total_reviews = value.parse::<u64>()?,
-                "total_rating" => total_rating = value.parse::<f64>()?,
-                "last_rating" => last_rating = value.parse::<u8>()?,
-                "max_rate" => max_rate = value.parse::<u8>()?,
-                "min_rate" => min_rate = value.parse::<u8>()?,
+                "total_reviews" => {
+                    total_reviews = value
+                        .parse::<u64>()
+                        .map_err(|_| ServiceError::ParsingNumberError)?
+                }
+                "total_rating" => {
+                    total_rating = value
+                        .parse::<f64>()
+                        .map_err(|_| ServiceError::ParsingNumberError)?
+                }
+                "last_rating" => {
+                    last_rating = value
+                        .parse::<u8>()
+                        .map_err(|_| ServiceError::ParsingNumberError)?
+                }
+                "max_rate" => {
+                    max_rate = value
+                        .parse::<u8>()
+                        .map_err(|_| ServiceError::ParsingNumberError)?
+                }
+                "min_rate" => {
+                    min_rate = value
+                        .parse::<u8>()
+                        .map_err(|_| ServiceError::ParsingNumberError)?
+                }
                 _ => {}
             }
         }
