@@ -1,10 +1,10 @@
 # git-cliff ~ configuration file
 # https://git-cliff.org/docs/configuration
 
-# [remote.github]
-# owner = "orhun"
-# repo = "git-cliff"
-# token = ""
+[remote.github]
+owner = "Francisco Calderón <negrunch@grunch.dev>"
+repo = "https://github.com/MostroP2P/mostro-core"
+token = ""
 
 [changelog]
 # template for the changelog body
