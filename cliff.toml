@@ -2,8 +2,8 @@
 # https://git-cliff.org/docs/configuration
 
 [remote.github]
-owner = "Francisco Calderón <negrunch@grunch.dev>"
-repo = "https://github.com/MostroP2P/mostro-core"
+owner = "MostroP2P"
+repo = "mostro-core"
 token = ""
 
 [changelog]
