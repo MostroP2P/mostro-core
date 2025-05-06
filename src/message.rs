@@ -33,12 +33,12 @@ impl Peer {
         Self { pubkey, reputation }
     }
 
-    pub fn from_json(json: &str) -> Result<Self> {
-        Ok(serde_json::from_str(json)?)
+    pub fn from_json(json: &str) -> Result<Self, ServiceError> {
+        serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
     }
 
-    pub fn as_json(&self) -> Result<String> {
-        Ok(serde_json::to_string(&self)?)
+    pub fn as_json(&self) -> Result<String, ServiceError> {
+        serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
     }
 }
 
@@ -151,13 +151,13 @@ impl Message {
     }
 
     /// Get message from json string
-    pub fn from_json(json: &str) -> Result<Self> {
-        Ok(serde_json::from_str(json)?)
+    pub fn from_json(json: &str) -> Result<Self, ServiceError> {
+        serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
     }
 
     /// Get message as json string
-    pub fn as_json(&self) -> Result<String> {
-        Ok(serde_json::to_string(&self)?)
+    pub fn as_json(&self) -> Result<String, ServiceError> {
+        serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
     }
 
     // Get inner message kind
@@ -284,12 +284,12 @@ impl MessageKind {
         }
     }
     /// Get message from json string
-    pub fn from_json(json: &str) -> Result<Self> {
-        Ok(serde_json::from_str(json)?)
+    pub fn from_json(json: &str) -> Result<Self, ServiceError> {
+        serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
     }
     /// Get message as json string
-    pub fn as_json(&self) -> Result<String> {
-        Ok(serde_json::to_string(&self)?)
+    pub fn as_json(&self) -> Result<String, ServiceError> {
+        serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
     }
 
     // Get action from the inner message
