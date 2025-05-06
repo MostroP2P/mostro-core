@@ -562,7 +562,9 @@ impl Order {
         self.taken_at = Timestamp::now().as_u64() as i64
     }
 
-    /// check if a user is creating a full privacy order so he doesn't to have reputation
+    /// Check if a user is creating a full privacy order so he doesn't to have reputation
+    /// compare master keys with the order keys if they are the same the user is in full privacy mode
+    /// otherwise the user is not in normal mode and has a reputation
     pub fn is_full_privacy_order(
         &self,
         password: Option<&SecretString>,
@@ -570,29 +572,28 @@ impl Order {
         let (mut full_privacy_buyer_key, mut full_privacy_seller_key) = (None, None);
 
         // Get master pubkeys to get users data from db
-        let master_buyer_key = self
+        let master_buyer_pubkey = self
             .get_master_buyer_pubkey(password)
             .map_err(|_| ServiceError::InvalidPubkey)?
             .to_string();
 
-        let master_seller_key = self
+        let master_seller_pubkey = self
             .get_master_seller_pubkey(password)
             .map_err(|_| ServiceError::InvalidPubkey)?
             .to_string();
 
-        // Find full privacy users in this trade
-        if self.buyer_pubkey.is_some()
-            && self.master_buyer_pubkey.is_some()
-            && self.master_buyer_pubkey == self.buyer_pubkey
-        {
-            full_privacy_buyer_key = Some(master_buyer_key);
+        // Check if the buyer is in full privacy mode
+        if let Some(db_buyer_pubbkey) = self.buyer_pubkey.as_ref() {
+            if db_buyer_pubbkey == &master_buyer_pubkey {
+                full_privacy_buyer_key = Some(master_buyer_pubkey);
+            }
         }
 
-        if self.seller_pubkey.is_some()
-            && self.master_seller_pubkey.is_some()
-            && self.master_seller_pubkey == self.seller_pubkey
-        {
-            full_privacy_seller_key = Some(master_seller_key);
+        // Check if the seller is in full privacy mode
+        if let Some(db_seller_pubbkey) = self.seller_pubkey.as_ref() {
+            if db_seller_pubbkey == &master_seller_pubkey {
+                full_privacy_seller_key = Some(master_seller_pubkey);
+            }
         }
 
         Ok((full_privacy_buyer_key, full_privacy_seller_key))
