@@ -1,10 +1,6 @@
 # git-cliff ~ configuration file
 # https://git-cliff.org/docs/configuration
 
-[remote.github]
-owner = "MostroP2P"
-repo = "mostro-core"
-token = ""
 
 [changelog]
 # template for the changelog body
