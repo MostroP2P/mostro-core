@@ -240,7 +240,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
         // Hash the password
         let params = Params::new(
             Params::DEFAULT_M_COST,
-            Params::MIN_T_COST,
+            Params::DEFAULT_T_COST,
             Params::DEFAULT_P_COST * 2,
             Some(Params::DEFAULT_OUTPUT_LEN),
         )
@@ -284,9 +284,21 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
 }
 
 /// Encrypt a string to save it in the database
+///
+/// # Parameters
+/// * `idkey` - The string data to be encrypted
+/// * `password` - Optional password used for encryption. If None, returns the data unencrypted
+/// * `fixed_salt` - Optional fixed salt for encryption. If None, generates a random salt.
+///                 This parameter is primarily used for unit testing to ensure consistent encryption results.
+///
+/// # Returns
+/// Returns a Result containing either:
+/// * Ok(String) - The encrypted data encoded in base64
+/// * Err(ServiceError) - If encryption fails
 pub fn store_encrypted(
     idkey: &str,
     password: Option<&SecretString>,
+    fixed_salt: Option<SaltString>,
 ) -> Result<String, ServiceError> {
     // Salt size and nonce size
     const SALT_SIZE: usize = 16;
@@ -299,10 +311,10 @@ pub fn store_encrypted(
     };
 
     // Salt generation
-    #[cfg(test)]
-    let salt = SaltString::encode_b64(b"1H/aaYsf8&asduA0").unwrap();
-    #[cfg(not(test))]
-    let salt = SaltString::generate(&mut OsRng);
+    let salt = match fixed_salt {
+        Some(salt) => salt,
+        None => SaltString::generate(&mut OsRng),
+    };
 
     // Buffer to decode salt
     let buf = &mut [0u8; Salt::RECOMMENDED_LENGTH];
@@ -313,7 +325,7 @@ pub fn store_encrypted(
 
     let params = Params::new(
         Params::DEFAULT_M_COST,
-        Params::MIN_T_COST,
+        Params::DEFAULT_T_COST,
         Params::DEFAULT_P_COST * 2,
         Some(Params::DEFAULT_OUTPUT_LEN),
     )
