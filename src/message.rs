@@ -429,8 +429,8 @@ impl MessageKind {
 
 #[cfg(test)]
 mod test {
-    use crate::user::UserInfo;
     use crate::message::{Action, Message, MessageKind, Payload, Peer};
+    use crate::user::UserInfo;
     use nostr_sdk::Keys;
     use uuid::uuid;
 

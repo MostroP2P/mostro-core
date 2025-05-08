@@ -20,6 +20,7 @@ pub struct UserInfo {
 pub struct User {
     pub pubkey: String,
     pub is_admin: i64,
+    pub admin_password: Option<String>,
     pub is_solver: i64,
     pub is_banned: i64,
     pub category: i64,
@@ -46,6 +47,7 @@ impl User {
         Self {
             pubkey,
             is_admin,
+            admin_password: None,
             is_solver,
             is_banned,
             category,

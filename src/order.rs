@@ -1,15 +1,97 @@
 use anyhow::Result;
+use argon2::{
+    password_hash::{rand_core::OsRng, Salt, SaltString},
+    Algorithm, Argon2, Params, PasswordHasher, Version,
+};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    AeadCore, ChaCha20Poly1305, Key,
+};
 use nostr_sdk::{PublicKey, Timestamp};
+use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox, SecretString};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
 #[cfg(feature = "sqlx")]
 use sqlx_crud::SqlxCrud;
+use std::collections::{HashMap, VecDeque};
+use std::sync::LazyLock;
+use std::sync::RwLock;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroize;
 
 use crate::error::{CantDoReason, ServiceError};
+
+// 🔐 Cache: global static or pass it explicitly
+static KEY_CACHE: LazyLock<RwLock<SecretBox<SimpleCache>>> =
+    LazyLock::new(|| RwLock::new(SecretBox::new(Box::new(SimpleCache::new()))));
+
+// ----- SIMPLE FIXED-SIZE CACHE -----
+const MAX_CACHE_SIZE: usize = 50;
+
+// blake3 hash for cache key
+type CacheKey = blake3::Hash; // 256-bit
+
+struct SimpleCache {
+    map: HashMap<CacheKey, [u8; 32]>,
+    order: VecDeque<CacheKey>,
+}
+
+impl SimpleCache {
+    fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn get(&mut self, key: CacheKey) -> Option<[u8; 32]> {
+        if let Some(value) = self.map.get(&key) {
+            self.order.retain(|&k| k != key);
+            self.order.push_back(key);
+            Some(*value)
+        } else {
+            None
+        }
+    }
+
+    fn put(&mut self, key: CacheKey, value: [u8; 32]) {
+        if !self.map.contains_key(&key) && self.map.len() >= MAX_CACHE_SIZE {
+            if let Some(oldest_key) = self.order.pop_front() {
+                self.map.remove(&oldest_key);
+            }
+        }
+        self.order.retain(|&k| k != key);
+        self.order.push_back(key);
+        self.map.insert(key, value);
+    }
+}
+
+// Implemetation of zeroize required by secretbox
+impl Zeroize for SimpleCache {
+    fn zeroize(&mut self) {
+        for value in self.map.values_mut() {
+            value.zeroize();
+        }
+        self.map.clear();
+        self.order.clear();
+    }
+}
+
+// On drop, zeroize the cache
+impl Drop for SimpleCache {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+// make blake3 hash for cache key from password and salt
+fn make_cache_key(password: &str, salt: &[u8]) -> CacheKey {
+    blake3::hash([password.as_bytes(), salt].concat().as_slice())
+}
 
 /// Orders can be only Buy or Sell
 #[wasm_bindgen]
@@ -108,6 +190,182 @@ impl FromStr for Status {
             _ => Err(()),
         }
     }
+}
+
+/// Decrypt an identity key from the database
+pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<String, ServiceError> {
+    // Salt size and nonce size
+    const SALT_SIZE: usize = 16;
+    const NONCE_SIZE: usize = 12;
+    // If password is not provided, return data as it is
+    let password = match password {
+        Some(password) => password.expose_secret().to_string(),
+        None => return Ok(data),
+    };
+
+    // Decode the encrypted data from base64 to bytes
+    let encrypted_bytes = BASE64_STANDARD
+        .decode(&data)
+        .map_err(|_| ServiceError::DecryptionError("Error decoding encrypted data".to_string()))?;
+
+    // Validate input length before processing
+    if encrypted_bytes.len() < NONCE_SIZE + SALT_SIZE {
+        return Err(ServiceError::DecryptionError(
+            "Invalid encrypted data: too short for nonce and salt".to_string(),
+        ));
+    }
+
+    // Split the encrypted data into nonce and data
+    let (nonce, data) = encrypted_bytes.split_at(NONCE_SIZE);
+    let nonce: [u8; NONCE_SIZE] = nonce.try_into().map_err(|_| {
+        ServiceError::DecryptionError("Error converting nonce to array".to_string())
+    })?;
+    let (salt, ciphertext) = data.split_at(SALT_SIZE);
+
+    // Enecode salt from base64 to bytes
+    let salt = SaltString::encode_b64(salt)
+        .map_err(|_| ServiceError::DecryptionError("Error decoding salt".to_string()))?;
+
+    // get hash value from salt and password
+    let cache_key = make_cache_key(&password, salt.as_str().as_bytes());
+    let mut cache = KEY_CACHE
+        .write()
+        .map_err(|_| ServiceError::DecryptionError("Error in key cache".to_string()))?;
+
+    // Check if the key is already in the cache
+    // If the key is in the cache, use it
+    let key_bytes = if let Some(cached_key) = cache.expose_secret_mut().get(cache_key) {
+        cached_key
+    } else {
+        // Hash the password
+        let params = Params::new(
+            Params::DEFAULT_M_COST,
+            Params::DEFAULT_T_COST,
+            Params::DEFAULT_P_COST * 2,
+            Some(Params::DEFAULT_OUTPUT_LEN),
+        )
+        .map_err(|_| ServiceError::DecryptionError("Error Argon2 creating params".to_string()))?;
+        // Create Argon2 instance
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+        // Hash the password with the salt
+        let password_hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|_| {
+                ServiceError::DecryptionError("Error in Argon2 hashing password".to_string())
+            })?;
+
+        let key = password_hash
+            .hash
+            .ok_or_else(|| ServiceError::DecryptionError("Error getting Argon2 key".to_string()))?;
+        let key_bytes = key.as_bytes();
+        if key_bytes.len() != 32 {
+            return Err(ServiceError::DecryptionError(
+                "Key length is not 32 bytes".to_string(),
+            ));
+        }
+        let mut key_array = [0u8; 32];
+        key_array.copy_from_slice(key_bytes);
+        cache.expose_secret_mut().put(cache_key, key_array);
+        key_array
+    };
+
+    // Create cipher
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
+
+    // Decrypt the data
+    let decrypted = cipher
+        .decrypt(&nonce.into(), ciphertext)
+        .map_err(|e| ServiceError::DecryptionError(e.to_string()))?;
+
+    // Convert the decrypted data to a string and return it
+    String::from_utf8(decrypted).map_err(|_| {
+        ServiceError::DecryptionError("Error converting encrypted data to string".to_string())
+    })
+}
+
+/// Encrypt a string to save it in the database
+///
+/// # Parameters
+/// * `idkey` - The string data to be encrypted
+/// * `password` - Optional password used for encryption. If None, returns the data unencrypted
+/// * `fixed_salt` - Optional fixed salt for encryption. If None, generates a random salt.
+///                 This parameter is primarily used for unit testing to ensure consistent encryption results.
+///
+/// # Returns
+/// Returns a Result containing either:
+/// * Ok(String) - The encrypted data encoded in base64
+/// * Err(ServiceError) - If encryption fails
+pub fn store_encrypted(
+    idkey: &str,
+    password: Option<&SecretString>,
+    fixed_salt: Option<SaltString>,
+) -> Result<String, ServiceError> {
+    // Salt size and nonce size
+    const SALT_SIZE: usize = 16;
+    const NONCE_SIZE: usize = 12;
+
+    // If password is not provided, return data as it is
+    let password = match password {
+        Some(password) => password.expose_secret().to_string(),
+        None => return Ok(idkey.to_string()),
+    };
+
+    // Salt generation
+    let salt = match fixed_salt {
+        Some(salt) => salt,
+        None => SaltString::generate(&mut OsRng),
+    };
+
+    // Buffer to decode salt
+    let buf = &mut [0u8; Salt::RECOMMENDED_LENGTH];
+    // Decode salt from base64 to bytes
+    let salt_decoded = salt
+        .decode_b64(buf)
+        .map_err(|_| ServiceError::EncryptionError("Error decoding salt".to_string()))?;
+
+    let params = Params::new(
+        Params::DEFAULT_M_COST,
+        Params::DEFAULT_T_COST,
+        Params::DEFAULT_P_COST * 2,
+        Some(Params::DEFAULT_OUTPUT_LEN),
+    )
+    .map_err(|_| ServiceError::EncryptionError("Error creating params".to_string()))?;
+
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let password_hash = argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|_| ServiceError::EncryptionError("Error hashing password".to_string()))?;
+
+    let key = password_hash
+        .hash
+        .ok_or_else(|| ServiceError::EncryptionError("Error getting hash".to_string()))?;
+    let key_bytes = key.as_bytes();
+    if key_bytes.len() != 32 {
+        return Err(ServiceError::EncryptionError(
+            "Key length is not 32 bytes".to_string(),
+        ));
+    }
+    // Create cipher
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(key_bytes));
+    // Generate nonce
+    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng); // 96-bits; unique per message
+
+    // Encrypt data
+    let ciphertext = cipher
+        .encrypt(&nonce, idkey.as_bytes())
+        .map_err(|e| ServiceError::EncryptionError(e.to_string()))?;
+
+    // Combine nonce and ciphertext
+    let mut encrypted = Vec::with_capacity(NONCE_SIZE + SALT_SIZE + ciphertext.len());
+    encrypted.extend_from_slice(&nonce);
+    encrypted.extend_from_slice(salt_decoded);
+    encrypted.extend_from_slice(&ciphertext);
+
+    // --- Encoding to String ---
+    // Encode the binary ciphertext into a Base64 String
+    let ciphertext_base64 = BASE64_STANDARD.encode(&encrypted);
+
+    Ok(ciphertext_base64)
 }
 
 /// Database representation of an order
@@ -212,7 +470,6 @@ impl Order {
             None,
         )
     }
-
     /// Get the kind of the order
     pub fn get_order_kind(&self) -> Result<Kind, ServiceError> {
         if let Ok(kind) = Kind::from_str(&self.kind) {
@@ -300,17 +557,23 @@ impl Order {
         }
     }
     /// Get the master buyer pubkey
-    pub fn get_master_buyer_pubkey(&self) -> Result<PublicKey, ServiceError> {
+    pub fn get_master_buyer_pubkey(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<String, ServiceError> {
         if let Some(pk) = self.master_buyer_pubkey.as_ref() {
-            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+            decrypt_data(pk.clone(), password).map_err(|_| ServiceError::InvalidPubkey)
         } else {
             Err(ServiceError::InvalidPubkey)
         }
     }
     /// Get the master seller pubkey
-    pub fn get_master_seller_pubkey(&self) -> Result<PublicKey, ServiceError> {
+    pub fn get_master_seller_pubkey(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<String, ServiceError> {
         if let Some(pk) = self.master_seller_pubkey.as_ref() {
-            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+            decrypt_data(pk.clone(), password).map_err(|_| ServiceError::InvalidPubkey)
         } else {
             Err(ServiceError::InvalidPubkey)
         }
@@ -340,26 +603,37 @@ impl Order {
         self.taken_at = Timestamp::now().as_u64() as i64
     }
 
-    /// check if a user is creating a full privacy order so he doesn't to have reputation
-    pub fn is_full_privacy_order(&self) -> (bool, bool) {
-        let (mut full_privacy_buyer, mut full_privacy_seller) = (false, false);
+    /// Check if a user is creating a full privacy order so he doesn't to have reputation
+    /// compare master keys with the order keys if they are the same the user is in full privacy mode
+    /// otherwise the user is not in normal mode and has a reputation
+    pub fn is_full_privacy_order(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<(Option<String>, Option<String>), ServiceError> {
+        let (mut normal_buyer_idkey, mut normal_seller_idkey) = (None, None);
 
-        // Find full privacy users in this trade
-        if self.buyer_pubkey.is_some()
-            && self.master_buyer_pubkey.is_some()
-            && self.master_buyer_pubkey == self.buyer_pubkey
-        {
-            full_privacy_buyer = true;
+        // Get master pubkeys to get users data from db
+        let master_buyer_pubkey = match self.get_master_buyer_pubkey(password) {
+            Ok(pk) => Some(pk),
+            Err(_) => None,
+        };
+
+        let master_seller_pubkey = match self.get_master_seller_pubkey(password) {
+            Ok(pk) => Some(pk),
+            Err(_) => None,
+        };
+
+        // Check if the buyer is in full privacy mode
+        if self.buyer_pubkey.as_ref() != master_buyer_pubkey.as_ref() {
+            normal_buyer_idkey = master_buyer_pubkey;
         }
 
-        if self.seller_pubkey.is_some()
-            && self.master_seller_pubkey.is_some()
-            && self.master_seller_pubkey == self.seller_pubkey
-        {
-            full_privacy_seller = true;
+        // Check if the seller is in full privacy mode
+        if self.seller_pubkey.as_ref() != master_seller_pubkey.as_ref() {
+            normal_seller_idkey = master_seller_pubkey;
         }
 
-        (full_privacy_buyer, full_privacy_seller)
+        Ok((normal_buyer_idkey, normal_seller_idkey))
     }
     /// Setup the dispute status
     ///
@@ -507,15 +781,6 @@ impl SmallOrder {
             amounts.push(max);
         }
         Ok(())
-    }
-
-    // Get the fiat amount, if the order is a range order, return the range as min-max string
-    pub fn fiat_amount(&self) -> String {
-        if self.max_amount.is_some() {
-            format!("{}-{}", self.min_amount.unwrap(), self.max_amount.unwrap())
-        } else {
-            self.fiat_amount.to_string()
-        }
     }
 }
 
