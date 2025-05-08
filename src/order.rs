@@ -770,15 +770,6 @@ impl SmallOrder {
         }
         Ok(())
     }
-
-    // Get the fiat amount, if the order is a range order, return the range as min-max string
-    pub fn fiat_amount(&self) -> String {
-        if self.max_amount.is_some() {
-            format!("{}-{}", self.min_amount.unwrap(), self.max_amount.unwrap())
-        } else {
-            self.fiat_amount.to_string()
-        }
-    }
 }
 
 impl From<Order> for SmallOrder {
