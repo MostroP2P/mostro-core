@@ -22,7 +22,7 @@ use mostro_core::prelude::*;
 
 ## Contribute
 
-You may be interested in contributing to Mostro. If you're looking for somewhere to start contributing, check out the [good first issue](https://github.com/MostroP2P/mostro/labels/good%20first%20issue) list.
+You may be interested in contributing to Mostro. If you're looking for somewhere to start contributing, check out the [good first issue](https://github.com/MostroP2P/mostro-core/labels/good%20first%20issue) list.
 
 More info in our [contributing guide](contributing.md).
 
