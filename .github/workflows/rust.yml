@@ -16,6 +16,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: 1.86.0
+        override: true
     - name: Build
       run: cargo build --verbose
     - name: Run tests
