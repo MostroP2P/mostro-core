@@ -33,4 +33,4 @@ More info in our [contributing guide](contributing.md).
 
 ## License
 
-Mostro is licensed under the [MIT license](LICENSE).IT license.
+Mostro is licensed under the [MIT license](LICENSE).
