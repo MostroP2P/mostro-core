@@ -6,7 +6,7 @@ Anyone is welcome to contribute to Mostro. If you're looking for somewhere to st
 
 ## Communication Channels
 
-Most communication about technical issues on Mostro happens on the development [Telegram group](https://t.me/mostro_dev), non-technical discussions happen on this [Telegram group](https://t.me/MostroP2P). Discussion about code changes happens in GitHub issues and pull requests.
+Most communication about technical issues on Mostro happens on the development [Telegram group](https://t.me/mostro_dev), non-technical discussions happen on [Mostro general discussion Telegram group](https://t.me/MostroP2P). Discussion about code changes happens in GitHub issues and pull requests.
 
 ## Contributor Workflow
 
@@ -28,7 +28,7 @@ Mostro follows the review workflow established by the Bitcoin Core project. The 
 Anyone may participate in peer review, which is expressed by comments in the pull request. Typically, reviewers will review the code for obvious errors, test the patch set, and opine on its technical merits. Project maintainers consider peer review when determining whether there is consensus to merge a pull request (discussions may be spread across GitHub and Telegram).
 
 - `ACK` means "I have tested the code and I agree it should be merged";
-- `utACK` means "I have not tested the code, but I have reviewed it and it looks OK, and I agree it can be merged";
+- `utACK` means "I have not tested the code, but I have reviewed. It looks OK, and I agree it can be merged";
 - `Concept ACK` means "I agree with the general principle of this pull request";
 - `NACK` means "I disagree this should be merged", and must be accompanied by sound technical justification. NACKs without accompanying reasoning may be disregarded;
 - `Nit` refers to trivial, often non-blocking issues.
@@ -48,11 +48,11 @@ See <https://help.github.com/articles/setting-your-username-in-git/> for instruc
 From <https://chris.beams.io/posts/git-commit/#seven-rules>:
 
 1. Separate subject from body with a blank line
-2. Limit the subject line to 50 characters (\*)
+2. Limit the subject line to 50 characters
 3. Capitalize the subject line
 4. Do not end the subject line with a period
 5. Use the imperative mood in the subject line
-6. Wrap the body at 72 characters (\*)
+6. Wrap the body at 72 characters
 7. Use the body to explain what and why vs. how
 
 ### Sign your commits with GPG
