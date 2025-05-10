@@ -27,7 +27,7 @@ sign-tag = true
 # Use 'allow-branch' if you release from other branches. Check defaults if needed.
 allow-branch = ["main"]
 # Git cliff to generate the changelog
-pre-release-hook = ["git", "cliff", "--unreleased", "-o", "CHANGELOG.md", "--tag", "{{version}}" ]
+pre-release-hook = ["git", "cliff", "--unreleased", "--github-repo", "MostroP2P/mostro-core", "-o", "CHANGELOG.md", "--tag", "{{version}}" ]
 
 [dependencies]
 chrono = "0.4.38"
