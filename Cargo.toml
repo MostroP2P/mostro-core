@@ -57,6 +57,7 @@ bitcoin_hashes = "0.16.0"
 rand = "0.9.0"
 argon2 = "0.5"
 chacha20poly1305 = "0.10"
+base64 = "0.22.1"
 
 [features]
 default = ["wasm"]

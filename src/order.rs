@@ -1,8 +1,9 @@
 use anyhow::Result;
 use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
-    Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
+    Argon2, PasswordHasher,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
     AeadCore, ChaCha20Poly1305, Key,
@@ -119,24 +120,23 @@ impl FromStr for Status {
 }
 
 /// Decrypt an identity key from the database
-pub fn decrypt_data(encrypted: &[u8], password: Option<&str>) -> Result<String, ServiceError> {
+pub fn decrypt_data(data: String, password: Option<&str>) -> Result<String, ServiceError> {
     // Salt size and nonce size
     const SALT_SIZE: usize = 16;
     const NONCE_SIZE: usize = 12;
     // If password is not provided, return data as it is
     let password = match password {
         Some(password) => password,
-        None => {
-            return String::from_utf8(encrypted.to_vec()).map_err(|_| {
-                ServiceError::DecryptionError(
-                    "Error converting encrypted data to string".to_string(),
-                )
-            })
-        }
+        None => return Ok(data),
     };
 
+    // Decode the encrypted data from base64 to bytes
+    let encrypted_bytes = BASE64_STANDARD
+        .decode(&data)
+        .map_err(|_| ServiceError::DecryptionError("Error decoding encrypted data".to_string()))?;
+
     // Split the encrypted data into nonce and data
-    let (nonce, data) = encrypted.split_at(NONCE_SIZE);
+    let (nonce, data) = encrypted_bytes.split_at(NONCE_SIZE);
     let nonce: [u8; NONCE_SIZE] = nonce.try_into().unwrap();
     let (salt, ciphertext) = data.split_at(SALT_SIZE);
     // Decode salt from base64 to bytes
@@ -155,7 +155,7 @@ pub fn decrypt_data(encrypted: &[u8], password: Option<&str>) -> Result<String, 
             "Key length is not 32 bytes".to_string(),
         ));
     }
-
+    // Create cipher
     let cipher = ChaCha20Poly1305::new(Key::from_slice(key_bytes));
 
     // Decrypt the data
@@ -215,11 +215,11 @@ pub async fn store_encrypted(idkey: &str, password: Option<&str>) -> Result<Stri
     encrypted.extend_from_slice(salt_decoded);
     encrypted.extend_from_slice(&ciphertext);
 
-    // Convert encrypted data to string
-    let encrypted_string = String::from_utf8(encrypted).map_err(|_| {
-        ServiceError::EncryptionError("Error converting encrypted data to string".to_string())
-    })?;
-    Ok(encrypted_string)
+    // --- Encoding to String ---
+    // Encode the binary ciphertext into a Base64 String
+    let ciphertext_base64 = BASE64_STANDARD.encode(&encrypted);
+
+    Ok(ciphertext_base64)
 }
 
 /// Database representation of an order
