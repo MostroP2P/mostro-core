@@ -6,6 +6,8 @@ Mostro Core is a Rust-based library that provides peer-to-peer functionality for
 
 - Rust 1.86.0 or later
 - Cargo (Rust's package manager)
+- [cargo-release](https://crates.io/crates/cargo-release) for releasing new versions
+- [git-cliff](https://crates.io/crates/git-cliff) for generating the changelog
 
 ## Features
 
