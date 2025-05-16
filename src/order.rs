@@ -118,6 +118,57 @@ impl FromStr for Status {
     }
 }
 
+/// Decrypt an identity key from the database
+pub fn decrypt_data(encrypted: &[u8], password: Option<&str>) -> Result<String, ServiceError> {
+    // Salt size and nonce size
+    const SALT_SIZE: usize = 16;
+    const NONCE_SIZE: usize = 12;
+    // If password is not provided, return data as it is
+    let password = match password {
+        Some(password) => password,
+        None => {
+            return String::from_utf8(encrypted.to_vec()).map_err(|_| {
+                ServiceError::DecryptionError(
+                    "Error converting encrypted data to string".to_string(),
+                )
+            })
+        }
+    };
+
+    // Split the encrypted data into nonce and data
+    let (nonce, data) = encrypted.split_at(NONCE_SIZE);
+    let nonce: [u8; NONCE_SIZE] = nonce.try_into().unwrap();
+    let (salt, ciphertext) = data.split_at(SALT_SIZE);
+    // Decode salt from base64 to bytes
+    let salt = SaltString::encode_b64(salt)
+        .map_err(|_| ServiceError::DecryptionError("Error decoding salt".to_string()))?;
+    // Hash the password
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|_| ServiceError::DecryptionError("Error hashing password".to_string()))?;
+
+    let key = password_hash.hash.unwrap();
+    let key_bytes = key.as_bytes();
+    if key_bytes.len() != 32 {
+        return Err(ServiceError::DecryptionError(
+            "Key length is not 32 bytes".to_string(),
+        ));
+    }
+
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(key_bytes));
+
+    // Decrypt the data
+    let decrypted = cipher
+        .decrypt(&nonce.into(), ciphertext)
+        .map_err(|e| ServiceError::DecryptionError(e.to_string()))?;
+
+    // Convert the decrypted data to a string and return it
+    String::from_utf8(decrypted).map_err(|_| {
+        ServiceError::DecryptionError("Error converting encrypted data to string".to_string())
+    })
+}
+
 /// Encrypt a string to save it in the database
 pub async fn store_encrypted(idkey: &str, password: Option<&str>) -> Result<String, ServiceError> {
     // Salt size and nonce size
