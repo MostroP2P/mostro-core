@@ -563,25 +563,39 @@ impl Order {
     }
 
     /// check if a user is creating a full privacy order so he doesn't to have reputation
-    pub fn is_full_privacy_order(&self) -> (bool, bool) {
-        let (mut full_privacy_buyer, mut full_privacy_seller) = (false, false);
+    pub fn is_full_privacy_order(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<(Option<String>, Option<String>), ServiceError> {
+        let (mut full_privacy_buyer_key, mut full_privacy_seller_key) = (None, None);
+
+        // Get master pubkeys to get users data from db
+        let master_buyer_key = self
+            .get_master_buyer_pubkey(password)
+            .map_err(|_| ServiceError::InvalidPubkey)?
+            .to_string();
+
+        let master_seller_key = self
+            .get_master_seller_pubkey(password)
+            .map_err(|_| ServiceError::InvalidPubkey)?
+            .to_string();
 
         // Find full privacy users in this trade
         if self.buyer_pubkey.is_some()
             && self.master_buyer_pubkey.is_some()
             && self.master_buyer_pubkey == self.buyer_pubkey
         {
-            full_privacy_buyer = true;
+            full_privacy_buyer_key = Some(master_buyer_key);
         }
 
         if self.seller_pubkey.is_some()
             && self.master_seller_pubkey.is_some()
             && self.master_seller_pubkey == self.seller_pubkey
         {
-            full_privacy_seller = true;
+            full_privacy_seller_key = Some(master_seller_key);
         }
 
-        (full_privacy_buyer, full_privacy_seller)
+        Ok((full_privacy_buyer_key, full_privacy_seller_key))
     }
     /// Setup the dispute status
     ///
