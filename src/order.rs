@@ -3,8 +3,8 @@ use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
     Algorithm, Argon2, Params, PasswordHasher, Version,
 };
-use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::{collections::hash_map::DefaultHasher, sync::RwLock};
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chacha20poly1305::{
@@ -20,7 +20,6 @@ use sqlx::FromRow;
 use sqlx_crud::SqlxCrud;
 use std::collections::{HashMap, VecDeque};
 use std::sync::LazyLock;
-use std::sync::Mutex;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -28,7 +27,7 @@ use wasm_bindgen::prelude::*;
 use crate::error::{CantDoReason, ServiceError};
 
 // 🔐 Cache: global static or pass it explicitly
-static KEY_CACHE: LazyLock<Mutex<SimpleCache>> = LazyLock::new(|| Mutex::new(SimpleCache::new()));
+static KEY_CACHE: LazyLock<RwLock<SimpleCache>> = LazyLock::new(|| RwLock::new(SimpleCache::new()));
 
 // ----- SIMPLE FIXED-SIZE CACHE -----
 const MAX_CACHE_SIZE: usize = 50;
@@ -192,7 +191,9 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
 
     // Split the encrypted data into nonce and data
     let (nonce, data) = encrypted_bytes.split_at(NONCE_SIZE);
-    let nonce: [u8; NONCE_SIZE] = nonce.try_into().unwrap();
+    let nonce: [u8; NONCE_SIZE] = nonce.try_into().map_err(|_| {
+        ServiceError::DecryptionError("Error converting nonce to array".to_string())
+    })?;
     let (salt, ciphertext) = data.split_at(SALT_SIZE);
 
     // Enecode salt from base64 to bytes
@@ -202,7 +203,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
     // get hash value from salt and password
     let cache_key = make_cache_key(&password, salt.as_str().as_bytes());
     let mut cache = KEY_CACHE
-        .lock()
+        .write()
         .map_err(|_| ServiceError::DecryptionError("Error in key cache".to_string()))?;
     // Check if the key is already in the cache
     // If the key is in the cache, use it
@@ -216,7 +217,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
             Params::DEFAULT_P_COST * 2,
             Some(Params::DEFAULT_OUTPUT_LEN),
         )
-        .unwrap();
+        .map_err(|_| ServiceError::DecryptionError("Error Argon2 creating params".to_string()))?;
         // Create Argon2 instance
         let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
         // Hash the password with the salt
@@ -224,7 +225,9 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
             .hash_password(password.as_bytes(), &salt)
             .map_err(|_| ServiceError::DecryptionError("Error hashing password".to_string()))?;
 
-        let key = password_hash.hash.unwrap();
+        let key = password_hash
+            .hash
+            .ok_or_else(|| ServiceError::DecryptionError("Error getting hash".to_string()))?;
         let key_bytes = key.as_bytes();
         if key_bytes.len() != 32 {
             return Err(ServiceError::DecryptionError(
@@ -274,7 +277,6 @@ pub async fn store_encrypted(
         SaltString::generate(&mut OsRng)
     };
 
-    println!("Salt: {}", salt);
     // Buffer to decode salt
     let buf = &mut [0u8; Salt::RECOMMENDED_LENGTH];
     // Decode salt from base64 to bytes
