@@ -1,7 +1,7 @@
 use anyhow::Result;
 use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
-    Argon2, PasswordHasher,
+    Algorithm, Argon2, Params, PasswordHasher, Version,
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chacha20poly1305::{
@@ -144,7 +144,15 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
     let salt = SaltString::encode_b64(salt)
         .map_err(|_| ServiceError::DecryptionError("Error decoding salt".to_string()))?;
     // Hash the password
-    let argon2 = Argon2::default();
+    let params = Params::new(
+        16 * 1024,
+        Params::MIN_T_COST,
+        Params::DEFAULT_P_COST * 2,
+        Some(Params::DEFAULT_OUTPUT_LEN),
+    )
+    .unwrap();
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt)
         .map_err(|_| ServiceError::DecryptionError("Error hashing password".to_string()))?;
@@ -194,7 +202,14 @@ pub async fn store_encrypted(
         .decode_b64(buf)
         .map_err(|_| ServiceError::EncryptionError("Error decoding salt".to_string()))?;
 
-    let argon2 = Argon2::default();
+    let params = Params::new(
+        16 * 1024,
+        Params::MIN_T_COST,
+        Params::DEFAULT_P_COST * 2,
+        Some(Params::DEFAULT_OUTPUT_LEN),
+    )
+    .unwrap();
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let password_hash = argon2
         .hash_password(password.as_bytes(), &salt)
         .map_err(|_| ServiceError::EncryptionError("Error hashing password".to_string()))?;
@@ -202,7 +217,9 @@ pub async fn store_encrypted(
     let key = password_hash.hash.unwrap();
     let key_bytes = key.as_bytes();
     if key_bytes.len() != 32 {
-        panic!("Key length is not 32 bytes");
+        return Err(ServiceError::EncryptionError(
+            "Key length is not 32 bytes".to_string(),
+        ));
     }
     // Create cipher
     let cipher = ChaCha20Poly1305::new(Key::from_slice(key_bytes));
