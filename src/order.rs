@@ -3,9 +3,6 @@ use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
     Algorithm, Argon2, Params, PasswordHasher, Version,
 };
-use std::hash::{Hash, Hasher};
-use std::{collections::hash_map::DefaultHasher, sync::RwLock};
-
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
@@ -20,6 +17,7 @@ use sqlx::FromRow;
 use sqlx_crud::SqlxCrud;
 use std::collections::{HashMap, VecDeque};
 use std::sync::LazyLock;
+use std::sync::RwLock;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -32,9 +30,12 @@ static KEY_CACHE: LazyLock<RwLock<SimpleCache>> = LazyLock::new(|| RwLock::new(S
 // ----- SIMPLE FIXED-SIZE CACHE -----
 const MAX_CACHE_SIZE: usize = 50;
 
+// blake3 hash for cache key
+type CacheKey = blake3::Hash; // 256-bit
+
 struct SimpleCache {
-    map: HashMap<u64, [u8; 32]>,
-    order: VecDeque<u64>,
+    map: HashMap<CacheKey, [u8; 32]>,
+    order: VecDeque<CacheKey>,
 }
 
 impl SimpleCache {
@@ -45,7 +46,7 @@ impl SimpleCache {
         }
     }
 
-    fn get(&mut self, key: u64) -> Option<[u8; 32]> {
+    fn get(&mut self, key: CacheKey) -> Option<[u8; 32]> {
         if let Some(value) = self.map.get(&key) {
             self.order.retain(|&k| k != key);
             self.order.push_back(key);
@@ -55,7 +56,7 @@ impl SimpleCache {
         }
     }
 
-    fn put(&mut self, key: u64, value: [u8; 32]) {
+    fn put(&mut self, key: CacheKey, value: [u8; 32]) {
         if !self.map.contains_key(&key) && self.map.len() >= MAX_CACHE_SIZE {
             if let Some(oldest_key) = self.order.pop_front() {
                 self.map.remove(&oldest_key);
@@ -67,11 +68,9 @@ impl SimpleCache {
     }
 }
 
-fn make_cache_key(password: &str, salt: &[u8]) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    password.hash(&mut hasher);
-    salt.hash(&mut hasher);
-    hasher.finish()
+// make blake3 hash for cache key from password and salt
+fn make_cache_key(password: &str, salt: &[u8]) -> CacheKey {
+    blake3::hash([password.as_bytes(), salt].concat().as_slice())
 }
 
 /// Orders can be only Buy or Sell
@@ -189,6 +188,13 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
         .decode(&data)
         .map_err(|_| ServiceError::DecryptionError("Error decoding encrypted data".to_string()))?;
 
+    // Validate input length before processing
+    if encrypted_bytes.len() < NONCE_SIZE + SALT_SIZE {
+        return Err(ServiceError::DecryptionError(
+            "Invalid encrypted data: too short for nonce and salt".to_string(),
+        ));
+    }
+
     // Split the encrypted data into nonce and data
     let (nonce, data) = encrypted_bytes.split_at(NONCE_SIZE);
     let nonce: [u8; NONCE_SIZE] = nonce.try_into().map_err(|_| {
@@ -223,11 +229,13 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
         // Hash the password with the salt
         let password_hash = argon2
             .hash_password(password.as_bytes(), &salt)
-            .map_err(|_| ServiceError::DecryptionError("Error hashing password".to_string()))?;
+            .map_err(|_| {
+                ServiceError::DecryptionError("Error in Argon2 hashing password".to_string())
+            })?;
 
         let key = password_hash
             .hash
-            .ok_or_else(|| ServiceError::DecryptionError("Error getting hash".to_string()))?;
+            .ok_or_else(|| ServiceError::DecryptionError("Error getting Argon2 key".to_string()))?;
         let key_bytes = key.as_bytes();
         if key_bytes.len() != 32 {
             return Err(ServiceError::DecryptionError(
@@ -255,7 +263,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
 }
 
 /// Encrypt a string to save it in the database
-pub async fn store_encrypted(
+pub fn store_encrypted(
     idkey: &str,
     password: Option<&SecretString>,
 ) -> Result<String, ServiceError> {
