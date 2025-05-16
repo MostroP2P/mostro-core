@@ -28,7 +28,7 @@ sign-tag = true
 allow-branch = ["main"]
 # Git cliff to generate the changelog
 pre-release-hook = [
-  "sh", "-c", "git cliff --unreleased --github-repo MostroP2P/mostro-core -o CHANGELOG.md --tag {{version}} && if [ \"$DRY_RUN\" != \"true\" ]; then git add CHANGELOG.md && git commit -m \"Update CHANGELOG for version {{version}}\"; else echo \"DRY RUN: Skip git add and commit\"; fi"
+  "sh", "-c", "git cliff --unreleased --github-repo MostroP2P/mostro-core -o CHANGELOG.md --tag {{version}} && if [ \"$DRY_RUN\" != \"true\" ]; then git diff --quiet CHANGELOG.md || cagit add CHANGELOG.md && git commit -m \"Update CHANGELOG for version {{version}}\"; else echo \"DRY RUN: Skip git add and commit\"; fi"
 ]
 [dependencies]
 chrono = "0.4.38"
