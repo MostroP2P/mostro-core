@@ -1,3 +1,12 @@
+use anyhow::Result;
+use argon2::{
+    password_hash::{rand_core::OsRng, Salt, SaltString},
+    Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
+};
+use chacha20poly1305::{
+    aead::{Aead, KeyInit},
+    AeadCore, ChaCha20Poly1305, Key,
+};
 use nostr_sdk::{PublicKey, Timestamp};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
@@ -109,6 +118,59 @@ impl FromStr for Status {
     }
 }
 
+/// Encrypt a string to save it in the database
+pub async fn store_encrypted(idkey: &str, password: Option<&str>) -> Result<String, ServiceError> {
+    // Salt size and nonce size
+    const SALT_SIZE: usize = 16;
+    const NONCE_SIZE: usize = 12;
+
+    // if data is not encrypted return the data as it is
+    let password = match password {
+        Some(password) => password,
+        None => return Ok(idkey.to_string()),
+    };
+    // Salt generation
+    let salt = SaltString::generate(&mut OsRng);
+    // Buffer to decode salt
+    let buf = &mut [0u8; Salt::RECOMMENDED_LENGTH];
+    // Decode salt from base64 to bytes
+    let salt_decoded = salt
+        .decode_b64(buf)
+        .map_err(|_| ServiceError::EncryptionError("Error decoding salt".to_string()))?;
+
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|_| ServiceError::EncryptionError("Error hashing password".to_string()))?;
+
+    let key = password_hash.hash.unwrap();
+    let key_bytes = key.as_bytes();
+    if key_bytes.len() != 32 {
+        panic!("Key length is not 32 bytes");
+    }
+    // Create cipher
+    let cipher = ChaCha20Poly1305::new(Key::from_slice(key_bytes));
+    // Generate nonce
+    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng); // 96-bits; unique per message
+
+    // Encrypt data
+    let ciphertext = cipher
+        .encrypt(&nonce, idkey.as_bytes())
+        .map_err(|e| ServiceError::EncryptionError(e.to_string()))?;
+
+    // Combine nonce and ciphertext
+    let mut encrypted = Vec::with_capacity(NONCE_SIZE + SALT_SIZE + ciphertext.len());
+    encrypted.extend_from_slice(&nonce);
+    encrypted.extend_from_slice(salt_decoded);
+    encrypted.extend_from_slice(&ciphertext);
+
+    // Convert encrypted data to string
+    let encrypted_string = String::from_utf8(encrypted).map_err(|_| {
+        ServiceError::EncryptionError("Error converting encrypted data to string".to_string())
+    })?;
+    Ok(encrypted_string)
+}
+
 /// Database representation of an order
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
@@ -211,7 +273,6 @@ impl Order {
             None,
         )
     }
-
     /// Get the kind of the order
     pub fn get_order_kind(&self) -> Result<Kind, ServiceError> {
         if let Ok(kind) = Kind::from_str(&self.kind) {
