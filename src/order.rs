@@ -9,6 +9,7 @@ use chacha20poly1305::{
     AeadCore, ChaCha20Poly1305, Key,
 };
 use nostr_sdk::{PublicKey, Timestamp};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
@@ -120,13 +121,13 @@ impl FromStr for Status {
 }
 
 /// Decrypt an identity key from the database
-pub fn decrypt_data(data: String, password: Option<&str>) -> Result<String, ServiceError> {
+pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<String, ServiceError> {
     // Salt size and nonce size
     const SALT_SIZE: usize = 16;
     const NONCE_SIZE: usize = 12;
     // If password is not provided, return data as it is
     let password = match password {
-        Some(password) => password,
+        Some(password) => password.expose_secret().to_string(),
         None => return Ok(data),
     };
 
@@ -170,16 +171,20 @@ pub fn decrypt_data(data: String, password: Option<&str>) -> Result<String, Serv
 }
 
 /// Encrypt a string to save it in the database
-pub async fn store_encrypted(idkey: &str, password: Option<&str>) -> Result<String, ServiceError> {
+pub async fn store_encrypted(
+    idkey: &str,
+    password: Option<&SecretString>,
+) -> Result<String, ServiceError> {
     // Salt size and nonce size
     const SALT_SIZE: usize = 16;
     const NONCE_SIZE: usize = 12;
 
-    // if data is not encrypted return the data as it is
+    // If password is not provided, return data as it is
     let password = match password {
-        Some(password) => password,
+        Some(password) => password.expose_secret().to_string(),
         None => return Ok(idkey.to_string()),
     };
+
     // Salt generation
     let salt = SaltString::generate(&mut OsRng);
     // Buffer to decode salt
