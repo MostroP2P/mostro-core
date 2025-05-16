@@ -9,7 +9,7 @@ use chacha20poly1305::{
     AeadCore, ChaCha20Poly1305, Key,
 };
 use nostr_sdk::{PublicKey, Timestamp};
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::{ExposeSecret, ExposeSecretMut, SecretBox, SecretString};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
@@ -21,11 +21,13 @@ use std::sync::RwLock;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
+use zeroize::Zeroize;
 
 use crate::error::{CantDoReason, ServiceError};
 
 // 🔐 Cache: global static or pass it explicitly
-static KEY_CACHE: LazyLock<RwLock<SimpleCache>> = LazyLock::new(|| RwLock::new(SimpleCache::new()));
+static KEY_CACHE: LazyLock<RwLock<SecretBox<SimpleCache>>> =
+    LazyLock::new(|| RwLock::new(SecretBox::new(Box::new(SimpleCache::new()))));
 
 // ----- SIMPLE FIXED-SIZE CACHE -----
 const MAX_CACHE_SIZE: usize = 50;
@@ -65,6 +67,24 @@ impl SimpleCache {
         self.order.retain(|&k| k != key);
         self.order.push_back(key);
         self.map.insert(key, value);
+    }
+}
+
+// Implemetation of zeroize required by secretbox
+impl Zeroize for SimpleCache {
+    fn zeroize(&mut self) {
+        for value in self.map.values_mut() {
+            value.zeroize();
+        }
+        self.map.clear();
+        self.order.clear();
+    }
+}
+
+// On drop, zeroize the cache
+impl Drop for SimpleCache {
+    fn drop(&mut self) {
+        self.zeroize();
     }
 }
 
@@ -211,9 +231,10 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
     let mut cache = KEY_CACHE
         .write()
         .map_err(|_| ServiceError::DecryptionError("Error in key cache".to_string()))?;
+
     // Check if the key is already in the cache
     // If the key is in the cache, use it
-    let key_bytes = if let Some(cached_key) = cache.get(cache_key) {
+    let key_bytes = if let Some(cached_key) = cache.expose_secret_mut().get(cache_key) {
         cached_key
     } else {
         // Hash the password
@@ -244,7 +265,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
         }
         let mut key_array = [0u8; 32];
         key_array.copy_from_slice(key_bytes);
-        cache.put(cache_key, key_array);
+        cache.expose_secret_mut().put(cache_key, key_array);
         key_array
     };
 
