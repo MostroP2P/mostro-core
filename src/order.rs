@@ -569,34 +569,30 @@ impl Order {
         &self,
         password: Option<&SecretString>,
     ) -> Result<(Option<String>, Option<String>), ServiceError> {
-        let (mut full_privacy_buyer_key, mut full_privacy_seller_key) = (None, None);
+        let (mut normal_buyer_idkey, mut normal_seller_idkey) = (None, None);
 
         // Get master pubkeys to get users data from db
-        let master_buyer_pubkey = self
-            .get_master_buyer_pubkey(password)
-            .map_err(|_| ServiceError::InvalidPubkey)?
-            .to_string();
+        let master_buyer_pubkey = match self.get_master_buyer_pubkey(password) {
+            Ok(pk) => Some(pk),
+            Err(_) => None,
+        };
 
-        let master_seller_pubkey = self
-            .get_master_seller_pubkey(password)
-            .map_err(|_| ServiceError::InvalidPubkey)?
-            .to_string();
+        let master_seller_pubkey = match self.get_master_seller_pubkey(password) {
+            Ok(pk) => Some(pk),
+            Err(_) => None,
+        };
 
         // Check if the buyer is in full privacy mode
-        if let Some(db_buyer_pubbkey) = self.buyer_pubkey.as_ref() {
-            if db_buyer_pubbkey == &master_buyer_pubkey {
-                full_privacy_buyer_key = Some(master_buyer_pubkey);
-            }
+        if self.buyer_pubkey.as_ref() != master_buyer_pubkey.as_ref() {
+            normal_buyer_idkey = master_buyer_pubkey;
         }
 
         // Check if the seller is in full privacy mode
-        if let Some(db_seller_pubbkey) = self.seller_pubkey.as_ref() {
-            if db_seller_pubbkey == &master_seller_pubkey {
-                full_privacy_seller_key = Some(master_seller_pubkey);
-            }
+        if self.seller_pubkey.as_ref() != master_seller_pubkey.as_ref() {
+            normal_seller_idkey = master_seller_pubkey;
         }
 
-        Ok((full_privacy_buyer_key, full_privacy_seller_key))
+        Ok((normal_buyer_idkey, normal_seller_idkey))
     }
     /// Setup the dispute status
     ///
