@@ -1,25 +1,12 @@
-use crate::dispute::SolverDisputeInfo;
-use crate::error::ServiceError;
-use crate::user::UserInfo;
-use crate::{error::CantDoReason, order::SmallOrder};
+use crate::prelude::*;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
 use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::Message as BitcoinMessage;
 use nostr_sdk::prelude::*;
-use serde::{Deserialize, Serialize};
+
 use std::fmt;
 use uuid::Uuid;
-
-// Max rating
-pub const MAX_RATING: u8 = 5;
-// Min rating
-pub const MIN_RATING: u8 = 1;
-
-/// All events broadcasted by Mostro daemon are Parameterized Replaceable Events
-/// and the event kind must be between 30000 and 39999
-pub const NOSTR_REPLACEABLE_EVENT_KIND: u16 = 38383;
-pub const PROTOCOL_VER: u8 = 1;
 
 /// One party of the trade
 #[derive(Debug, Deserialize, Serialize, Clone)]
