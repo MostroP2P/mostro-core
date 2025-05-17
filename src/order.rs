@@ -1,4 +1,4 @@
-use anyhow::Result;
+use crate::prelude::*;
 use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
     Algorithm, Argon2, Params, PasswordHasher, Version,
@@ -22,8 +22,6 @@ use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 use zeroize::Zeroize;
-
-use crate::error::{CantDoReason, ServiceError};
 
 // 🔐 Cache: global static or pass it explicitly
 static KEY_CACHE: LazyLock<RwLock<SecretBox<SimpleCache>>> =
@@ -289,7 +287,7 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
 /// * `idkey` - The string data to be encrypted
 /// * `password` - Optional password used for encryption. If None, returns the data unencrypted
 /// * `fixed_salt` - Optional fixed salt for encryption. If None, generates a random salt.
-///                 This parameter is primarily used for unit testing to ensure consistent encryption results.
+///   This parameter is primarily used for unit testing to ensure consistent encryption results.
 ///
 /// # Returns
 /// Returns a Result containing either:
@@ -613,15 +611,8 @@ impl Order {
         let (mut normal_buyer_idkey, mut normal_seller_idkey) = (None, None);
 
         // Get master pubkeys to get users data from db
-        let master_buyer_pubkey = match self.get_master_buyer_pubkey(password) {
-            Ok(pk) => Some(pk),
-            Err(_) => None,
-        };
-
-        let master_seller_pubkey = match self.get_master_seller_pubkey(password) {
-            Ok(pk) => Some(pk),
-            Err(_) => None,
-        };
+        let master_buyer_pubkey = self.get_master_buyer_pubkey(password).ok();
+        let master_seller_pubkey = self.get_master_seller_pubkey(password).ok();
 
         // Check if the buyer is in full privacy mode
         if self.buyer_pubkey.as_ref() != master_buyer_pubkey.as_ref() {
