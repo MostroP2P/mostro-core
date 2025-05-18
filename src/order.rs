@@ -1,4 +1,4 @@
-use crate::prelude::*;
+use crate::{crypto::CryptoUtils, prelude::*};
 use argon2::{
     password_hash::{rand_core::OsRng, Salt, SaltString},
     Algorithm, Argon2, Params, PasswordHasher, Version,
@@ -235,34 +235,10 @@ pub fn decrypt_data(data: String, password: Option<&SecretString>) -> Result<Str
     let key_bytes = if let Some(cached_key) = cache.expose_secret_mut().get(cache_key) {
         cached_key
     } else {
-        // Hash the password
-        let params = Params::new(
-            Params::DEFAULT_M_COST,
-            Params::DEFAULT_T_COST,
-            Params::DEFAULT_P_COST * 2,
-            Some(Params::DEFAULT_OUTPUT_LEN),
-        )
-        .map_err(|_| ServiceError::DecryptionError("Error Argon2 creating params".to_string()))?;
-        // Create Argon2 instance
-        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-        // Hash the password with the salt
-        let password_hash = argon2
-            .hash_password(password.as_bytes(), &salt)
-            .map_err(|_| {
-                ServiceError::DecryptionError("Error in Argon2 hashing password".to_string())
-            })?;
-
-        let key = password_hash
-            .hash
-            .ok_or_else(|| ServiceError::DecryptionError("Error getting Argon2 key".to_string()))?;
-        let key_bytes = key.as_bytes();
-        if key_bytes.len() != 32 {
-            return Err(ServiceError::DecryptionError(
-                "Key length is not 32 bytes".to_string(),
-            ));
-        }
+        
+        let key_bytes = CryptoUtils::derive_key(&password, &salt).map_err(|_| ServiceError::DecryptionError("Error deriving key".to_string()))?;
         let mut key_array = [0u8; 32];
-        key_array.copy_from_slice(key_bytes);
+        key_array.copy_from_slice(&key_bytes);
         cache.expose_secret_mut().put(cache_key, key_array);
         key_array
     };
@@ -321,47 +297,11 @@ pub fn store_encrypted(
         .decode_b64(buf)
         .map_err(|_| ServiceError::EncryptionError("Error decoding salt".to_string()))?;
 
-    let params = Params::new(
-        Params::DEFAULT_M_COST,
-        Params::DEFAULT_T_COST,
-        Params::DEFAULT_P_COST * 2,
-        Some(Params::DEFAULT_OUTPUT_LEN),
-    )
-    .map_err(|_| ServiceError::EncryptionError("Error creating params".to_string()))?;
-
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let password_hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|_| ServiceError::EncryptionError("Error hashing password".to_string()))?;
-
-    let key = password_hash
-        .hash
-        .ok_or_else(|| ServiceError::EncryptionError("Error getting hash".to_string()))?;
-    let key_bytes = key.as_bytes();
-    if key_bytes.len() != 32 {
-        return Err(ServiceError::EncryptionError(
-            "Key length is not 32 bytes".to_string(),
-        ));
-    }
-    // Create cipher
-    let cipher = ChaCha20Poly1305::new(Key::from_slice(key_bytes));
-    // Generate nonce
-    let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng); // 96-bits; unique per message
-
-    // Encrypt data
-    let ciphertext = cipher
-        .encrypt(&nonce, idkey.as_bytes())
-        .map_err(|e| ServiceError::EncryptionError(e.to_string()))?;
-
-    // Combine nonce and ciphertext
-    let mut encrypted = Vec::with_capacity(NONCE_SIZE + SALT_SIZE + ciphertext.len());
-    encrypted.extend_from_slice(&nonce);
-    encrypted.extend_from_slice(salt_decoded);
-    encrypted.extend_from_slice(&ciphertext);
-
-    // --- Encoding to String ---
-    // Encode the binary ciphertext into a Base64 String
-    let ciphertext_base64 = BASE64_STANDARD.encode(&encrypted);
+    // Derive key as bytes
+    let key_bytes = CryptoUtils::derive_key(&password, &salt).map_err(|_| ServiceError::DecryptionError("Error deriving key".to_string()))?;
+    
+    // Encrypt data and return base64 encoded string
+    let ciphertext_base64 = CryptoUtils::encrypt(idkey.as_bytes(), &key_bytes, salt_decoded).map_err(|_| ServiceError::EncryptionError("Error encrypting data".to_string()))?;
 
     Ok(ciphertext_base64)
 }

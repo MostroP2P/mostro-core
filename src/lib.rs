@@ -5,7 +5,7 @@ pub mod order;
 pub mod prelude;
 pub mod rating;
 pub mod user;
-
+pub mod crypto;
 #[cfg(test)]
 mod test {
     use crate::error::CantDoReason;
