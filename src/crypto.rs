@@ -65,7 +65,7 @@ impl SimpleCache {
     }
 }
 
-// Implemetation of zeroize required by secretbox
+// Implementation of zeroize required by secretbox
 impl Zeroize for SimpleCache {
     fn zeroize(&mut self) {
         for value in self.map.values_mut() {
@@ -164,13 +164,13 @@ impl CryptoUtils {
 
         let nonce: [u8; NONCE_SIZE] = nonce
             .try_into()
-            .map_err(|_| ServiceError::DecryptionError("Error converting nonce".to_string()))?;
+            .map_err(|e| ServiceError::DecryptionError(format!("Error converting nonce: {}", e)))?;
 
         let (salt, ciphertext) = data.split_at(SALT_SIZE);
 
         // Enecode salt from base64 to bytes
         let salt = SaltString::encode_b64(salt)
-            .map_err(|_| ServiceError::DecryptionError("Error decoding salt".to_string()))?;
+            .map_err(|e| ServiceError::DecryptionError(format!("Error decoding salt: {}", e)))?;
 
         // get hash value from salt and password
         let cache_key = make_cache_key(password, salt.as_str().as_bytes());
@@ -251,8 +251,6 @@ impl CryptoUtils {
         password: Option<&SecretString>,
         fixed_salt: Option<SaltString>,
     ) -> Result<String, ServiceError> {
-        // Salt size and nonce size
-
         // If password is not provided, return data as it is
         let password = match password {
             Some(password) => password.expose_secret().to_string(),
@@ -270,15 +268,15 @@ impl CryptoUtils {
         // Decode salt from base64 to bytes
         let salt_decoded = salt
             .decode_b64(buf)
-            .map_err(|_| ServiceError::EncryptionError("Error decoding salt".to_string()))?;
+            .map_err(|e| ServiceError::EncryptionError(format!("Error decoding salt: {}", e)))?;
 
         // Derive key as bytes
         let key_bytes = CryptoUtils::derive_key(&password, &salt)
-            .map_err(|_| ServiceError::DecryptionError("Error deriving key".to_string()))?;
+            .map_err(|e| ServiceError::EncryptionError(format!("Error deriving key: {}", e)))?;
 
         // Encrypt data and return base64 encoded string
         let ciphertext_base64 = CryptoUtils::encrypt(idkey.as_bytes(), &key_bytes, salt_decoded)
-            .map_err(|_| ServiceError::EncryptionError("Error encrypting data".to_string()))?;
+            .map_err(|e| ServiceError::EncryptionError(format!("Error encrypting data: {}", e)))?;
 
         Ok(ciphertext_base64)
     }
