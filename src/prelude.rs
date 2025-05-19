@@ -3,10 +3,11 @@
 //
 //! Prelude
 
+pub use crate::crypto::*;
 pub use crate::dispute::{Dispute, SolverDisputeInfo, Status as DisputeStatus};
 pub use crate::error::{CantDoReason, MostroError, ServiceError};
 pub use crate::message::{Action, Message, MessageKind, Payload, Peer};
-pub use crate::order::{decrypt_data, store_encrypted, Kind, Order, SmallOrder, Status};
+pub use crate::order::{Kind, Order, SmallOrder, Status};
 pub use crate::rating::Rating;
 pub use crate::user::{User, UserInfo};
 pub(crate) use serde::{Deserialize, Serialize};
