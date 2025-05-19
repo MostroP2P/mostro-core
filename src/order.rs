@@ -1,4 +1,6 @@
+use crate::prelude::*;
 use nostr_sdk::{PublicKey, Timestamp};
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
@@ -7,8 +9,6 @@ use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
-
-use crate::error::{CantDoReason, ServiceError};
 
 /// Orders can be only Buy or Sell
 #[wasm_bindgen]
@@ -108,7 +108,6 @@ impl FromStr for Status {
         }
     }
 }
-
 /// Database representation of an order
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
@@ -211,7 +210,6 @@ impl Order {
             None,
         )
     }
-
     /// Get the kind of the order
     pub fn get_order_kind(&self) -> Result<Kind, ServiceError> {
         if let Ok(kind) = Kind::from_str(&self.kind) {
@@ -299,17 +297,23 @@ impl Order {
         }
     }
     /// Get the master buyer pubkey
-    pub fn get_master_buyer_pubkey(&self) -> Result<PublicKey, ServiceError> {
+    pub fn get_master_buyer_pubkey(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<String, ServiceError> {
         if let Some(pk) = self.master_buyer_pubkey.as_ref() {
-            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+            CryptoUtils::decrypt_data(pk.clone(), password).map_err(|_| ServiceError::InvalidPubkey)
         } else {
             Err(ServiceError::InvalidPubkey)
         }
     }
     /// Get the master seller pubkey
-    pub fn get_master_seller_pubkey(&self) -> Result<PublicKey, ServiceError> {
+    pub fn get_master_seller_pubkey(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<String, ServiceError> {
         if let Some(pk) = self.master_seller_pubkey.as_ref() {
-            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
+            CryptoUtils::decrypt_data(pk.clone(), password).map_err(|_| ServiceError::InvalidPubkey)
         } else {
             Err(ServiceError::InvalidPubkey)
         }
@@ -339,26 +343,30 @@ impl Order {
         self.taken_at = Timestamp::now().as_u64() as i64
     }
 
-    /// check if a user is creating a full privacy order so he doesn't to have reputation
-    pub fn is_full_privacy_order(&self) -> (bool, bool) {
-        let (mut full_privacy_buyer, mut full_privacy_seller) = (false, false);
+    /// Check if a user is creating a full privacy order so he doesn't to have reputation
+    /// compare master keys with the order keys if they are the same the user is in full privacy mode
+    /// otherwise the user is not in normal mode and has a reputation
+    pub fn is_full_privacy_order(
+        &self,
+        password: Option<&SecretString>,
+    ) -> Result<(Option<String>, Option<String>), ServiceError> {
+        let (mut normal_buyer_idkey, mut normal_seller_idkey) = (None, None);
 
-        // Find full privacy users in this trade
-        if self.buyer_pubkey.is_some()
-            && self.master_buyer_pubkey.is_some()
-            && self.master_buyer_pubkey == self.buyer_pubkey
-        {
-            full_privacy_buyer = true;
+        // Get master pubkeys to get users data from db
+        let master_buyer_pubkey = self.get_master_buyer_pubkey(password).ok();
+        let master_seller_pubkey = self.get_master_seller_pubkey(password).ok();
+
+        // Check if the buyer is in full privacy mode
+        if self.buyer_pubkey.as_ref() != master_buyer_pubkey.as_ref() {
+            normal_buyer_idkey = master_buyer_pubkey;
         }
 
-        if self.seller_pubkey.is_some()
-            && self.master_seller_pubkey.is_some()
-            && self.master_seller_pubkey == self.seller_pubkey
-        {
-            full_privacy_seller = true;
+        // Check if the seller is in full privacy mode
+        if self.seller_pubkey.as_ref() != master_seller_pubkey.as_ref() {
+            normal_seller_idkey = master_seller_pubkey;
         }
 
-        (full_privacy_buyer, full_privacy_seller)
+        Ok((normal_buyer_idkey, normal_seller_idkey))
     }
     /// Setup the dispute status
     ///
@@ -506,15 +514,6 @@ impl SmallOrder {
             amounts.push(max);
         }
         Ok(())
-    }
-
-    // Get the fiat amount, if the order is a range order, return the range as min-max string
-    pub fn fiat_amount(&self) -> String {
-        if self.max_amount.is_some() {
-            format!("{}-{}", self.min_amount.unwrap(), self.max_amount.unwrap())
-        } else {
-            self.fiat_amount.to_string()
-        }
     }
 }
 

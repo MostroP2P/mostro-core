@@ -1,5 +1,4 @@
-use serde::{Deserialize, Serialize};
-use std::fmt;
+use crate::prelude::*;
 
 /// Represents specific reasons why a requested action cannot be performed
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -91,6 +90,8 @@ pub enum ServiceError {
     UnexpectedError(String),
     EnvVarError(String),
     IOError(String),
+    EncryptionError(String),
+    DecryptionError(String),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -101,8 +102,8 @@ pub enum MostroError {
 
 impl std::error::Error for MostroError {}
 
-impl fmt::Display for MostroError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for MostroError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MostroError::MostroInternalErr(m) => write!(f, "Error caused by {}", m),
             MostroError::MostroCantDo(m) => write!(f, "Sending cantDo message to user for {:?}", m),
@@ -110,8 +111,8 @@ impl fmt::Display for MostroError {
     }
 }
 
-impl fmt::Display for ServiceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ServiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ServiceError::ParsingInvoiceError => write!(f, "Incorrect invoice"),
             ServiceError::ParsingNumberError => write!(f, "Error parsing the number"),
@@ -147,6 +148,8 @@ impl fmt::Display for ServiceError {
             ServiceError::UnexpectedError(e) => write!(f, "Unexpected error: {}", e),
             ServiceError::EnvVarError(e) => write!(f, "Environment variable error: {}", e),
             ServiceError::IOError(e) => write!(f, "IO error: {}", e),
+            ServiceError::EncryptionError(e) => write!(f, "Encryption error: {}", e),
+            ServiceError::DecryptionError(e) => write!(f, "Decryption error: {}", e),
         }
     }
 }
