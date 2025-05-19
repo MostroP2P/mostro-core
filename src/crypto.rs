@@ -210,7 +210,7 @@ impl CryptoUtils {
     ) -> Result<String, ServiceError> {
         // If password is not provided, return data as it is
         let password = match password {
-            Some(password) => password.expose_secret().to_string(),
+            Some(password) => password,
             None => return Ok(data),
         };
         // Decode the encrypted data from base64 to bytes
@@ -226,7 +226,7 @@ impl CryptoUtils {
         }
 
         // Extract key bytes, salt and ciphered text
-        let decrypted_data = CryptoUtils::decrypt(encrypted_bytes, &password)?;
+        let decrypted_data = CryptoUtils::decrypt(encrypted_bytes, password.expose_secret())?;
 
         // Convert the decrypted data to a string and return it
         String::from_utf8(decrypted_data).map_err(|_| {
@@ -253,7 +253,7 @@ impl CryptoUtils {
     ) -> Result<String, ServiceError> {
         // If password is not provided, return data as it is
         let password = match password {
-            Some(password) => password.expose_secret().to_string(),
+            Some(password) => password,
             None => return Ok(idkey.to_string()),
         };
 
@@ -271,7 +271,7 @@ impl CryptoUtils {
             .map_err(|e| ServiceError::EncryptionError(format!("Error decoding salt: {}", e)))?;
 
         // Derive key as bytes
-        let key_bytes = CryptoUtils::derive_key(&password, &salt)
+        let key_bytes = CryptoUtils::derive_key(password.expose_secret(), &salt)
             .map_err(|e| ServiceError::EncryptionError(format!("Error deriving key: {}", e)))?;
 
         // Encrypt data and return base64 encoded string
