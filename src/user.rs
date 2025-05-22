@@ -68,8 +68,7 @@ impl User {
         self.total_reviews += 1;
         let old_rating = self.total_rating;
         // recompute new rating
-        if self.total_reviews <= 1 {
-            self.total_rating = rating.into();
+        if self.total_reviews <= 1 {            
             self.max_rating = rating.into();
             self.min_rating = rating.into();
         } else {
