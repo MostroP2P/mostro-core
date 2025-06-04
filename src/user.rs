@@ -69,7 +69,9 @@ impl User {
         let old_rating = self.total_rating;
         // recompute new rating
         if self.total_reviews <= 1 {
-            self.total_rating = rating.into();
+            // New logic with weight 1/2 for first vote.
+            let first_rating = rating as f64;
+            self.total_rating = first_rating / 2.0;
             self.max_rating = rating.into();
             self.min_rating = rating.into();
         } else {
