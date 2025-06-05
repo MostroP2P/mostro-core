@@ -99,7 +99,7 @@ pub struct SolverDisputeInfo {
     pub initiator_info: Option<UserInfo>,
     pub counterpart_info: Option<UserInfo>,
     pub premium: i64,
-    pub payment_method: Vec<String>,
+    pub payment_method: String,
     pub amount: i64,
     pub fiat_amount: i64,
     pub fee: i64,
