@@ -1,4 +1,5 @@
 pub mod crypto;
+pub mod crud;
 pub mod dispute;
 pub mod error;
 pub mod message;

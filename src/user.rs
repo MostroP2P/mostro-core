@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
-
 pub struct UserInfo {
     /// User's rating
     pub rating: f64,
@@ -16,7 +15,7 @@ pub struct UserInfo {
 
 /// Database representation of an user
 #[cfg_attr(feature = "sqlx", derive(FromRow))]
-#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct User {
     pub pubkey: String,
     pub is_admin: i64,
@@ -38,18 +37,18 @@ pub struct User {
 impl User {
     pub fn new(
         pubkey: String,
-        is_admin: i64,
-        is_solver: i64,
-        is_banned: i64,
+        is_admin: bool,
+        is_solver: bool,
+        is_banned: bool,
         category: i64,
         trade_index: i64,
     ) -> Self {
         Self {
             pubkey,
-            is_admin,
+            is_admin: is_admin as i64,
             admin_password: None,
-            is_solver,
-            is_banned,
+            is_solver: is_solver as i64,
+            is_banned: is_banned as i64,
             category,
             last_trade_index: trade_index,
             total_reviews: 0,

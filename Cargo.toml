@@ -41,16 +41,7 @@ uuid = { version = "1.8.0", features = [
   "serde",
   "js",
 ] }
-sqlx = { version = "0.6.2", features = [
-  "runtime-tokio-rustls",
-  "sqlite",
-  "macros",
-  "chrono",
-  "uuid",
-], optional = true }
-sqlx-crud = { version = "0.4.0", features = [
-  "runtime-tokio-rustls",
-], optional = true }
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "uuid", "chrono"], optional = true }
 wasm-bindgen = { version = "0.2.92", optional = true }
 nostr-sdk = "0.41.0"
 bitcoin = "0.32.5"
@@ -64,6 +55,6 @@ zeroize = "1.8.1"
 blake3 = "1.8.2"
 
 [features]
-default = ["wasm"]
+default = ["wasm", "sqlx"]
 wasm = ["dep:wasm-bindgen"]
-sqlx = ["dep:wasm-bindgen", "dep:sqlx", "dep:sqlx-crud"]
+sqlx = ["dep:wasm-bindgen", "dep:sqlx"]

@@ -1,11 +1,10 @@
 use crate::prelude::*;
-use nostr_sdk::{PublicKey, Timestamp};
+use nostr_sdk::PublicKey;
+use nostr_sdk::Timestamp;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
-#[cfg(feature = "sqlx")]
-use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -109,44 +108,45 @@ impl FromStr for Status {
     }
 }
 /// Database representation of an order
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct Order {
-    pub id: Uuid,
+    pub id: String,
     pub kind: String,
     pub event_id: String,
     pub hash: Option<String>,
     pub preimage: Option<String>,
-    pub creator_pubkey: String,
+    pub creator_pubkey: Option<String>,
     pub cancel_initiator_pubkey: Option<String>,
+    pub dispute_initiator_pubkey: Option<String>,
     pub buyer_pubkey: Option<String>,
     pub master_buyer_pubkey: Option<String>,
     pub seller_pubkey: Option<String>,
     pub master_seller_pubkey: Option<String>,
     pub status: String,
-    pub price_from_api: bool,
+    pub price_from_api: Option<i64>,
     pub premium: i64,
     pub payment_method: String,
     pub amount: i64,
     pub min_amount: Option<i64>,
     pub max_amount: Option<i64>,
-    pub buyer_dispute: bool,
-    pub seller_dispute: bool,
-    pub buyer_cooperativecancel: bool,
-    pub seller_cooperativecancel: bool,
-    pub fee: i64,
-    pub routing_fee: i64,
+    pub buyer_dispute: Option<i64>,
+    pub seller_dispute: Option<i64>,
+    pub buyer_cooperativecancel: Option<i64>,
+    pub seller_cooperativecancel: Option<i64>,
+    pub fee: Option<i64>,
+    pub routing_fee: Option<i64>,
     pub fiat_code: String,
     pub fiat_amount: i64,
     pub buyer_invoice: Option<String>,
-    pub range_parent_id: Option<Uuid>,
-    pub invoice_held_at: i64,
-    pub taken_at: i64,
+    pub range_parent_id: Option<String>,
+    pub invoice_held_at: Option<i64>,
+    pub taken_at: Option<i64>,
     pub created_at: i64,
-    pub buyer_sent_rate: bool,
-    pub seller_sent_rate: bool,
-    pub failed_payment: bool,
-    pub payment_attempts: i64,
+    pub buyer_sent_rate: Option<i64>,
+    pub seller_sent_rate: Option<i64>,
+    pub failed_payment: Option<i64>,
+    pub payment_attempts: Option<i64>,
     pub expires_at: i64,
     pub trade_index_seller: Option<i64>,
     pub trade_index_buyer: Option<i64>,
@@ -157,7 +157,7 @@ pub struct Order {
 impl From<SmallOrder> for Order {
     fn from(small_order: SmallOrder) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().to_string(),
             // order will be overwritten with the real one before publishing
             kind: small_order
                 .kind
@@ -173,15 +173,18 @@ impl From<SmallOrder> for Order {
             payment_method: small_order.payment_method,
             premium: small_order.premium,
             event_id: String::new(),
-            creator_pubkey: String::new(),
-            price_from_api: false,
-            fee: 0,
-            routing_fee: 0,
-            invoice_held_at: 0,
-            taken_at: 0,
+            creator_pubkey: None,
+            price_from_api: None,
+            fee: None,
+            routing_fee: None,
+            invoice_held_at: None,
+            taken_at: None,
             created_at: small_order.created_at.unwrap_or(0),
             expires_at: small_order.expires_at.unwrap_or(0),
-            payment_attempts: 0,
+            payment_attempts: None,
+            trade_index_seller: None,
+            trade_index_buyer: None,
+            next_trade_index: None,
             ..Default::default()
         }
     }
@@ -191,7 +194,7 @@ impl Order {
     /// Convert an order to a small order
     pub fn as_new_order(&self) -> SmallOrder {
         SmallOrder::new(
-            Some(self.id),
+            Some(Uuid::parse_str(&self.id).unwrap()),
             Some(Kind::from_str(&self.kind).unwrap()),
             Some(Status::from_str(&self.status).unwrap()),
             self.amount,
@@ -257,7 +260,7 @@ impl Order {
     /// Check if the sender is the creator of the order
     pub fn sent_from_maker(&self, sender: PublicKey) -> Result<(), CantDoReason> {
         let sender = sender.to_string();
-        if self.creator_pubkey != sender {
+        if self.creator_pubkey.as_ref() != Some(&sender) {
             return Err(CantDoReason::InvalidPubkey);
         }
         Ok(())
@@ -266,7 +269,7 @@ impl Order {
     /// Check if the sender is the creator of the order
     pub fn not_sent_from_maker(&self, sender: PublicKey) -> Result<(), CantDoReason> {
         let sender = sender.to_string();
-        if self.creator_pubkey == sender {
+        if self.creator_pubkey.as_ref() == Some(&sender) {
             return Err(CantDoReason::InvalidPubkey);
         }
         Ok(())
@@ -274,7 +277,7 @@ impl Order {
 
     /// Get the creator pubkey
     pub fn get_creator_pubkey(&self) -> Result<PublicKey, ServiceError> {
-        match PublicKey::from_str(self.creator_pubkey.as_ref()) {
+        match PublicKey::from_str(self.creator_pubkey.as_ref().unwrap()) {
             Ok(pk) => Ok(pk),
             Err(_) => Err(ServiceError::InvalidPubkey),
         }
@@ -325,11 +328,14 @@ impl Order {
     }
 
     pub fn count_failed_payment(&mut self, retries_number: i64) {
-        if !self.failed_payment {
-            self.failed_payment = true;
-            self.payment_attempts = 0;
-        } else if self.payment_attempts < retries_number {
-            self.payment_attempts += 1;
+        let failed_payment = self.failed_payment.unwrap_or(0);
+        let payment_attempts = self.payment_attempts.unwrap_or(0);
+        
+        if failed_payment == 0 {
+            self.failed_payment = Some(1);
+            self.payment_attempts = Some(0);
+        } else if payment_attempts < retries_number {
+            self.payment_attempts = Some(payment_attempts + 1);
         }
     }
 
@@ -340,7 +346,7 @@ impl Order {
 
     /// Set the timestamp to now
     pub fn set_timestamp_now(&mut self) {
-        self.taken_at = Timestamp::now().as_u64() as i64
+        self.taken_at = Some(Timestamp::now().as_u64() as i64)
     }
 
     /// Check if a user is creating a full privacy order so he doesn't to have reputation
@@ -380,12 +386,15 @@ impl Order {
         let mut update_seller_dispute = false;
         let mut update_buyer_dispute = false;
 
-        if is_seller_dispute && !self.seller_dispute {
+        let seller_dispute = self.seller_dispute.unwrap_or(0);
+        let buyer_dispute = self.buyer_dispute.unwrap_or(0);
+
+        if is_seller_dispute && seller_dispute == 0 {
             update_seller_dispute = true;
-            self.seller_dispute = update_seller_dispute;
-        } else if is_buyer_dispute && !self.buyer_dispute {
+            self.seller_dispute = Some(1);
+        } else if is_buyer_dispute && buyer_dispute == 0 {
             update_buyer_dispute = true;
-            self.buyer_dispute = update_buyer_dispute;
+            self.buyer_dispute = Some(1);
         };
         // Set the status to dispute
         self.status = Status::Dispute.to_string();
@@ -519,7 +528,7 @@ impl SmallOrder {
 
 impl From<Order> for SmallOrder {
     fn from(order: Order) -> Self {
-        let id = Some(order.id);
+        let id = Some(Uuid::parse_str(&order.id).unwrap());
         let kind = Kind::from_str(&order.kind).unwrap();
         let status = Status::from_str(&order.status).unwrap();
         let amount = order.amount;

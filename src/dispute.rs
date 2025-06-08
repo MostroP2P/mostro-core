@@ -5,8 +5,6 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::{FromRow, Type};
-#[cfg(feature = "sqlx")]
-use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 const TOKEN_MIN: u16 = 100;
@@ -58,32 +56,23 @@ impl FromStr for Status {
 }
 
 /// Database representation of a dispute
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct Dispute {
-    /// Unique identifier for the dispute
-    pub id: Uuid,
-    /// Order ID that the dispute is related to
-    pub order_id: Uuid,
-    /// Status of the dispute
+    pub id: String,
+    pub order_id: String,
     pub status: String,
-    /// Previous status of the order before the dispute was created
     pub order_previous_status: String,
-    /// Public key of the solver
     pub solver_pubkey: Option<String>,
-    /// Timestamp when the dispute was created
     pub created_at: i64,
-    /// Timestamp when the dispute was taken by a solver
-    pub taken_at: i64,
-    /// Security token for the buyer
-    pub buyer_token: Option<u16>,
-    /// Security token for the seller
-    pub seller_token: Option<u16>,
+    pub taken_at: Option<i64>,
+    pub buyer_token: i64,
+    pub seller_token: i64,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct SolverDisputeInfo {
-    pub id: Uuid,
+    pub id: String,
     pub kind: String,
     pub status: String,
     pub hash: Option<String>,
@@ -91,9 +80,9 @@ pub struct SolverDisputeInfo {
     pub order_previous_status: String,
     pub initiator_pubkey: String,
     pub buyer_pubkey: Option<String>,
-    pub buyer_token: Option<u16>,
+    pub buyer_token: i64,
     pub seller_pubkey: Option<String>,
-    pub seller_token: Option<u16>,
+    pub seller_token: i64,
     pub initiator_full_privacy: bool,
     pub counterpart_full_privacy: bool,
     pub initiator_info: Option<UserInfo>,
@@ -102,11 +91,11 @@ pub struct SolverDisputeInfo {
     pub payment_method: String,
     pub amount: i64,
     pub fiat_amount: i64,
-    pub fee: i64,
-    pub routing_fee: i64,
+    pub fee: Option<i64>,
+    pub routing_fee: Option<i64>,
     pub buyer_invoice: Option<String>,
-    pub invoice_held_at: i64,
-    pub taken_at: i64,
+    pub invoice_held_at: Option<i64>,
+    pub taken_at: Option<i64>,
     pub created_at: i64,
 }
 
@@ -146,7 +135,7 @@ impl SolverDisputeInfo {
         }
 
         Self {
-            id: order.id,
+            id: order.id.clone(),
             kind: order.kind.clone(),
             status: order.status.clone(),
             hash: order.hash.clone(),
@@ -178,15 +167,15 @@ impl SolverDisputeInfo {
 impl Dispute {
     pub fn new(order_id: Uuid, order_status: String) -> Self {
         Self {
-            id: Uuid::new_v4(),
-            order_id,
+            id: Uuid::new_v4().to_string(),
+            order_id: order_id.to_string(),
             status: Status::Initiated.to_string(),
             order_previous_status: order_status,
             solver_pubkey: None,
             created_at: Utc::now().timestamp(),
-            taken_at: 0,
-            buyer_token: None,
-            seller_token: None,
+            taken_at: None,
+            buyer_token: 0,
+            seller_token: 0,
         }
     }
 
@@ -206,12 +195,12 @@ impl Dispute {
             }
         }
 
-        self.buyer_token = Some(buyer_token);
-        self.seller_token = Some(seller_token);
+        self.buyer_token = buyer_token as i64;
+        self.seller_token = seller_token as i64;
 
         let (initiator_token, counterpart_token) = match is_buyer_dispute {
-            true => (self.buyer_token, self.seller_token),
-            false => (self.seller_token, self.buyer_token),
+            true => (Some(buyer_token), Some(seller_token)),
+            false => (Some(seller_token), Some(buyer_token)),
         };
 
         (initiator_token, counterpart_token)
