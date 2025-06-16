@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE users SET\n                is_admin = ?2,\n                admin_password = ?3,\n                is_solver = ?4,\n                is_banned = ?5,\n                category = ?6,\n                last_trade_index = ?7,\n                total_reviews = ?8,\n                total_rating = ?9,\n                last_rating = ?10,\n                max_rating = ?11,\n                min_rating = ?12,\n                created_at = ?13\n            WHERE pubkey = ?1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "7405dcae124b6dc2cde6792270924a59825397d5c2d88b2a52a5ed90d6988d1a"
+}

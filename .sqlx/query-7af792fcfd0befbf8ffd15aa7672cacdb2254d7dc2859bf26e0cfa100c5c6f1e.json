@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE disputes SET\n                order_id = ?2,\n                status = ?3,\n                order_previous_status = ?4,\n                solver_pubkey = ?5,\n                created_at = ?6,\n                taken_at = ?7,\n                buyer_token = ?8,\n                seller_token = ?9\n            WHERE id = ?1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "7af792fcfd0befbf8ffd15aa7672cacdb2254d7dc2859bf26e0cfa100c5c6f1e"
+}

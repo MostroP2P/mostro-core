@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO disputes (\n                id, order_id, status, order_previous_status,\n                solver_pubkey, created_at, taken_at,\n                buyer_token, seller_token\n            ) VALUES (\n                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9\n            )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "27627fe70c963cf7c8a51d541cf6220590fb7bb07ee8409a0363224e7806d9e8"
+}

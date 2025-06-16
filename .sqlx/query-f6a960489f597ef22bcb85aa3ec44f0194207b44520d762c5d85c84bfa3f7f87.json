@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT * FROM disputes WHERE id = ?1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "order_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "status",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "order_previous_status",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "solver_pubkey",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "taken_at",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "buyer_token",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "seller_token",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "f6a960489f597ef22bcb85aa3ec44f0194207b44520d762c5d85c84bfa3f7f87"
+}

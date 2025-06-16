@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE orders SET\n                kind = ?2,\n                event_id = ?3,\n                hash = ?4,\n                preimage = ?5,\n                creator_pubkey = ?6,\n                cancel_initiator_pubkey = ?7,\n                buyer_pubkey = ?8,\n                master_buyer_pubkey = ?9,\n                seller_pubkey = ?10,\n                master_seller_pubkey = ?11,\n                status = ?12,\n                price_from_api = ?13,\n                premium = ?14,\n                payment_method = ?15,\n                amount = ?16,\n                min_amount = ?17,\n                max_amount = ?18,\n                buyer_dispute = ?19,\n                seller_dispute = ?20,\n                buyer_cooperativecancel = ?21,\n                seller_cooperativecancel = ?22,\n                fee = ?23,\n                routing_fee = ?24,\n                fiat_code = ?25,\n                fiat_amount = ?26,\n                buyer_invoice = ?27,\n                range_parent_id = ?28,\n                invoice_held_at = ?29,\n                taken_at = ?30,\n                created_at = ?31,\n                buyer_sent_rate = ?32,\n                seller_sent_rate = ?33,\n                failed_payment = ?34,\n                payment_attempts = ?35,\n                expires_at = ?36,\n                trade_index_seller = ?37,\n                trade_index_buyer = ?38,\n                next_trade_pubkey = ?39,\n                next_trade_index = ?40\n            WHERE id = ?1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 40
+    },
+    "nullable": []
+  },
+  "hash": "65434f7cfce3ff9a3475ad327309a6e55b591c088442fab878aba5d63b29ca53"
+}

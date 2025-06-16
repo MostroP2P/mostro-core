@@ -18,10 +18,10 @@ pub struct UserInfo {
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct User {
     pub pubkey: String,
-    pub is_admin: i64,
+    pub is_admin: bool,
     pub admin_password: Option<String>,
-    pub is_solver: i64,
-    pub is_banned: i64,
+    pub is_solver: bool,
+    pub is_banned: bool,
     pub category: i64,
     /// We have to be sure that when a user creates a new order (or takes an order),
     /// the trade_index is greater than the one we have in database
@@ -45,10 +45,10 @@ impl User {
     ) -> Self {
         Self {
             pubkey,
-            is_admin: is_admin as i64,
+            is_admin,
             admin_password: None,
-            is_solver: is_solver as i64,
-            is_banned: is_banned as i64,
+            is_solver,
+            is_banned,
             category,
             last_trade_index: trade_index,
             total_reviews: 0,

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO users (\n                pubkey, is_admin, admin_password, is_solver, is_banned,\n                category, last_trade_index, total_reviews, total_rating,\n                last_rating, max_rating, min_rating, created_at\n            ) VALUES (\n                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13\n            )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "89b0123857583ff094cbda41fc5b18dbc0a21cf269d8dbc9b0ce88f3fc4a9c8f"
+}

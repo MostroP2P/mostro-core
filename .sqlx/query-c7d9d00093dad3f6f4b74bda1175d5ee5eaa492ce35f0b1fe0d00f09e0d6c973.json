@@ -1,0 +1,92 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT * FROM users WHERE pubkey = ?1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "name": "pubkey",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_admin",
+        "ordinal": 1,
+        "type_info": "Bool"
+      },
+      {
+        "name": "admin_password",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "is_solver",
+        "ordinal": 3,
+        "type_info": "Bool"
+      },
+      {
+        "name": "is_banned",
+        "ordinal": 4,
+        "type_info": "Bool"
+      },
+      {
+        "name": "category",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "last_trade_index",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "total_reviews",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "total_rating",
+        "ordinal": 8,
+        "type_info": "Float"
+      },
+      {
+        "name": "last_rating",
+        "ordinal": 9,
+        "type_info": "Integer"
+      },
+      {
+        "name": "max_rating",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "min_rating",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 12,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c7d9d00093dad3f6f4b74bda1175d5ee5eaa492ce35f0b1fe0d00f09e0d6c973"
+}

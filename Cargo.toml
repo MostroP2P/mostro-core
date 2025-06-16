@@ -41,7 +41,7 @@ uuid = { version = "1.8.0", features = [
   "serde",
   "js",
 ] }
-sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "uuid", "chrono"], optional = true }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite", "uuid", "chrono"], optional = true }
 wasm-bindgen = { version = "0.2.92", optional = true }
 nostr-sdk = "0.41.0"
 bitcoin = "0.32.5"
