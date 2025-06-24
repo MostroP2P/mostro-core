@@ -225,6 +225,15 @@ pub struct MessageKind {
 
 type Amount = i64;
 
+/// Payment failure retry information
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PaymentFailedInfo {
+    /// Maximum number of payment attempts
+    pub payment_attempts: u32,
+    /// Retry interval in seconds between payment attempts
+    pub payment_retries_interval: u32,
+}
+
 /// Message payload
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -249,6 +258,8 @@ pub enum Payload {
     /// messages with action release and fiat-sent
     /// to inform the next trade pubkey and trade index
     NextTrade(String, u32),
+    /// Payment failure retry configuration information
+    PaymentFailed(PaymentFailedInfo),
 }
 
 #[allow(dead_code)]
@@ -343,7 +354,6 @@ impl MessageKind {
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
             | Action::Cancel
-            | Action::PaymentFailed
             | Action::InvoiceUpdated
             | Action::AdminAddSolver
             | Action::SendDm
@@ -353,6 +363,12 @@ impl MessageKind {
                     return false;
                 }
                 true
+            }
+            Action::PaymentFailed => {
+                if self.id.is_none() {
+                    return false;
+                }
+                matches!(&self.payload, Some(Payload::PaymentFailed(_)))
             }
             Action::RateUser => {
                 matches!(&self.payload, Some(Payload::RatingUser(_)))
@@ -529,6 +545,49 @@ mod test {
         let message_json = message_without_reputation.as_json().unwrap();
         let deserialized_message = Message::from_json(&message_json).unwrap();
         assert!(deserialized_message.verify());
+    }
+
+    #[test]
+    fn test_payment_failed_payload() {
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        
+        // Test PaymentFailedInfo serialization and deserialization
+        let payment_failed_info = crate::message::PaymentFailedInfo {
+            payment_attempts: 3,
+            payment_retries_interval: 60,
+        };
+        
+        let payload = Payload::PaymentFailed(payment_failed_info);
+        let message = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::PaymentFailed,
+            Some(payload),
+        ));
+        
+        // Verify message validation
+        assert!(message.verify());
+        
+        // Test JSON serialization
+        let message_json = message.as_json().unwrap();
+        println!("PaymentFailed message JSON: {}", message_json);
+        
+        // Test deserialization
+        let deserialized_message = Message::from_json(&message_json).unwrap();
+        assert!(deserialized_message.verify());
+        
+        // Verify the payload contains correct values
+        if let Message::Order(kind) = deserialized_message {
+            if let Some(Payload::PaymentFailed(info)) = kind.payload {
+                assert_eq!(info.payment_attempts, 3);
+                assert_eq!(info.payment_retries_interval, 60);
+            } else {
+                panic!("Expected PaymentFailed payload");
+            }
+        } else {
+            panic!("Expected Order message");
+        }
     }
 
     #[test]
