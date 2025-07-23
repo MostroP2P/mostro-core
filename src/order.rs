@@ -327,7 +327,7 @@ impl Order {
     pub fn count_failed_payment(&mut self, retries_number: i64) {
         if !self.failed_payment {
             self.failed_payment = true;
-            self.payment_attempts = 0;
+            self.payment_attempts = 1;
         } else if self.payment_attempts < retries_number {
             self.payment_attempts += 1;
         }
