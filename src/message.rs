@@ -73,6 +73,7 @@ pub enum Action {
     InvoiceUpdated,
     SendDm,
     TradePubkey,
+    RestoreSession
 }
 
 impl fmt::Display for Action {
@@ -234,6 +235,39 @@ pub struct PaymentFailedInfo {
     pub payment_retries_interval: u32,
 }
 
+/// Information about the order to be restored in the new client
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RestoredOrdersInfo {
+    /// Id of the order
+    pub order_id: Uuid,
+    /// Trade index of the order
+    pub trade_index: i64,
+    /// Status of the order
+    pub status: String
+}
+
+/// Information about the dispute to be restored in the new client
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RestoredDisputesInfo {
+    /// Id of the dispute
+    pub dispute_id: Uuid,
+    /// Order id of the dispute
+    pub order_id: Uuid,
+    /// Trade index of the dispute
+    pub trade_index: i64,
+    /// Status of the dispute
+    pub status: String
+}
+
+/// Payment failure retry information
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RestoreSessionInfo {
+    /// Vector of orders of the user
+    pub restore_orders: Vec<RestoredOrdersInfo>,
+    /// Vector of disputes of the user
+    pub restore_disputes: Vec<RestoredDisputesInfo>,
+}
+
 /// Message payload
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -260,6 +294,8 @@ pub enum Payload {
     NextTrade(String, u32),
     /// Payment failure retry configuration information
     PaymentFailed(PaymentFailedInfo),
+    /// Restore session
+    RestoreSession(RestoreSessionInfo),
 }
 
 #[allow(dead_code)]
@@ -358,7 +394,8 @@ impl MessageKind {
             | Action::AdminAddSolver
             | Action::SendDm
             | Action::TradePubkey
-            | Action::Canceled => {
+            | Action::Canceled
+            | Action::RestoreSession => {
                 if self.id.is_none() {
                     return false;
                 }
