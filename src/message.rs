@@ -274,13 +274,13 @@ pub struct RestoredDisputesInfo {
     pub status: String,
 }
 
-/// Payment failure retry information
-#[derive(Debug, Deserialize, Serialize, Clone)]
+/// Restore session userinfo
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct RestoreSessionInfo {
-    /// Vector of orders of the user
+    /// Vector of orders of the user requesting the restore of data
     #[serde(rename = "orders")]
     pub restore_orders: Vec<RestoredOrdersInfo>,
-    /// Vector of disputes of the user
+    /// Vector of disputes of the user requesting the restore of data
     #[serde(rename = "disputes")]
     pub restore_disputes: Vec<RestoredDisputesInfo>,
 }
@@ -311,9 +311,9 @@ pub enum Payload {
     NextTrade(String, u32),
     /// Payment failure retry configuration information
     PaymentFailed(PaymentFailedInfo),
-    /// Restore session
+    /// Restore session request from user
     RestoreRequest,
-    /// Restore session data (flat structure)
+    /// Restore session data with orders and disputes
     RestoreData(RestoreSessionInfo),
 }
 
