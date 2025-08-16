@@ -314,13 +314,7 @@ pub enum Payload {
     /// Restore session
     RestoreRequest,
     /// Restore session data (flat structure)
-    #[serde(untagged)]
-    RestoreData {
-        /// Vector of orders of the user
-        orders: Vec<RestoredOrdersInfo>,
-        /// Vector of disputes of the user
-        disputes: Vec<RestoredDisputesInfo>,
-    },
+    RestoreData(RestoreSessionInfo),
 }
 
 #[allow(dead_code)]
