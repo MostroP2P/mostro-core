@@ -4,6 +4,10 @@ use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::Message as BitcoinMessage;
 use nostr_sdk::prelude::*;
+#[cfg(feature = "sqlx")]
+use sqlx::FromRow;
+#[cfg(feature = "sqlx")]
+use sqlx_crud::SqlxCrud;
 
 use std::fmt;
 use uuid::Uuid;
@@ -73,7 +77,7 @@ pub enum Action {
     InvoiceUpdated,
     SendDm,
     TradePubkey,
-    RestoreSession
+    RestoreSession,
 }
 
 impl fmt::Display for Action {
@@ -91,6 +95,7 @@ pub enum Message {
     CantDo(MessageKind),
     Rate(MessageKind),
     Dm(MessageKind),
+    Restore(MessageKind),
 }
 
 impl Message {
@@ -117,6 +122,11 @@ impl Message {
         let kind = MessageKind::new(id, request_id, trade_index, action, payload);
 
         Self::Dispute(kind)
+    }
+
+    pub fn new_restore(action: Action, payload: Option<Payload>) -> Self {
+        let kind = MessageKind::new(None, None, None, action, payload);
+        Self::Restore(kind)
     }
 
     /// New can't do template message message
@@ -155,7 +165,8 @@ impl Message {
             | Message::Order(k)
             | Message::CantDo(k)
             | Message::Rate(k)
-            | Message::Dm(k) => k,
+            | Message::Dm(k)
+            | Message::Restore(k) => k,
         }
     }
 
@@ -166,7 +177,8 @@ impl Message {
             | Message::Order(a)
             | Message::CantDo(a)
             | Message::Rate(a)
-            | Message::Dm(a) => Some(a.get_action()),
+            | Message::Dm(a)
+            | Message::Restore(a) => Some(a.get_action()),
         }
     }
 
@@ -177,7 +189,8 @@ impl Message {
             | Message::Dispute(m)
             | Message::CantDo(m)
             | Message::Rate(m)
-            | Message::Dm(m) => m.verify(),
+            | Message::Dm(m)
+            | Message::Restore(m) => m.verify(),
         }
     }
 
@@ -236,6 +249,7 @@ pub struct PaymentFailedInfo {
 }
 
 /// Information about the order to be restored in the new client
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredOrdersInfo {
     /// Id of the order
@@ -243,10 +257,11 @@ pub struct RestoredOrdersInfo {
     /// Trade index of the order
     pub trade_index: i64,
     /// Status of the order
-    pub status: String
+    pub status: String,
 }
 
 /// Information about the dispute to be restored in the new client
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredDisputesInfo {
     /// Id of the dispute
@@ -256,15 +271,17 @@ pub struct RestoredDisputesInfo {
     /// Trade index of the dispute
     pub trade_index: i64,
     /// Status of the dispute
-    pub status: String
+    pub status: String,
 }
 
 /// Payment failure retry information
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoreSessionInfo {
     /// Vector of orders of the user
+    #[serde(rename = "orders")]
     pub restore_orders: Vec<RestoredOrdersInfo>,
     /// Vector of disputes of the user
+    #[serde(rename = "disputes")]
     pub restore_disputes: Vec<RestoredDisputesInfo>,
 }
 
@@ -295,7 +312,15 @@ pub enum Payload {
     /// Payment failure retry configuration information
     PaymentFailed(PaymentFailedInfo),
     /// Restore session
-    RestoreSession(RestoreSessionInfo),
+    RestoreRequest,
+    /// Restore session data (flat structure)
+    #[serde(untagged)]
+    RestoreData {
+        /// Vector of orders of the user
+        orders: Vec<RestoredOrdersInfo>,
+        /// Vector of disputes of the user
+        disputes: Vec<RestoredDisputesInfo>,
+    },
 }
 
 #[allow(dead_code)]
@@ -394,8 +419,7 @@ impl MessageKind {
             | Action::AdminAddSolver
             | Action::SendDm
             | Action::TradePubkey
-            | Action::Canceled
-            | Action::RestoreSession => {
+            | Action::Canceled => {
                 if self.id.is_none() {
                     return false;
                 }
@@ -412,6 +436,12 @@ impl MessageKind {
             }
             Action::CantDo => {
                 matches!(&self.payload, Some(Payload::CantDo(_)))
+            }
+            Action::RestoreSession => {
+                matches!(
+                    &self.payload,
+                    Some(Payload::RestoreRequest) | Some(Payload::RestoreData { .. })
+                )
             }
         }
     }
@@ -587,13 +617,13 @@ mod test {
     #[test]
     fn test_payment_failed_payload() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
-        
+
         // Test PaymentFailedInfo serialization and deserialization
         let payment_failed_info = crate::message::PaymentFailedInfo {
             payment_attempts: 3,
             payment_retries_interval: 60,
         };
-        
+
         let payload = Payload::PaymentFailed(payment_failed_info);
         let message = Message::Order(MessageKind::new(
             Some(uuid),
@@ -602,18 +632,18 @@ mod test {
             Action::PaymentFailed,
             Some(payload),
         ));
-        
+
         // Verify message validation
         assert!(message.verify());
-        
+
         // Test JSON serialization
         let message_json = message.as_json().unwrap();
         println!("PaymentFailed message JSON: {}", message_json);
-        
+
         // Test deserialization
         let deserialized_message = Message::from_json(&message_json).unwrap();
         assert!(deserialized_message.verify());
-        
+
         // Verify the payload contains correct values
         if let Message::Order(kind) = deserialized_message {
             if let Some(Payload::PaymentFailed(info)) = kind.payload {
