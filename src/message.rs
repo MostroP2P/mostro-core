@@ -430,7 +430,7 @@ impl MessageKind {
                 matches!(&self.payload, Some(Payload::CantDo(_)))
             }
             Action::RestoreSession => {
-                if self.id.is_some() {
+                if self.id.is_some() || self.request_id.is_some() || self.trade_index.is_some() {
                     return false;
                 }
                 matches!(&self.payload, None | Some(Payload::RestoreData(_)))
@@ -800,7 +800,7 @@ mod test {
 
     #[test]
     fn test_restore_session_message_validation() {
-        // Test that RestoreSession action requires valid payload
+        // Test that RestoreSession action accepts only payload=None or RestoreData
         let restore_request_message = Message::Restore(MessageKind::new(
             None,
             None,
@@ -822,8 +822,18 @@ mod test {
             Some(wrong_payload),
         ));
 
-        // Should fail validation because RestoreSession only accepts RestoreRequest or RestoreData
+        // Should fail validation because RestoreSession only accepts None or RestoreData
         assert!(!wrong_message.verify());
+
+        // Id presence should make it invalid
+        let with_id = Message::Restore(MessageKind::new(
+            Some(uuid!("00000000-0000-0000-0000-000000000001")),
+            None,
+            None,
+            Action::RestoreSession,
+            None,
+        ));
+        assert!(!with_id.verify());
     }
 
     #[test]
