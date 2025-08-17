@@ -274,7 +274,7 @@ pub struct RestoredDisputesInfo {
     pub status: String,
 }
 
-/// Restore session userinfo
+/// Restore session user info
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct RestoreSessionInfo {
     /// Vector of orders of the user requesting the restore of data
@@ -680,7 +680,7 @@ mod test {
 
     #[test]
     fn test_restore_session_message() {
-        // Test RestoreSession with RestoreRequest payload
+        // Test RestoreSession request (payload = None)
         let restore_request_message = Message::Restore(MessageKind::new(
             None,
             None,
