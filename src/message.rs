@@ -124,8 +124,8 @@ impl Message {
         Self::Dispute(kind)
     }
 
-    pub fn new_restore(action: Action, payload: Option<Payload>) -> Self {
-        let kind = MessageKind::new(None, None, None, action, payload);
+    pub fn new_restore(payload: Option<Payload>) -> Self {
+        let kind = MessageKind::new(None, None, None, Action::RestoreSession, payload);
         Self::Restore(kind)
     }
 
@@ -858,7 +858,7 @@ mod test {
     #[test]
     fn test_restore_session_message_constructor() {
         // Test the new_restore constructor
-        let restore_request_message = Message::new_restore(Action::RestoreSession, None);
+        let restore_request_message = Message::new_restore(None);
 
         assert!(matches!(restore_request_message, Message::Restore(_)));
         assert!(restore_request_message.verify());
@@ -872,10 +872,8 @@ mod test {
             restore_orders: vec![],
             restore_disputes: vec![],
         };
-        let restore_data_message = Message::new_restore(
-            Action::RestoreSession,
-            Some(Payload::RestoreData(restore_session_info)),
-        );
+        let restore_data_message =
+            Message::new_restore(Some(Payload::RestoreData(restore_session_info)));
 
         assert!(matches!(restore_data_message, Message::Restore(_)));
         assert!(restore_data_message.verify());
