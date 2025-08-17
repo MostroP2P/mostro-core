@@ -630,7 +630,6 @@ mod test {
 
         // Test JSON serialization
         let message_json = message.as_json().unwrap();
-        println!("PaymentFailed message JSON: {}", message_json);
 
         // Test deserialization
         let deserialized_message = Message::from_json(&message_json).unwrap();
@@ -834,6 +833,26 @@ mod test {
             None,
         ));
         assert!(!with_id.verify());
+
+        // request_id presence should make it invalid
+        let with_request_id = Message::Restore(MessageKind::new(
+            None,
+            Some(42),
+            None,
+            Action::RestoreSession,
+            None,
+        ));
+        assert!(!with_request_id.verify());
+
+        // trade_index presence should make it invalid
+        let with_trade_index = Message::Restore(MessageKind::new(
+            None,
+            None,
+            Some(7),
+            Action::RestoreSession,
+            None,
+        ));
+        assert!(!with_trade_index.verify());
     }
 
     #[test]
