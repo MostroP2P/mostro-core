@@ -311,8 +311,6 @@ pub enum Payload {
     NextTrade(String, u32),
     /// Payment failure retry configuration information
     PaymentFailed(PaymentFailedInfo),
-    /// Restore session request from user
-    RestoreRequest,
     /// Restore session data with orders and disputes
     RestoreData(RestoreSessionInfo),
 }
@@ -432,10 +430,10 @@ impl MessageKind {
                 matches!(&self.payload, Some(Payload::CantDo(_)))
             }
             Action::RestoreSession => {
-                matches!(
-                    &self.payload,
-                    Some(Payload::RestoreRequest) | Some(Payload::RestoreData(_))
-                )
+                if self.id.is_some() {
+                    return false;
+                }
+                matches!(&self.payload, None | Some(Payload::RestoreData(_)))
             }
         }
     }
@@ -684,13 +682,12 @@ mod test {
     #[test]
     fn test_restore_session_message() {
         // Test RestoreSession with RestoreRequest payload
-        let restore_request_payload = Payload::RestoreRequest;
         let restore_request_message = Message::Restore(MessageKind::new(
             None,
             None,
             None,
             Action::RestoreSession,
-            Some(restore_request_payload),
+            None,
         ));
 
         // Verify message validation
@@ -804,7 +801,7 @@ mod test {
     #[test]
     fn test_restore_session_message_validation() {
         // Test that RestoreSession action requires valid payload
-        let invalid_message = Message::Restore(MessageKind::new(
+        let restore_request_message = Message::Restore(MessageKind::new(
             None,
             None,
             None,
@@ -812,8 +809,8 @@ mod test {
             None, // Missing payload
         ));
 
-        // Should fail validation because RestoreSession requires payload
-        assert!(!invalid_message.verify());
+        // Verify restore request message
+        assert!(restore_request_message.verify());
 
         // Test with wrong payload type
         let wrong_payload = Payload::TextMessage("wrong payload".to_string());
@@ -832,8 +829,7 @@ mod test {
     #[test]
     fn test_restore_session_message_constructor() {
         // Test the new_restore constructor
-        let restore_request_message =
-            Message::new_restore(Action::RestoreSession, Some(Payload::RestoreRequest));
+        let restore_request_message = Message::new_restore(Action::RestoreSession, None);
 
         assert!(matches!(restore_request_message, Message::Restore(_)));
         assert!(restore_request_message.verify());
