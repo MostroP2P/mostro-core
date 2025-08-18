@@ -4,6 +4,10 @@ use bitcoin::hashes::Hash;
 use bitcoin::key::Secp256k1;
 use bitcoin::secp256k1::Message as BitcoinMessage;
 use nostr_sdk::prelude::*;
+#[cfg(feature = "sqlx")]
+use sqlx::FromRow;
+#[cfg(feature = "sqlx")]
+use sqlx_crud::SqlxCrud;
 
 use std::fmt;
 use uuid::Uuid;
@@ -73,6 +77,7 @@ pub enum Action {
     InvoiceUpdated,
     SendDm,
     TradePubkey,
+    RestoreSession,
 }
 
 impl fmt::Display for Action {
@@ -90,6 +95,7 @@ pub enum Message {
     CantDo(MessageKind),
     Rate(MessageKind),
     Dm(MessageKind),
+    Restore(MessageKind),
 }
 
 impl Message {
@@ -116,6 +122,11 @@ impl Message {
         let kind = MessageKind::new(id, request_id, trade_index, action, payload);
 
         Self::Dispute(kind)
+    }
+
+    pub fn new_restore(payload: Option<Payload>) -> Self {
+        let kind = MessageKind::new(None, None, None, Action::RestoreSession, payload);
+        Self::Restore(kind)
     }
 
     /// New can't do template message message
@@ -154,7 +165,8 @@ impl Message {
             | Message::Order(k)
             | Message::CantDo(k)
             | Message::Rate(k)
-            | Message::Dm(k) => k,
+            | Message::Dm(k)
+            | Message::Restore(k) => k,
         }
     }
 
@@ -165,7 +177,8 @@ impl Message {
             | Message::Order(a)
             | Message::CantDo(a)
             | Message::Rate(a)
-            | Message::Dm(a) => Some(a.get_action()),
+            | Message::Dm(a)
+            | Message::Restore(a) => Some(a.get_action()),
         }
     }
 
@@ -176,7 +189,8 @@ impl Message {
             | Message::Dispute(m)
             | Message::CantDo(m)
             | Message::Rate(m)
-            | Message::Dm(m) => m.verify(),
+            | Message::Dm(m)
+            | Message::Restore(m) => m.verify(),
         }
     }
 
@@ -234,6 +248,43 @@ pub struct PaymentFailedInfo {
     pub payment_retries_interval: u32,
 }
 
+/// Information about the order to be restored in the new client
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RestoredOrdersInfo {
+    /// Id of the order
+    pub order_id: Uuid,
+    /// Trade index of the order
+    pub trade_index: i64,
+    /// Status of the order
+    pub status: String,
+}
+
+/// Information about the dispute to be restored in the new client
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RestoredDisputesInfo {
+    /// Id of the dispute
+    pub dispute_id: Uuid,
+    /// Order id of the dispute
+    pub order_id: Uuid,
+    /// Trade index of the dispute
+    pub trade_index: i64,
+    /// Status of the dispute
+    pub status: String,
+}
+
+/// Restore session user info
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
+pub struct RestoreSessionInfo {
+    /// Vector of orders of the user requesting the restore of data
+    #[serde(rename = "orders")]
+    pub restore_orders: Vec<RestoredOrdersInfo>,
+    /// Vector of disputes of the user requesting the restore of data
+    #[serde(rename = "disputes")]
+    pub restore_disputes: Vec<RestoredDisputesInfo>,
+}
+
 /// Message payload
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -260,6 +311,8 @@ pub enum Payload {
     NextTrade(String, u32),
     /// Payment failure retry configuration information
     PaymentFailed(PaymentFailedInfo),
+    /// Restore session data with orders and disputes
+    RestoreData(RestoreSessionInfo),
 }
 
 #[allow(dead_code)]
@@ -375,6 +428,12 @@ impl MessageKind {
             }
             Action::CantDo => {
                 matches!(&self.payload, Some(Payload::CantDo(_)))
+            }
+            Action::RestoreSession => {
+                if self.id.is_some() || self.request_id.is_some() || self.trade_index.is_some() {
+                    return false;
+                }
+                matches!(&self.payload, None | Some(Payload::RestoreData(_)))
             }
         }
     }
@@ -550,13 +609,13 @@ mod test {
     #[test]
     fn test_payment_failed_payload() {
         let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
-        
+
         // Test PaymentFailedInfo serialization and deserialization
         let payment_failed_info = crate::message::PaymentFailedInfo {
             payment_attempts: 3,
             payment_retries_interval: 60,
         };
-        
+
         let payload = Payload::PaymentFailed(payment_failed_info);
         let message = Message::Order(MessageKind::new(
             Some(uuid),
@@ -565,18 +624,17 @@ mod test {
             Action::PaymentFailed,
             Some(payload),
         ));
-        
+
         // Verify message validation
         assert!(message.verify());
-        
+
         // Test JSON serialization
         let message_json = message.as_json().unwrap();
-        println!("PaymentFailed message JSON: {}", message_json);
-        
+
         // Test deserialization
         let deserialized_message = Message::from_json(&message_json).unwrap();
         assert!(deserialized_message.verify());
-        
+
         // Verify the payload contains correct values
         if let Message::Order(kind) = deserialized_message {
             if let Some(Payload::PaymentFailed(info)) = kind.payload {
@@ -618,5 +676,210 @@ mod test {
             trade_keys.public_key(),
             sig
         ));
+    }
+
+    #[test]
+    fn test_restore_session_message() {
+        // Test RestoreSession request (payload = None)
+        let restore_request_message = Message::Restore(MessageKind::new(
+            None,
+            None,
+            None,
+            Action::RestoreSession,
+            None,
+        ));
+
+        // Verify message validation
+        assert!(restore_request_message.verify());
+        assert_eq!(
+            restore_request_message.inner_action(),
+            Some(Action::RestoreSession)
+        );
+
+        // Test JSON serialization and deserialization for RestoreRequest
+        let message_json = restore_request_message.as_json().unwrap();
+        let deserialized_message = Message::from_json(&message_json).unwrap();
+        assert!(deserialized_message.verify());
+        assert_eq!(
+            deserialized_message.inner_action(),
+            Some(Action::RestoreSession)
+        );
+
+        // Test RestoreSession with RestoreData payload
+        let restored_orders = vec![
+            crate::message::RestoredOrdersInfo {
+                order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
+                trade_index: 1,
+                status: "active".to_string(),
+            },
+            crate::message::RestoredOrdersInfo {
+                order_id: uuid!("408e1272-d5f4-47e6-bd97-3504baea9c24"),
+                trade_index: 2,
+                status: "success".to_string(),
+            },
+        ];
+
+        let restored_disputes = vec![crate::message::RestoredDisputesInfo {
+            dispute_id: uuid!("508e1272-d5f4-47e6-bd97-3504baea9c25"),
+            order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
+            trade_index: 1,
+            status: "initiated".to_string(),
+        }];
+
+        let restore_session_info = crate::message::RestoreSessionInfo {
+            restore_orders: restored_orders.clone(),
+            restore_disputes: restored_disputes.clone(),
+        };
+
+        let restore_data_payload = Payload::RestoreData(restore_session_info);
+        let restore_data_message = Message::Restore(MessageKind::new(
+            None,
+            None,
+            None,
+            Action::RestoreSession,
+            Some(restore_data_payload),
+        ));
+
+        // Verify message validation
+        assert!(restore_data_message.verify());
+        assert_eq!(
+            restore_data_message.inner_action(),
+            Some(Action::RestoreSession)
+        );
+
+        // Test JSON serialization and deserialization for RestoreData
+        let message_json = restore_data_message.as_json().unwrap();
+        let deserialized_message = Message::from_json(&message_json).unwrap();
+        assert!(deserialized_message.verify());
+        assert_eq!(
+            deserialized_message.inner_action(),
+            Some(Action::RestoreSession)
+        );
+
+        // Verify the payload contains correct data
+        if let Message::Restore(kind) = deserialized_message {
+            if let Some(Payload::RestoreData(info)) = kind.payload {
+                assert_eq!(info.restore_orders.len(), 2);
+                assert_eq!(info.restore_disputes.len(), 1);
+
+                // Check first order
+                assert_eq!(
+                    info.restore_orders[0].order_id,
+                    uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")
+                );
+                assert_eq!(info.restore_orders[0].trade_index, 1);
+                assert_eq!(info.restore_orders[0].status, "active");
+
+                // Check second order
+                assert_eq!(
+                    info.restore_orders[1].order_id,
+                    uuid!("408e1272-d5f4-47e6-bd97-3504baea9c24")
+                );
+                assert_eq!(info.restore_orders[1].trade_index, 2);
+                assert_eq!(info.restore_orders[1].status, "success");
+
+                // Check dispute
+                assert_eq!(
+                    info.restore_disputes[0].dispute_id,
+                    uuid!("508e1272-d5f4-47e6-bd97-3504baea9c25")
+                );
+                assert_eq!(
+                    info.restore_disputes[0].order_id,
+                    uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")
+                );
+                assert_eq!(info.restore_disputes[0].trade_index, 1);
+                assert_eq!(info.restore_disputes[0].status, "initiated");
+            } else {
+                panic!("Expected RestoreData payload");
+            }
+        } else {
+            panic!("Expected Restore message");
+        }
+    }
+
+    #[test]
+    fn test_restore_session_message_validation() {
+        // Test that RestoreSession action accepts only payload=None or RestoreData
+        let restore_request_message = Message::Restore(MessageKind::new(
+            None,
+            None,
+            None,
+            Action::RestoreSession,
+            None, // Missing payload
+        ));
+
+        // Verify restore request message
+        assert!(restore_request_message.verify());
+
+        // Test with wrong payload type
+        let wrong_payload = Payload::TextMessage("wrong payload".to_string());
+        let wrong_message = Message::Restore(MessageKind::new(
+            None,
+            None,
+            None,
+            Action::RestoreSession,
+            Some(wrong_payload),
+        ));
+
+        // Should fail validation because RestoreSession only accepts None or RestoreData
+        assert!(!wrong_message.verify());
+
+        // Id presence should make it invalid
+        let with_id = Message::Restore(MessageKind::new(
+            Some(uuid!("00000000-0000-0000-0000-000000000001")),
+            None,
+            None,
+            Action::RestoreSession,
+            None,
+        ));
+        assert!(!with_id.verify());
+
+        // request_id presence should make it invalid
+        let with_request_id = Message::Restore(MessageKind::new(
+            None,
+            Some(42),
+            None,
+            Action::RestoreSession,
+            None,
+        ));
+        assert!(!with_request_id.verify());
+
+        // trade_index presence should make it invalid
+        let with_trade_index = Message::Restore(MessageKind::new(
+            None,
+            None,
+            Some(7),
+            Action::RestoreSession,
+            None,
+        ));
+        assert!(!with_trade_index.verify());
+    }
+
+    #[test]
+    fn test_restore_session_message_constructor() {
+        // Test the new_restore constructor
+        let restore_request_message = Message::new_restore(None);
+
+        assert!(matches!(restore_request_message, Message::Restore(_)));
+        assert!(restore_request_message.verify());
+        assert_eq!(
+            restore_request_message.inner_action(),
+            Some(Action::RestoreSession)
+        );
+
+        // Test with RestoreData payload
+        let restore_session_info = crate::message::RestoreSessionInfo {
+            restore_orders: vec![],
+            restore_disputes: vec![],
+        };
+        let restore_data_message =
+            Message::new_restore(Some(Payload::RestoreData(restore_session_info)));
+
+        assert!(matches!(restore_data_message, Message::Restore(_)));
+        assert!(restore_data_message.verify());
+        assert_eq!(
+            restore_data_message.inner_action(),
+            Some(Action::RestoreSession)
+        );
     }
 }
