@@ -8,7 +8,7 @@ pub use crate::dispute::{Dispute, SolverDisputeInfo, Status as DisputeStatus};
 pub use crate::error::{CantDoReason, MostroError, ServiceError};
 pub use crate::message::{
     Action, Message, MessageKind, Payload, PaymentFailedInfo, Peer, RestoreSessionInfo,
-    RestoredDisputesInfo, RestoredOrdersInfo,
+    RestoredDisputeHelper, RestoredDisputesInfo, RestoredOrderHelper, RestoredOrdersInfo,
 };
 pub use crate::order::{Kind, Order, SmallOrder, Status};
 pub use crate::rating::Rating;

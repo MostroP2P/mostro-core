@@ -247,6 +247,30 @@ pub struct PaymentFailedInfo {
     /// Retry interval in seconds between payment attempts
     pub payment_retries_interval: u32,
 }
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RestoredOrderHelper {
+    pub id: Uuid,
+    pub status: String,
+    pub master_buyer_pubkey: Option<String>,
+    pub master_seller_pubkey: Option<String>,
+    pub trade_index_buyer: Option<i64>,
+    pub trade_index_seller: Option<i64>,
+}
+
+/// Information about the dispute to be restored in the new client
+/// Helper struct to decrypt the dispute information in case of encrypted database
+#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RestoredDisputeHelper {
+    pub dispute_id: Uuid,
+    pub order_id: Uuid,
+    pub dispute_status: String,
+    pub master_buyer_pubkey: Option<String>,
+    pub master_seller_pubkey: Option<String>,
+    pub trade_index_buyer: Option<i64>,
+    pub trade_index_seller: Option<i64>,
+}
 
 /// Information about the order to be restored in the new client
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
