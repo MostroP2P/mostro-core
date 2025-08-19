@@ -247,6 +247,9 @@ pub struct PaymentFailedInfo {
     /// Retry interval in seconds between payment attempts
     pub payment_retries_interval: u32,
 }
+
+/// Helper struct for faster order-restore queries (used by mostrod).
+/// Intended as a lightweight row-mapper when fetching restore metadata.
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredOrderHelper {
@@ -258,8 +261,9 @@ pub struct RestoredOrderHelper {
     pub trade_index_seller: Option<i64>,
 }
 
-/// Information about the dispute to be restored in the new client
-/// Helper struct to decrypt the dispute information in case of encrypted database
+/// Information about the dispute to be restored in the new client.
+/// Helper struct to decrypt the dispute information in case of encrypted database.
+/// Note: field names are chosen to match expected SQL SELECT aliases in mostrod (e.g. `status` aliased as `dispute_status`).
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredDisputeHelper {
