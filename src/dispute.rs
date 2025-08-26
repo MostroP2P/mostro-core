@@ -1,7 +1,6 @@
 use crate::{order::Order, user::User, user::UserInfo};
 use chrono::Utc;
 use nostr_sdk::Timestamp;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::{FromRow, Type};
@@ -9,8 +8,6 @@ use sqlx::{FromRow, Type};
 use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
-const TOKEN_MIN: u16 = 100;
-const TOKEN_MAX: u16 = 999;
 
 /// Each status that a dispute can have
 #[cfg_attr(feature = "sqlx", derive(Type))]
@@ -75,10 +72,6 @@ pub struct Dispute {
     pub created_at: i64,
     /// Timestamp when the dispute was taken by a solver
     pub taken_at: i64,
-    /// Security token for the buyer
-    pub buyer_token: Option<u16>,
-    /// Security token for the seller
-    pub seller_token: Option<u16>,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
@@ -91,9 +84,7 @@ pub struct SolverDisputeInfo {
     pub order_previous_status: String,
     pub initiator_pubkey: String,
     pub buyer_pubkey: Option<String>,
-    pub buyer_token: Option<u16>,
     pub seller_pubkey: Option<String>,
-    pub seller_token: Option<u16>,
     pub initiator_full_privacy: bool,
     pub counterpart_full_privacy: bool,
     pub initiator_info: Option<UserInfo>,
@@ -154,9 +145,7 @@ impl SolverDisputeInfo {
             order_previous_status: dispute.order_previous_status.clone(),
             initiator_pubkey: initiator_tradekey,
             buyer_pubkey: order.buyer_pubkey.clone(),
-            buyer_token: dispute.buyer_token,
             seller_pubkey: order.seller_pubkey.clone(),
-            seller_token: dispute.seller_token,
             initiator_full_privacy,
             counterpart_full_privacy,
             counterpart_info,
@@ -185,35 +174,6 @@ impl Dispute {
             solver_pubkey: None,
             created_at: Utc::now().timestamp(),
             taken_at: 0,
-            buyer_token: None,
-            seller_token: None,
         }
-    }
-
-    /// Create new dispute record and generate security tokens
-    /// Returns a tuple of the initiator's token and the counterpart's token
-    pub fn create_tokens(&mut self, is_buyer_dispute: bool) -> (Option<u16>, Option<u16>) {
-        let mut rng = rand::rng();
-        let mut buyer_token;
-        let mut seller_token;
-
-        // Ensure tokens are unique
-        loop {
-            buyer_token = rng.random_range(TOKEN_MIN..=TOKEN_MAX);
-            seller_token = rng.random_range(TOKEN_MIN..=TOKEN_MAX);
-            if buyer_token != seller_token {
-                break;
-            }
-        }
-
-        self.buyer_token = Some(buyer_token);
-        self.seller_token = Some(seller_token);
-
-        let (initiator_token, counterpart_token) = match is_buyer_dispute {
-            true => (self.buyer_token, self.seller_token),
-            false => (self.seller_token, self.buyer_token),
-        };
-
-        (initiator_token, counterpart_token)
     }
 }
