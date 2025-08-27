@@ -206,8 +206,6 @@ impl Order {
             self.buyer_invoice.clone(),
             Some(self.created_at),
             Some(self.expires_at),
-            None,
-            None,
         )
     }
     /// Get the kind of the order
@@ -422,8 +420,6 @@ pub struct SmallOrder {
     pub buyer_invoice: Option<String>,
     pub created_at: Option<i64>,
     pub expires_at: Option<i64>,
-    pub buyer_token: Option<u16>,
-    pub seller_token: Option<u16>,
 }
 
 #[allow(dead_code)]
@@ -445,8 +441,6 @@ impl SmallOrder {
         buyer_invoice: Option<String>,
         created_at: Option<i64>,
         expires_at: Option<i64>,
-        buyer_token: Option<u16>,
-        seller_token: Option<u16>,
     ) -> Self {
         Self {
             id,
@@ -464,8 +458,6 @@ impl SmallOrder {
             buyer_invoice,
             created_at,
             expires_at,
-            buyer_token,
-            seller_token,
         }
     }
     /// New order from json string
@@ -549,8 +541,6 @@ impl From<Order> for SmallOrder {
             buyer_invoice,
             created_at: None,
             expires_at: None,
-            buyer_token: None,
-            seller_token: None,
         }
     }
 }
