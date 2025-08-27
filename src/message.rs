@@ -330,7 +330,7 @@ pub enum Payload {
     /// In some cases we need to send an amount
     Amount(Amount),
     /// Dispute
-    Dispute(Uuid, Option<u16>, Option<SolverDisputeInfo>),
+    Dispute(Uuid, Option<SolverDisputeInfo>),
     /// Here the reason why we can't do the action
     CantDo(Option<CantDoReason>),
     /// This is used by the maker of a range order only on
