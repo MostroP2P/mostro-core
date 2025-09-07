@@ -400,6 +400,7 @@ impl Order {
 
 /// We use this struct to create a new order
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct SmallOrder {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
