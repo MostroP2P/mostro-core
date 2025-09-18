@@ -42,6 +42,8 @@ pub enum CantDoReason {
     OutOfRangeSatsAmount,
     /// For users trying to do actions on dispute that are not theirs
     IsNotYourDispute,
+    /// For solvers when admin has taken over their dispute
+    DisputeTakenByAdmin,
     /// For users trying to create a dispute on an order that is not in dispute
     DisputeCreationError,
     /// Generic not found
