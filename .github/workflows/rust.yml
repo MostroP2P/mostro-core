@@ -49,7 +49,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with: { cache-on-failure: true }
       - name: cargo test
-        run: cargo test --locked
+        run: cargo test
 
   # Prepare matrix of targets from archs file
   matrix:
@@ -97,7 +97,7 @@ jobs:
         run: cargo install cross --version 0.2.5
 
       - name: Build release
-        run: cross build --release --locked --target ${{ matrix.target }}
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Prepare conventional artifact name
         shell: bash
