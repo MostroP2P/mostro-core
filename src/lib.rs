@@ -158,6 +158,7 @@ mod test {
             CantDoReason::OutOfRangeSatsAmount,
             CantDoReason::IsNotYourDispute,
             CantDoReason::NotFound,
+            CantDoReason::InvalidFiatCurrency,
         ];
 
         for reason in reasons {
