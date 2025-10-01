@@ -54,6 +54,8 @@ pub enum CantDoReason {
     InvalidAction,
     /// Pending order exists
     PendingOrderExists,
+    /// Invalid fiat currency
+    InvalidFiatCurrency,
 }
 
 #[derive(Debug, PartialEq, Eq)]
