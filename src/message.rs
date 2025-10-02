@@ -78,6 +78,7 @@ pub enum Action {
     SendDm,
     TradePubkey,
     RestoreSession,
+    Orders,
 }
 
 impl fmt::Display for Action {
@@ -341,6 +342,10 @@ pub enum Payload {
     PaymentFailed(PaymentFailedInfo),
     /// Restore session data with orders and disputes
     RestoreData(RestoreSessionInfo),
+    /// IDs array
+    Ids(Vec<Uuid>),
+    /// Orders array
+    Orders(Vec<SmallOrder>),
 }
 
 #[allow(dead_code)]
@@ -462,6 +467,12 @@ impl MessageKind {
                     return false;
                 }
                 matches!(&self.payload, None | Some(Payload::RestoreData(_)))
+            }
+            Action::Orders => {
+                matches!(
+                    &self.payload,
+                    Some(Payload::Ids(_)) | Some(Payload::Orders(_))
+                )
             }
         }
     }

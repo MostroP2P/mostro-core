@@ -26,7 +26,7 @@ use mostro_core::prelude::*;
 
 You may be interested in contributing to Mostro. If you're looking for somewhere to start contributing, check out the [good first issue](https://github.com/MostroP2P/mostro-core/labels/good%20first%20issue) list.
 
-More info in our [contributing guide](contributing.md).
+More info in our [contributing guide](contributing.md) and the focused [Repository Guidelines](AGENTS.md) for agent contributors.
 
 ## Documentation
 
