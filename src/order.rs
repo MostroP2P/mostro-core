@@ -508,6 +508,19 @@ impl SmallOrder {
         }
         Ok(())
     }
+
+    /// Check if the fiat currency is accepted
+    pub fn check_fiat_currency(
+        &self,
+        fiat_currencies_accepted: &[String],
+    ) -> Result<(), CantDoReason> {
+        if !fiat_currencies_accepted.contains(&self.fiat_code)
+            && !fiat_currencies_accepted.is_empty()
+        {
+            return Err(CantDoReason::InvalidFiatCurrency);
+        }
+        Ok(())
+    }
 }
 
 impl From<Order> for SmallOrder {
