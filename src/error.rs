@@ -56,6 +56,8 @@ pub enum CantDoReason {
     PendingOrderExists,
     /// Invalid fiat currency
     InvalidFiatCurrency,
+    /// Too many requests
+    TooManyRequests,
 }
 
 #[derive(Debug, PartialEq, Eq)]

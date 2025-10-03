@@ -159,6 +159,7 @@ mod test {
             CantDoReason::IsNotYourDispute,
             CantDoReason::NotFound,
             CantDoReason::InvalidFiatCurrency,
+            CantDoReason::TooManyRequests,
         ];
 
         for reason in reasons {
