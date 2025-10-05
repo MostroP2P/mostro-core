@@ -78,6 +78,7 @@ pub enum Action {
     SendDm,
     TradePubkey,
     RestoreSession,
+    SynchUserTradeIndex,
     Orders,
 }
 
@@ -444,6 +445,7 @@ impl MessageKind {
             | Action::AdminAddSolver
             | Action::SendDm
             | Action::TradePubkey
+            | Action::SynchUserTradeIndex
             | Action::Canceled => {
                 if self.id.is_none() {
                     return false;
