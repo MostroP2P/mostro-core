@@ -78,7 +78,7 @@ pub enum Action {
     SendDm,
     TradePubkey,
     RestoreSession,
-    SynchUserTradeIndex,
+    LastTradeIndex,
     Orders,
 }
 
@@ -445,7 +445,6 @@ impl MessageKind {
             | Action::AdminAddSolver
             | Action::SendDm
             | Action::TradePubkey
-            | Action::SynchUserTradeIndex
             | Action::Canceled => {
                 if self.id.is_none() {
                     return false;
@@ -469,6 +468,12 @@ impl MessageKind {
                     return false;
                 }
                 matches!(&self.payload, None | Some(Payload::RestoreData(_)))
+            }
+            Action::LastTradeIndex => {
+                if self.id.is_none() || self.request_id.is_some() {
+                    return false;
+                }
+                matches!(&self.payload, None)
             }
             Action::Orders => {
                 matches!(
@@ -922,5 +927,47 @@ mod test {
             restore_data_message.inner_action(),
             Some(Action::RestoreSession)
         );
+    }
+
+    #[test]
+    fn test_last_trade_index_valid_message() {
+        let uuid = uuid!("11111111-2222-3333-4444-555555555555");
+        let kind = MessageKind::new(Some(uuid), None, Some(7), Action::LastTradeIndex, None);
+        let msg = Message::Restore(kind);
+
+        assert!(msg.verify());
+
+        // roundtrip
+        let json = msg.as_json().unwrap();
+        let decoded = Message::from_json(&json).unwrap();
+        assert!(decoded.verify());
+
+        // ensure the trade index is propagated
+        let inner = decoded.get_inner_message_kind();
+        assert_eq!(inner.trade_index(), 7);
+        assert_eq!(inner.has_trade_index(), (true, 7));
+    }
+
+    #[test]
+    fn test_last_trade_index_requires_id() {
+        // Missing id must fail validation for LastTradeIndex
+        let kind = MessageKind::new(None, Some(1), Some(5), Action::LastTradeIndex, None);
+        let msg = Message::Restore(kind);
+        assert!(!msg.verify());
+    }
+
+    #[test]
+    fn test_last_trade_index_with_payload_is_still_valid() {
+        // For this action, payload is not accepted
+        let uuid = uuid!("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        let kind = MessageKind::new(
+            Some(uuid),
+            None,
+            Some(3),
+            Action::LastTradeIndex,
+            Some(Payload::TextMessage("ignored".to_string())),
+        );
+        let msg = Message::Restore(kind);
+        assert!(!msg.verify());
     }
 }
