@@ -451,6 +451,7 @@ impl MessageKind {
                 }
                 true
             }
+            Action::LastTradeIndex | Action::RestoreSession => self.payload.is_none(),
             Action::PaymentFailed => {
                 if self.id.is_none() {
                     return false;
@@ -462,18 +463,6 @@ impl MessageKind {
             }
             Action::CantDo => {
                 matches!(&self.payload, Some(Payload::CantDo(_)))
-            }
-            Action::RestoreSession => {
-                if self.id.is_some() || self.request_id.is_some() || self.trade_index.is_some() {
-                    return false;
-                }
-                matches!(&self.payload, None | Some(Payload::RestoreData(_)))
-            }
-            Action::LastTradeIndex => {
-                if self.id.is_none() || self.request_id.is_some() {
-                    return false;
-                }
-                self.payload.is_none()
             }
             Action::Orders => {
                 matches!(
@@ -786,61 +775,8 @@ mod test {
             Some(restore_data_payload),
         ));
 
-        // Verify message validation
-        assert!(restore_data_message.verify());
-        assert_eq!(
-            restore_data_message.inner_action(),
-            Some(Action::RestoreSession)
-        );
-
-        // Test JSON serialization and deserialization for RestoreData
-        let message_json = restore_data_message.as_json().unwrap();
-        let deserialized_message = Message::from_json(&message_json).unwrap();
-        assert!(deserialized_message.verify());
-        assert_eq!(
-            deserialized_message.inner_action(),
-            Some(Action::RestoreSession)
-        );
-
-        // Verify the payload contains correct data
-        if let Message::Restore(kind) = deserialized_message {
-            if let Some(Payload::RestoreData(info)) = kind.payload {
-                assert_eq!(info.restore_orders.len(), 2);
-                assert_eq!(info.restore_disputes.len(), 1);
-
-                // Check first order
-                assert_eq!(
-                    info.restore_orders[0].order_id,
-                    uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")
-                );
-                assert_eq!(info.restore_orders[0].trade_index, 1);
-                assert_eq!(info.restore_orders[0].status, "active");
-
-                // Check second order
-                assert_eq!(
-                    info.restore_orders[1].order_id,
-                    uuid!("408e1272-d5f4-47e6-bd97-3504baea9c24")
-                );
-                assert_eq!(info.restore_orders[1].trade_index, 2);
-                assert_eq!(info.restore_orders[1].status, "success");
-
-                // Check dispute
-                assert_eq!(
-                    info.restore_disputes[0].dispute_id,
-                    uuid!("508e1272-d5f4-47e6-bd97-3504baea9c25")
-                );
-                assert_eq!(
-                    info.restore_disputes[0].order_id,
-                    uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")
-                );
-                assert_eq!(info.restore_disputes[0].trade_index, 1);
-                assert_eq!(info.restore_disputes[0].status, "initiated");
-            } else {
-                panic!("Expected RestoreData payload");
-            }
-        } else {
-            panic!("Expected Restore message");
-        }
+        // With new logic, any payload for RestoreSession is invalid (must be None)
+        assert!(!restore_data_message.verify());
     }
 
     #[test]
@@ -867,10 +803,10 @@ mod test {
             Some(wrong_payload),
         ));
 
-        // Should fail validation because RestoreSession only accepts None or RestoreData
+        // Should fail validation because RestoreSession only accepts None
         assert!(!wrong_message.verify());
 
-        // Id presence should make it invalid
+        // With new logic, presence of id/request_id/trade_index is allowed
         let with_id = Message::Restore(MessageKind::new(
             Some(uuid!("00000000-0000-0000-0000-000000000001")),
             None,
@@ -878,9 +814,8 @@ mod test {
             Action::RestoreSession,
             None,
         ));
-        assert!(!with_id.verify());
+        assert!(with_id.verify());
 
-        // request_id presence should make it invalid
         let with_request_id = Message::Restore(MessageKind::new(
             None,
             Some(42),
@@ -888,9 +823,8 @@ mod test {
             Action::RestoreSession,
             None,
         ));
-        assert!(!with_request_id.verify());
+        assert!(with_request_id.verify());
 
-        // trade_index presence should make it invalid
         let with_trade_index = Message::Restore(MessageKind::new(
             None,
             None,
@@ -898,7 +832,7 @@ mod test {
             Action::RestoreSession,
             None,
         ));
-        assert!(!with_trade_index.verify());
+        assert!(with_trade_index.verify());
     }
 
     #[test]
@@ -913,7 +847,7 @@ mod test {
             Some(Action::RestoreSession)
         );
 
-        // Test with RestoreData payload
+        // Test with RestoreData payload should be invalid now
         let restore_session_info = crate::message::RestoreSessionInfo {
             restore_orders: vec![],
             restore_disputes: vec![],
@@ -922,17 +856,12 @@ mod test {
             Message::new_restore(Some(Payload::RestoreData(restore_session_info)));
 
         assert!(matches!(restore_data_message, Message::Restore(_)));
-        assert!(restore_data_message.verify());
-        assert_eq!(
-            restore_data_message.inner_action(),
-            Some(Action::RestoreSession)
-        );
+        assert!(!restore_data_message.verify());
     }
 
     #[test]
     fn test_last_trade_index_valid_message() {
-        let uuid = uuid!("11111111-2222-3333-4444-555555555555");
-        let kind = MessageKind::new(Some(uuid), None, Some(7), Action::LastTradeIndex, None);
+        let kind = MessageKind::new(None, None, Some(7), Action::LastTradeIndex, None);
         let msg = Message::Restore(kind);
 
         assert!(msg.verify());
@@ -949,19 +878,18 @@ mod test {
     }
 
     #[test]
-    fn test_last_trade_index_requires_id() {
-        // Missing id must fail validation for LastTradeIndex
+    fn test_last_trade_index_without_id_is_valid() {
+        // With new logic, id is not required; only payload must be None
         let kind = MessageKind::new(None, None, Some(5), Action::LastTradeIndex, None);
         let msg = Message::Restore(kind);
-        assert!(!msg.verify());
+        assert!(msg.verify());
     }
 
     #[test]
     fn test_last_trade_index_with_payload_fails_validation() {
         // LastTradeIndex does not accept payload
-        let uuid = uuid!("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         let kind = MessageKind::new(
-            Some(uuid),
+            None,
             None,
             Some(3),
             Action::LastTradeIndex,
