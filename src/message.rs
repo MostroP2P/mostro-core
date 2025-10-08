@@ -473,7 +473,7 @@ impl MessageKind {
                 if self.id.is_none() || self.request_id.is_some() {
                     return false;
                 }
-                matches!(&self.payload, None)
+                self.payload.is_none()
             }
             Action::Orders => {
                 matches!(
