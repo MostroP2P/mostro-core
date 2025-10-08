@@ -957,8 +957,8 @@ mod test {
     }
 
     #[test]
-    fn test_last_trade_index_with_payload_is_still_valid() {
-        // For this action, payload is not accepted
+    fn test_last_trade_index_with_payload_fails_validation() {
+        // LastTradeIndex does not accept payload
         let uuid = uuid!("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
         let kind = MessageKind::new(
             Some(uuid),
