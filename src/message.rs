@@ -951,7 +951,7 @@ mod test {
     #[test]
     fn test_last_trade_index_requires_id() {
         // Missing id must fail validation for LastTradeIndex
-        let kind = MessageKind::new(None, Some(1), Some(5), Action::LastTradeIndex, None);
+        let kind = MessageKind::new(None, None, Some(5), Action::LastTradeIndex, None);
         let msg = Message::Restore(kind);
         assert!(!msg.verify());
     }
