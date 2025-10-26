@@ -320,7 +320,7 @@ pub struct RestoreSessionInfo {
 #[serde(rename_all = "snake_case")]
 pub enum Payload {
     /// Order
-    Order(SmallOrder),
+    Order(SmallOrder, Option<UserInfo>),
     /// Payment request
     PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
     /// Use to send a message to another user
@@ -405,7 +405,7 @@ impl MessageKind {
     /// Verify if is valid message
     pub fn verify(&self) -> bool {
         match &self.action {
-            Action::NewOrder => matches!(&self.payload, Some(Payload::Order(_))),
+            Action::NewOrder => matches!(&self.payload, Some(Payload::Order(_, _))),
             Action::PayInvoice | Action::AddInvoice => {
                 if self.id.is_none() {
                     return false;
@@ -478,7 +478,7 @@ impl MessageKind {
             return None;
         }
         match &self.payload {
-            Some(Payload::Order(o)) => Some(o),
+            Some(Payload::Order(o, _)) => Some(o),
             _ => None,
         }
     }
@@ -492,7 +492,7 @@ impl MessageKind {
         }
         match &self.payload {
             Some(Payload::PaymentRequest(_, pr, _)) => Some(pr.to_owned()),
-            Some(Payload::Order(ord)) => ord.buyer_invoice.to_owned(),
+            Some(Payload::Order(ord, _)) => ord.buyer_invoice.to_owned(),
             _ => None,
         }
     }
