@@ -322,7 +322,7 @@ pub enum Payload {
     /// Order
     Order(SmallOrder, Option<UserInfo>),
     /// Payment request
-    PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
+    PaymentRequest(Option<SmallOrder>, String, Option<Amount>, Option<UserInfo>),
     /// Use to send a message to another user
     TextMessage(String),
     /// Peer information
@@ -410,7 +410,7 @@ impl MessageKind {
                 if self.id.is_none() {
                     return false;
                 }
-                matches!(&self.payload, Some(Payload::PaymentRequest(_, _, _)))
+                matches!(&self.payload, Some(Payload::PaymentRequest(_, _, _, _)))
             }
             Action::TakeSell
             | Action::TakeBuy
@@ -491,7 +491,7 @@ impl MessageKind {
             return None;
         }
         match &self.payload {
-            Some(Payload::PaymentRequest(_, pr, _)) => Some(pr.to_owned()),
+            Some(Payload::PaymentRequest(_, pr, _, _)) => Some(pr.to_owned()),
             Some(Payload::Order(ord, _)) => ord.buyer_invoice.to_owned(),
             _ => None,
         }
@@ -502,7 +502,7 @@ impl MessageKind {
             return None;
         }
         match &self.payload {
-            Some(Payload::PaymentRequest(_, _, amount)) => *amount,
+            Some(Payload::PaymentRequest(_, _, amount, _)) => *amount,
             Some(Payload::Amount(amount)) => Some(*amount),
             _ => None,
         }
