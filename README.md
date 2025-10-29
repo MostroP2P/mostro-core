@@ -9,6 +9,29 @@ Mostro Core is a Rust-based library that provides peer-to-peer functionality for
 - [cargo-release](https://crates.io/crates/cargo-release) for releasing new versions
 - [git-cliff](https://crates.io/crates/git-cliff) for generating the changelog
 
+### Installing git-cliff
+
+git-cliff is used to automatically generate changelogs from git commits. You can install it using one of the following methods:
+
+#### Using Cargo (Recommended)
+```bash
+cargo install git-cliff
+```
+
+#### Using Package Managers
+- **Ubuntu/Debian**: `sudo apt install git-cliff`
+- **macOS (Homebrew)**: `brew install git-cliff`
+- **Arch Linux**: `sudo pacman -S git-cliff`
+- **Fedora**: `sudo dnf install git-cliff`
+
+#### Using Pre-built Binaries
+Download the latest release from the [git-cliff releases page](https://github.com/orhun/git-cliff/releases) and extract the binary to your PATH.
+
+#### Verify Installation
+```bash
+git cliff --version
+```
+
 ## Features
 
 - Peer-to-peer networking capabilities

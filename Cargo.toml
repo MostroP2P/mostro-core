@@ -26,7 +26,12 @@ sign-commit = true
 sign-tag = true
 # Use 'allow-branch' if you release from other branches. Check defaults if needed.
 allow-branch = ["main"]
-# Git cliff to generate the changelog
+# Generate CHANGELOG.md before creating the release tag (only during actual release, not dry-run)
+pre-release-hook = [
+  "sh",
+  "-c",
+  "GITHUB_TOKEN=\"${GITHUB_TOKEN:-}\" git cliff --unreleased --github-repo MostroP2P/mostro-core -o CHANGELOG.md --tag {{version}} && if [ \"$DRY_RUN\" != \"true\" ]; then git diff --quiet CHANGELOG.md || git add CHANGELOG.md && git commit -m \"Update CHANGELOG for version {{version}}\"; else echo \"DRY RUN: Skip git add and commit\"; fi",
+]
 
 [dependencies]
 chrono = "0.4.38"
@@ -52,13 +57,13 @@ sqlx-crud = { version = "0.4.0", features = [
 wasm-bindgen = { version = "0.2.92", optional = true }
 nostr-sdk = "0.43.0"
 bitcoin = "0.32.7"
-bitcoin_hashes = "0.16.0"
+bitcoin_hashes = "0.17.0"
 rand = "0.9.2"
 argon2 = "0.5"
 chacha20poly1305 = "0.10"
 base64 = "0.22.1"
 secrecy = "0.10.3"
-zeroize = "1.8.1"
+zeroize = "1.8.2"
 blake3 = "1.8.2"
 
 [features]
