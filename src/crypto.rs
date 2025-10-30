@@ -7,7 +7,7 @@ use argon2::{
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use chacha20poly1305::{
     aead::{Aead, KeyInit},
-    AeadCore, ChaCha20Poly1305,
+    AeadCore, ChaCha20Poly1305, Key,
 };
 use secrecy::*;
 use std::collections::{HashMap, VecDeque};
@@ -135,10 +135,7 @@ impl CryptoUtils {
             ));
         }
         // Create cipher
-        let key_array: [u8; 32] = key
-            .try_into()
-            .map_err(|_| ServiceError::EncryptionError("Invalid key length".to_string()))?;
-        let cipher = ChaCha20Poly1305::new(&key_array.into());
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(key));
         // Generate nonce
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng); // 96-bits; unique per message
 
@@ -196,7 +193,7 @@ impl CryptoUtils {
         };
 
         // Create cipher
-        let cipher = ChaCha20Poly1305::new(&key_bytes.into());
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&key_bytes));
 
         // Decrypt the data
         let decrypted = cipher
