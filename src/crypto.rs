@@ -135,10 +135,7 @@ impl CryptoUtils {
             ));
         }
         // Create cipher
-        let key_array: [u8; 32] = key
-            .try_into()
-            .map_err(|_| ServiceError::EncryptionError("Invalid key length".to_string()))?;
-        let cipher = ChaCha20Poly1305::new(&key_array.into());
+        let cipher = ChaCha20Poly1305::new(key.into());
         // Generate nonce
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng); // 96-bits; unique per message
 
