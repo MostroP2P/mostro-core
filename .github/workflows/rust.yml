@@ -92,7 +92,7 @@ jobs:
   # Create release
   release:
     runs-on: ubuntu-latest
-    needs: [changelog, build]
+    needs: [changelog, build, publish]
     permissions:
       contents: write
     steps:
