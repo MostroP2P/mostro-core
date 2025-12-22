@@ -559,8 +559,8 @@ impl From<Order> for SmallOrder {
             buyer_trade_pubkey,
             seller_trade_pubkey,
             buyer_invoice,
-            created_at: None,
-            expires_at: None,
+            created_at: Some(order.created_at),
+            expires_at: Some(order.expires_at),
         }
     }
 }
