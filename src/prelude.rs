@@ -21,7 +21,9 @@ pub use MostroError::*;
 pub const MAX_RATING: u8 = 5;
 // Min rating for a user
 pub const MIN_RATING: u8 = 1;
-// All events broadcasted by Mostro daemon are Parameterized Replaceable Events
-// and the event kind must be between 30000 and 39999
-pub const NOSTR_REPLACEABLE_EVENT_KIND: u16 = 38383;
+// Addressable event kind must be between 30000 and 39999 (NIP-1)
+pub const NOSTR_ORDER_EVENT_KIND: u16 = 38383;
+pub const NOSTR_RATING_EVENT_KIND: u16 = 38384;
+pub const NOSTR_INFO_EVENT_KIND: u16 = 38385;
+pub const NOSTR_DISPUTE_EVENT_KIND: u16 = 38386;
 pub(crate) const PROTOCOL_VER: u8 = 1;
