@@ -276,6 +276,8 @@ pub struct RestoredDisputeHelper {
     pub master_seller_pubkey: Option<String>,
     pub trade_index_buyer: Option<i64>,
     pub trade_index_seller: Option<i64>,
+    pub buyer_dispute: bool,
+    pub seller_dispute: bool,
 }
 
 /// Information about the order to be restored in the new client
@@ -302,6 +304,8 @@ pub struct RestoredDisputesInfo {
     pub trade_index: i64,
     /// Status of the dispute
     pub status: String,
+    /// Who initiated the dispute: "buyer", "seller", or null if unknown
+    pub initiator: Option<String>,
 }
 
 /// Restore session user info
@@ -759,6 +763,7 @@ mod test {
             order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
             trade_index: 1,
             status: "initiated".to_string(),
+            initiator: Some("buyer".to_string()),
         }];
 
         let restore_session_info = crate::message::RestoreSessionInfo {
