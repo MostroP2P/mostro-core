@@ -276,7 +276,11 @@ pub struct RestoredDisputeHelper {
     pub master_seller_pubkey: Option<String>,
     pub trade_index_buyer: Option<i64>,
     pub trade_index_seller: Option<i64>,
+    /// Indicates whether the buyer has initiated a dispute for this order.
+    /// Used in conjunction with `seller_dispute` to derive the `initiator` field in `RestoredDisputesInfo` after decryption.
     pub buyer_dispute: bool,
+    /// Indicates whether the seller has initiated a dispute for this order.
+    /// Used in conjunction with `buyer_dispute` to derive the `initiator` field in `RestoredDisputesInfo` after decryption.
     pub seller_dispute: bool,
 }
 
@@ -292,6 +296,14 @@ pub struct RestoredOrdersInfo {
     pub status: String,
 }
 
+/// Enum representing who initiated a dispute
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum DisputeInitiator {
+    Buyer,
+    Seller,
+}
+
 /// Information about the dispute to be restored in the new client
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -304,8 +316,8 @@ pub struct RestoredDisputesInfo {
     pub trade_index: i64,
     /// Status of the dispute
     pub status: String,
-    /// Who initiated the dispute: "buyer", "seller", or null if unknown
-    pub initiator: Option<String>,
+    /// Who initiated the dispute: Buyer, Seller, or null if unknown
+    pub initiator: Option<DisputeInitiator>,
 }
 
 /// Restore session user info
@@ -758,13 +770,29 @@ mod test {
             },
         ];
 
-        let restored_disputes = vec![crate::message::RestoredDisputesInfo {
-            dispute_id: uuid!("508e1272-d5f4-47e6-bd97-3504baea9c25"),
-            order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
-            trade_index: 1,
-            status: "initiated".to_string(),
-            initiator: Some("buyer".to_string()),
-        }];
+        let restored_disputes = vec![
+            crate::message::RestoredDisputesInfo {
+                dispute_id: uuid!("508e1272-d5f4-47e6-bd97-3504baea9c25"),
+                order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
+                trade_index: 1,
+                status: "initiated".to_string(),
+                initiator: Some(crate::message::DisputeInitiator::Buyer),
+            },
+            crate::message::RestoredDisputesInfo {
+                dispute_id: uuid!("608e1272-d5f4-47e6-bd97-3504baea9c26"),
+                order_id: uuid!("408e1272-d5f4-47e6-bd97-3504baea9c24"),
+                trade_index: 2,
+                status: "in_progress".to_string(),
+                initiator: None,
+            },
+            crate::message::RestoredDisputesInfo {
+                dispute_id: uuid!("508e1272-d5f4-47e6-bd97-3504baea9c25"),
+                order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
+                trade_index: 1,
+                status: "initiated".to_string(),
+                initiator: Some(crate::message::DisputeInitiator::Seller),
+            },
+        ];
 
         let restore_session_info = crate::message::RestoreSessionInfo {
             restore_orders: restored_orders.clone(),
@@ -782,6 +810,29 @@ mod test {
 
         // With new logic, any payload for RestoreSession is invalid (must be None)
         assert!(!restore_data_message.verify());
+
+        // Verify serialization/deserialization of RestoreData payload with all initiator cases
+        let message_json = restore_data_message.as_json().unwrap();
+        let deserialized_restore_message = Message::from_json(&message_json).unwrap();
+
+        if let Message::Restore(kind) = deserialized_restore_message {
+            if let Some(Payload::RestoreData(session_info)) = kind.payload {
+                assert_eq!(session_info.restore_disputes.len(), 3);
+                assert_eq!(
+                    session_info.restore_disputes[0].initiator,
+                    Some(crate::message::DisputeInitiator::Buyer)
+                );
+                assert_eq!(session_info.restore_disputes[1].initiator, None);
+                assert_eq!(
+                    session_info.restore_disputes[2].initiator,
+                    Some(crate::message::DisputeInitiator::Seller)
+                );
+            } else {
+                panic!("Expected RestoreData payload");
+            }
+        } else {
+            panic!("Expected Restore message");
+        }
     }
 
     #[test]
@@ -903,4 +954,63 @@ mod test {
         let msg = Message::Restore(kind);
         assert!(!msg.verify());
     }
+
+    #[test]
+    fn test_restored_dispute_helper_serialization_roundtrip() {
+        use crate::message::RestoredDisputeHelper;
+
+        let helper = RestoredDisputeHelper {
+            dispute_id: uuid!("508e1272-d5f4-47e6-bd97-3504baea9c25"),
+            order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
+            dispute_status: "initiated".to_string(),
+            master_buyer_pubkey: Some("npub1buyerkey".to_string()),
+            master_seller_pubkey: Some("npub1sellerkey".to_string()),
+            trade_index_buyer: Some(1),
+            trade_index_seller: Some(2),
+            buyer_dispute: true,
+            seller_dispute: false,
+        };
+
+        let json = serde_json::to_string(&helper).unwrap();
+        let deserialized: RestoredDisputeHelper = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.dispute_id, helper.dispute_id);
+        assert_eq!(deserialized.order_id, helper.order_id);
+        assert_eq!(deserialized.dispute_status, helper.dispute_status);
+        assert_eq!(deserialized.master_buyer_pubkey, helper.master_buyer_pubkey);
+        assert_eq!(
+            deserialized.master_seller_pubkey,
+            helper.master_seller_pubkey
+        );
+        assert_eq!(deserialized.trade_index_buyer, helper.trade_index_buyer);
+        assert_eq!(deserialized.trade_index_seller, helper.trade_index_seller);
+        assert_eq!(deserialized.buyer_dispute, helper.buyer_dispute);
+        assert_eq!(deserialized.seller_dispute, helper.seller_dispute);
+
+        let helper_seller_dispute = RestoredDisputeHelper {
+            dispute_id: uuid!("608e1272-d5f4-47e6-bd97-3504baea9c26"),
+            order_id: uuid!("408e1272-d5f4-47e6-bd97-3504baea9c24"),
+            dispute_status: "in_progress".to_string(),
+            master_buyer_pubkey: None,
+            master_seller_pubkey: None,
+            trade_index_buyer: None,
+            trade_index_seller: None,
+            buyer_dispute: false,
+            seller_dispute: true,
+        };
+
+        let json_seller = serde_json::to_string(&helper_seller_dispute).unwrap();
+        let deserialized_seller: RestoredDisputeHelper = serde_json::from_str(&json_seller).unwrap();
+
+        assert_eq!(deserialized_seller.dispute_id, helper_seller_dispute.dispute_id);
+        assert_eq!(deserialized_seller.order_id, helper_seller_dispute.order_id);
+        assert_eq!(deserialized_seller.dispute_status, helper_seller_dispute.dispute_status);
+        assert_eq!(deserialized_seller.master_buyer_pubkey, None);
+        assert_eq!(deserialized_seller.master_seller_pubkey, None);
+        assert_eq!(deserialized_seller.trade_index_buyer, None);
+        assert_eq!(deserialized_seller.trade_index_seller, None);
+        assert!(!deserialized_seller.buyer_dispute);
+        assert!(deserialized_seller.seller_dispute);
+    }
+
 }
