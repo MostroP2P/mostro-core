@@ -297,8 +297,10 @@ pub struct RestoredOrdersInfo {
 }
 
 /// Enum representing who initiated a dispute
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "sqlx", sqlx(type_name = "TEXT", rename_all = "lowercase"))]
 pub enum DisputeInitiator {
     Buyer,
     Seller,
@@ -1000,11 +1002,18 @@ mod test {
         };
 
         let json_seller = serde_json::to_string(&helper_seller_dispute).unwrap();
-        let deserialized_seller: RestoredDisputeHelper = serde_json::from_str(&json_seller).unwrap();
+        let deserialized_seller: RestoredDisputeHelper =
+            serde_json::from_str(&json_seller).unwrap();
 
-        assert_eq!(deserialized_seller.dispute_id, helper_seller_dispute.dispute_id);
+        assert_eq!(
+            deserialized_seller.dispute_id,
+            helper_seller_dispute.dispute_id
+        );
         assert_eq!(deserialized_seller.order_id, helper_seller_dispute.order_id);
-        assert_eq!(deserialized_seller.dispute_status, helper_seller_dispute.dispute_status);
+        assert_eq!(
+            deserialized_seller.dispute_status,
+            helper_seller_dispute.dispute_status
+        );
         assert_eq!(deserialized_seller.master_buyer_pubkey, None);
         assert_eq!(deserialized_seller.master_seller_pubkey, None);
         assert_eq!(deserialized_seller.trade_index_buyer, None);
@@ -1012,5 +1021,4 @@ mod test {
         assert!(!deserialized_seller.buyer_dispute);
         assert!(deserialized_seller.seller_dispute);
     }
-
 }
