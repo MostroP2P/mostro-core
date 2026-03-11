@@ -1,6 +1,5 @@
 use crate::prelude::*;
 use nostr_sdk::{PublicKey, Timestamp};
-use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
@@ -301,23 +300,17 @@ impl Order {
         }
     }
     /// Get the master buyer pubkey
-    pub fn get_master_buyer_pubkey(
-        &self,
-        password: Option<&SecretString>,
-    ) -> Result<String, ServiceError> {
+    pub fn get_master_buyer_pubkey(&self) -> Result<PublicKey, ServiceError> {
         if let Some(pk) = self.master_buyer_pubkey.as_ref() {
-            CryptoUtils::decrypt_data(pk.clone(), password).map_err(|_| ServiceError::InvalidPubkey)
+            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
         } else {
             Err(ServiceError::InvalidPubkey)
         }
     }
     /// Get the master seller pubkey
-    pub fn get_master_seller_pubkey(
-        &self,
-        password: Option<&SecretString>,
-    ) -> Result<String, ServiceError> {
+    pub fn get_master_seller_pubkey(&self) -> Result<PublicKey, ServiceError> {
         if let Some(pk) = self.master_seller_pubkey.as_ref() {
-            CryptoUtils::decrypt_data(pk.clone(), password).map_err(|_| ServiceError::InvalidPubkey)
+            PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
         } else {
             Err(ServiceError::InvalidPubkey)
         }
@@ -350,24 +343,21 @@ impl Order {
     /// Check if a user is creating a full privacy order so he doesn't to have reputation
     /// compare master keys with the order keys if they are the same the user is in full privacy mode
     /// otherwise the user is not in normal mode and has a reputation
-    pub fn is_full_privacy_order(
-        &self,
-        password: Option<&SecretString>,
-    ) -> Result<(Option<String>, Option<String>), ServiceError> {
+    pub fn is_full_privacy_order(&self) -> Result<(Option<String>, Option<String>), ServiceError> {
         let (mut normal_buyer_idkey, mut normal_seller_idkey) = (None, None);
 
         // Get master pubkeys to get users data from db
-        let master_buyer_pubkey = self.get_master_buyer_pubkey(password).ok();
-        let master_seller_pubkey = self.get_master_seller_pubkey(password).ok();
+        let master_buyer_pubkey = self.get_master_buyer_pubkey().ok();
+        let master_seller_pubkey = self.get_master_seller_pubkey().ok();
 
         // Check if the buyer is in full privacy mode
-        if self.buyer_pubkey.as_ref() != master_buyer_pubkey.as_ref() {
-            normal_buyer_idkey = master_buyer_pubkey;
+        if self.buyer_pubkey != master_buyer_pubkey.map(|pk| pk.to_string()) {
+            normal_buyer_idkey = master_buyer_pubkey.map(|pk| pk.to_string());
         }
 
         // Check if the seller is in full privacy mode
-        if self.seller_pubkey.as_ref() != master_seller_pubkey.as_ref() {
-            normal_seller_idkey = master_seller_pubkey;
+        if self.seller_pubkey != master_seller_pubkey.map(|pk| pk.to_string()) {
+            normal_seller_idkey = master_seller_pubkey.map(|pk| pk.to_string());
         }
 
         Ok((normal_buyer_idkey, normal_seller_idkey))
