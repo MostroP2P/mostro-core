@@ -264,7 +264,6 @@ pub struct RestoredOrderHelper {
 }
 
 /// Information about the dispute to be restored in the new client.
-/// Helper struct to decrypt the dispute information in case of encrypted database.
 /// Note: field names are chosen to match expected SQL SELECT aliases in mostrod (e.g. `status` aliased as `dispute_status`).
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -277,10 +276,10 @@ pub struct RestoredDisputeHelper {
     pub trade_index_buyer: Option<i64>,
     pub trade_index_seller: Option<i64>,
     /// Indicates whether the buyer has initiated a dispute for this order.
-    /// Used in conjunction with `seller_dispute` to derive the `initiator` field in `RestoredDisputesInfo` after decryption.
+    /// Used in conjunction with `seller_dispute` to derive the `initiator` field in `RestoredDisputesInfo`.
     pub buyer_dispute: bool,
     /// Indicates whether the seller has initiated a dispute for this order.
-    /// Used in conjunction with `buyer_dispute` to derive the `initiator` field in `RestoredDisputesInfo` after decryption.
+    /// Used in conjunction with `buyer_dispute` to derive the `initiator` field in `RestoredDisputesInfo`.
     pub seller_dispute: bool,
 }
 
