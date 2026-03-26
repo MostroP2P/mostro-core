@@ -832,11 +832,20 @@ mod test {
                     session_info.restore_disputes[0].initiator,
                     Some(crate::message::DisputeInitiator::Buyer)
                 );
+                assert!(session_info.restore_disputes[0].solver_pubkey.is_none());
                 assert_eq!(session_info.restore_disputes[1].initiator, None);
+                assert_eq!(
+                    session_info.restore_disputes[1].solver_pubkey,
+                    Some(
+                        "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"
+                            .to_string()
+                    )
+                );
                 assert_eq!(
                     session_info.restore_disputes[2].initiator,
                     Some(crate::message::DisputeInitiator::Seller)
                 );
+                assert!(session_info.restore_disputes[2].solver_pubkey.is_none());
             } else {
                 panic!("Expected RestoreData payload");
             }
@@ -997,6 +1006,7 @@ mod test {
         assert_eq!(deserialized.trade_index_seller, helper.trade_index_seller);
         assert_eq!(deserialized.buyer_dispute, helper.buyer_dispute);
         assert_eq!(deserialized.seller_dispute, helper.seller_dispute);
+        assert_eq!(deserialized.solver_pubkey, helper.solver_pubkey);
 
         let helper_seller_dispute = RestoredDisputeHelper {
             dispute_id: uuid!("608e1272-d5f4-47e6-bd97-3504baea9c26"),
@@ -1032,5 +1042,9 @@ mod test {
         assert_eq!(deserialized_seller.trade_index_seller, None);
         assert!(!deserialized_seller.buyer_dispute);
         assert!(deserialized_seller.seller_dispute);
+        assert_eq!(
+            deserialized_seller.solver_pubkey,
+            helper_seller_dispute.solver_pubkey
+        );
     }
 }
