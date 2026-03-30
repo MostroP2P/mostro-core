@@ -1,10 +1,14 @@
 # Mostro Core
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Rust Version](https://img.shields.io/badge/rust-1.90.0%2B-blue.svg)](https://www.rust-lang.org)
+[![Version](https://img.shields.io/crates/v/mostro-core)](https://crates.io/crates/mostro-core)
+
 Mostro Core is a Rust-based library that provides peer-to-peer functionality for decentralized applications. It serves as the foundation for building Mostro daemon.
 
 ## Requirements
 
-- Rust 1.86.0 or later
+- Rust 1.90.0 or later
 - Cargo (Rust's package manager)
 - [cargo-release](https://crates.io/crates/cargo-release) for releasing new versions
 - [git-cliff](https://crates.io/crates/git-cliff) for generating the changelog
