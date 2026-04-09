@@ -186,4 +186,73 @@ mod test {
         assert!(message.verify());
         assert_eq!(message.as_json().unwrap(), cant_do.as_json().unwrap());
     }
+
+    // === check_fiat_amount tests ===
+
+    #[test]
+    fn test_check_fiat_amount_valid() {
+        // id, kind, status, amount, fiat_code, min_amount, max_amount, fiat_amount, payment_method, premium, buyer_pubkey, seller_pubkey, buyer_invoice, created_at, expires_at
+        let order = SmallOrder::new(
+            None, None, None, 100, "VES".to_string(), None, None, 500, "Bank".to_string(), 1,
+            None, None, None, None, None,
+        );
+        assert!(order.check_fiat_amount().is_ok());
+    }
+
+    #[test]
+    fn test_check_fiat_amount_zero() {
+        let order = SmallOrder::new(
+            None, None, None, 100, "VES".to_string(), None, None, 0, "Bank".to_string(), 1,
+            None, None, None, None, None,
+        );
+        let result = order.check_fiat_amount();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), CantDoReason::InvalidAmount);
+    }
+
+    #[test]
+    fn test_check_fiat_amount_negative() {
+        let order = SmallOrder::new(
+            None, None, None, 100, "VES".to_string(), None, None, -100, "Bank".to_string(), 1,
+            None, None, None, None, None,
+        );
+        let result = order.check_fiat_amount();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), CantDoReason::InvalidAmount);
+    }
+
+    // === check_amount tests ===
+
+    #[test]
+    fn test_check_amount_valid() {
+        // amount = 100000 (positive, valid sats)
+        let order = SmallOrder::new(
+            None, None, None, 100000, "VES".to_string(), None, None, 500, "Bank".to_string(), 0,
+            None, None, None, None, None,
+        );
+        assert!(order.check_amount().is_ok());
+    }
+
+    #[test]
+    fn test_check_amount_zero() {
+        // amount = 0 is valid (seller sets exact sats amount)
+        let order = SmallOrder::new(
+            None, None, None, 0, "VES".to_string(), None, None, 500, "Bank".to_string(), 0,
+            None, None, None, None, None,
+        );
+        assert!(order.check_amount().is_ok());
+    }
+
+    #[test]
+    fn test_check_amount_negative() {
+        // amount = -1000 (negative, invalid)
+        let order = SmallOrder::new(
+            None, None, None, -1000, "VES".to_string(), None, None, 500, "Bank".to_string(), 0,
+            None, None, None, None, None,
+        );
+        let result = order.check_amount();
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), CantDoReason::InvalidAmount);
+    }
+
 }

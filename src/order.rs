@@ -475,6 +475,22 @@ impl SmallOrder {
             self.amount.to_string()
         }
     }
+    /// Check if fiat_amount is positive
+    pub fn check_fiat_amount(&self) -> Result<(), CantDoReason> {
+        if self.fiat_amount <= 0 {
+            return Err(CantDoReason::InvalidAmount);
+        }
+        Ok(())
+    }
+
+    /// Check if amount (sats) is non-negative when explicitly set
+    pub fn check_amount(&self) -> Result<(), CantDoReason> {
+        if self.amount < 0 {
+            return Err(CantDoReason::InvalidAmount);
+        }
+        Ok(())
+    }
+
     /// Check if the order has a zero amount and a premium or fiat amount
     pub fn check_zero_amount_with_premium(&self) -> Result<(), CantDoReason> {
         let premium = (self.premium != 0).then_some(self.premium);
@@ -485,6 +501,7 @@ impl SmallOrder {
         }
         Ok(())
     }
+
     /// Check if the order is a range order and if the amount is zero
     pub fn check_range_order_limits(&self, amounts: &mut Vec<i64>) -> Result<(), CantDoReason> {
         // Check if the min and max amount are valid and update the vector
