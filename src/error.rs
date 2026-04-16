@@ -44,6 +44,8 @@ pub enum CantDoReason {
     IsNotYourDispute,
     /// For solvers when admin has taken over their dispute
     DisputeTakenByAdmin,
+    /// For callers that are authenticated but do not have enough permissions
+    NotAuthorized,
     /// For users trying to create a dispute on an order that is not in dispute
     DisputeCreationError,
     /// Generic not found
