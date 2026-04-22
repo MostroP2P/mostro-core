@@ -87,9 +87,10 @@ pub async fn wrap_message(
             .map_err(|_| MostroError::MostroInternalErr(ServiceError::MessageSerializationError))?
     };
 
-    let rumor = EventBuilder::text_note(content)
-        .pow(opts.pow)
-        .build(trade_keys.public_key());
+    // PoW only applies to the outer GiftWrap (per WrapOptions docs); the
+    // rumor is encrypted inside the seal and never published on its own,
+    // so mining its event id would burn CPU for nothing.
+    let rumor = EventBuilder::text_note(content).build(trade_keys.public_key());
 
     let seal: Event = EventBuilder::seal(trade_keys, &receiver, rumor)
         .await
@@ -172,7 +173,25 @@ pub async fn unwrap_message(
         serde_json::from_str(&unwrapped.rumor.content)
             .map_err(|_| MostroError::MostroInternalErr(ServiceError::MessageSerializationError))?;
 
-    let signature = sig_str.as_deref().and_then(|s| Signature::from_str(s).ok());
+    let signature = match sig_str {
+        Some(s) => {
+            let sig = Signature::from_str(&s).map_err(|e| {
+                MostroError::MostroInternalErr(ServiceError::UnexpectedError(format!(
+                    "malformed rumor signature: {e}"
+                )))
+            })?;
+            let message_json = message.as_json().map_err(MostroError::MostroInternalErr)?;
+            if !Message::verify_signature(message_json, unwrapped.sender, sig) {
+                return Err(MostroError::MostroInternalErr(
+                    ServiceError::UnexpectedError(
+                        "rumor signature does not verify against sender".to_string(),
+                    ),
+                ));
+            }
+            Some(sig)
+        }
+        None => None,
+    };
 
     Ok(Some(UnwrappedMessage {
         message,
@@ -340,6 +359,67 @@ mod tests {
         assert!(
             matches!(result, Err(MostroError::MostroInternalErr(_))),
             "expected Err for corrupted gift wrap, got {result:?}",
+        );
+    }
+
+    // Build a GiftWrap by hand with a custom inner rumor tuple so tests
+    // can inject a malformed or wrong-signature payload that `wrap_message`
+    // would never emit.
+    async fn wrap_with_raw_inner(
+        trade_keys: &Keys,
+        receiver: PublicKey,
+        inner: (&Message, Option<String>),
+    ) -> Event {
+        let content = serde_json::to_string(&inner).unwrap();
+        let rumor = EventBuilder::text_note(content).build(trade_keys.public_key());
+        let seal = EventBuilder::seal(trade_keys, &receiver, rumor)
+            .await
+            .unwrap()
+            .sign(trade_keys)
+            .await
+            .unwrap();
+        gift_wrap_from_seal_with_pow(&seal, receiver, 0, None).unwrap()
+    }
+
+    #[tokio::test]
+    async fn unwrap_with_malformed_signature_errors() {
+        let trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+        let msg = sample_order_message(Some(1));
+
+        let wrapped = wrap_with_raw_inner(
+            &trade_keys,
+            receiver_keys.public_key(),
+            (&msg, Some("not-a-hex-signature".to_string())),
+        )
+        .await;
+
+        let result = unwrap_message(&wrapped, &receiver_keys).await;
+        assert!(
+            matches!(result, Err(MostroError::MostroInternalErr(_))),
+            "malformed signature must surface as Err, got {result:?}",
+        );
+    }
+
+    #[tokio::test]
+    async fn unwrap_with_signature_for_other_content_errors() {
+        let trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+        let msg = sample_order_message(Some(1));
+        // Well-formed signature, but over a completely different payload.
+        let bogus = Message::sign("not the real message".to_string(), &trade_keys);
+
+        let wrapped = wrap_with_raw_inner(
+            &trade_keys,
+            receiver_keys.public_key(),
+            (&msg, Some(bogus.to_string())),
+        )
+        .await;
+
+        let result = unwrap_message(&wrapped, &receiver_keys).await;
+        assert!(
+            matches!(result, Err(MostroError::MostroInternalErr(_))),
+            "non-verifying signature must surface as Err, got {result:?}",
         );
     }
 
