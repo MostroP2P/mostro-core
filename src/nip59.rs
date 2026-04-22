@@ -1,0 +1,466 @@
+//! NIP-59 GiftWrap transport for Mostro messages.
+//!
+//! Every message exchanged with a Mostro node travels through the same
+//! pipeline:
+//!
+//! ```text
+//! Message -> JSON((Message, Option<Signature>)) -> Rumor -> Seal -> GiftWrap
+//! ```
+//!
+//! This module centralizes wrap/unwrap so clients do not need to reimplement
+//! NIP-59 glue themselves. It does not manage relays, subscriptions, waiters
+//! or persistence — the returned `Event` is ready to publish, and the caller
+//! decides how to do so.
+
+use std::str::FromStr;
+
+use crate::message::{Action, Message, Payload};
+use crate::prelude::{CantDoReason, MostroError, ServiceError};
+use nostr_sdk::nips::{nip44, nip59};
+use nostr_sdk::prelude::*;
+
+/// Options controlling how a Mostro message is wrapped.
+#[derive(Debug, Clone)]
+pub struct WrapOptions {
+    /// NIP-13 proof-of-work difficulty applied to the outer GiftWrap event.
+    pub pow: u8,
+    /// Optional expiration tag for the outer GiftWrap event.
+    pub expiration: Option<Timestamp>,
+    /// When true the inner rumor content is `(Message, Some(Signature))`,
+    /// with the signature produced from the JSON of `Message` using
+    /// `trade_keys`. When false the content is `(Message, None)`. Traffic
+    /// to a Mostro node always uses `true`.
+    pub signed: bool,
+}
+
+impl Default for WrapOptions {
+    fn default() -> Self {
+        Self {
+            pow: 0,
+            expiration: None,
+            signed: true,
+        }
+    }
+}
+
+/// A Mostro message recovered from an incoming GiftWrap, plus metadata from
+/// the outer envelopes.
+#[derive(Debug, Clone)]
+pub struct UnwrappedMessage {
+    /// The logical Mostro message carried inside the rumor.
+    pub message: Message,
+    /// Signature of the JSON-serialized `Message`, produced with the sender's
+    /// trade keys. Present only when the sender set `signed = true`.
+    pub signature: Option<Signature>,
+    /// Rumor author (the sender's trade public key).
+    pub sender: PublicKey,
+    /// Rumor `created_at` timestamp.
+    pub created_at: Timestamp,
+}
+
+/// Build a GiftWrap event (`kind: 1059`) ready to be published to a relay.
+///
+/// * `message` — the Mostro message to send.
+/// * `trade_keys` — per-trade keys. Author of the rumor, signer of the Seal,
+///   and signer of the inner tuple signature when `opts.signed == true`.
+/// * `receiver` — the Mostro node public key.
+/// * `opts` — wrap options (PoW, expiration, signed).
+///
+/// `nostr-sdk` 0.44 enforces that the rumor author equals the seal signer
+/// (NIP-59 `SenderMismatch`), so both layers are signed with `trade_keys`.
+/// The inner tuple signature (produced with `trade_keys`) is what allows
+/// Mostro to cryptographically bind the message to the trade identity.
+pub async fn wrap_message(
+    message: &Message,
+    trade_keys: &Keys,
+    receiver: PublicKey,
+    opts: WrapOptions,
+) -> Result<Event, MostroError> {
+    let message_json = message.as_json().map_err(MostroError::MostroInternalErr)?;
+
+    let content = if opts.signed {
+        let sig = Message::sign(message_json, trade_keys);
+        serde_json::to_string(&(message, Some(sig.to_string())))
+            .map_err(|_| MostroError::MostroInternalErr(ServiceError::MessageSerializationError))?
+    } else {
+        serde_json::to_string(&(message, Option::<String>::None))
+            .map_err(|_| MostroError::MostroInternalErr(ServiceError::MessageSerializationError))?
+    };
+
+    let rumor = EventBuilder::text_note(content)
+        .pow(opts.pow)
+        .build(trade_keys.public_key());
+
+    let seal: Event = EventBuilder::seal(trade_keys, &receiver, rumor)
+        .await
+        .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?
+        .sign(trade_keys)
+        .await
+        .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?;
+
+    gift_wrap_from_seal_with_pow(&seal, receiver, opts.pow, opts.expiration)
+}
+
+/// Wrap an already built Seal into a NIP-59 GiftWrap with optional PoW and
+/// expiration. The outer event is signed with a freshly generated ephemeral
+/// key and carries a mandatory `p` tag pointing at `receiver`.
+fn gift_wrap_from_seal_with_pow(
+    seal: &Event,
+    receiver: PublicKey,
+    pow: u8,
+    expiration: Option<Timestamp>,
+) -> Result<Event, MostroError> {
+    if seal.kind != Kind::Seal {
+        return Err(MostroError::MostroInternalErr(
+            ServiceError::UnexpectedError("expected Seal kind".to_string()),
+        ));
+    }
+
+    let ephemeral = Keys::generate();
+    let encrypted = nip44::encrypt(
+        ephemeral.secret_key(),
+        &receiver,
+        seal.as_json(),
+        nip44::Version::default(),
+    )
+    .map_err(|e| MostroError::MostroInternalErr(ServiceError::EncryptionError(e.to_string())))?;
+
+    let mut tags: Vec<Tag> = Vec::new();
+    if let Some(exp) = expiration {
+        tags.push(Tag::expiration(exp));
+    }
+    tags.push(Tag::public_key(receiver));
+
+    EventBuilder::new(Kind::GiftWrap, encrypted)
+        .tags(tags)
+        .custom_created_at(random_past_timestamp())
+        .pow(pow)
+        .sign_with_keys(&ephemeral)
+        .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
+}
+
+/// Random timestamp in the recent past, per NIP-59 recommendation to blur
+/// real send time. Range: up to two days in the past.
+fn random_past_timestamp() -> Timestamp {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default();
+    // Deterministic-enough jitter sourced from the ephemeral key generation
+    // is not available here; use a pseudo-random seconds offset in [0, 172800).
+    let jitter = (Timestamp::now().as_secs() ^ now).rem_euclid(172_800);
+    Timestamp::from_secs(now.saturating_sub(jitter))
+}
+
+/// Try to open an incoming GiftWrap with the given `trade_keys`.
+///
+/// Returns `Ok(None)` when the wrap was not addressed to these keys (the
+/// underlying `nip59::extract_rumor` call fails), so the caller can try
+/// multiple trade keys without treating each miss as a fatal error. Any
+/// other failure (JSON malformed, unexpected layer) yields `Err`.
+pub async fn unwrap_message(
+    event: &Event,
+    trade_keys: &Keys,
+) -> Result<Option<UnwrappedMessage>, MostroError> {
+    if event.kind != Kind::GiftWrap {
+        return Err(MostroError::MostroInternalErr(
+            ServiceError::UnexpectedError("event is not a GiftWrap".to_string()),
+        ));
+    }
+
+    let unwrapped = match nip59::extract_rumor(trade_keys, event).await {
+        Ok(u) => u,
+        Err(_) => return Ok(None),
+    };
+
+    let (message, sig_str): (Message, Option<String>) =
+        serde_json::from_str(&unwrapped.rumor.content)
+            .map_err(|_| MostroError::MostroInternalErr(ServiceError::MessageSerializationError))?;
+
+    let signature = sig_str.as_deref().and_then(|s| Signature::from_str(s).ok());
+
+    Ok(Some(UnwrappedMessage {
+        message,
+        signature,
+        sender: unwrapped.sender,
+        created_at: unwrapped.rumor.created_at,
+    }))
+}
+
+/// Validate a response received from a Mostro node.
+///
+/// * Returns `Err(MostroCantDo(reason))` when the payload is `CantDo`.
+/// * Returns `Err(MostroInternalErr(...))` when `expected_request_id` is
+///   provided and the inner message carries a different id, or no id at all
+///   on an action that requires one.
+/// * Otherwise returns `Ok(())`.
+///
+/// The allow-list of actions that may arrive without a `request_id` (server
+/// push messages such as state transitions, DMs, payment failures, etc.) is
+/// intentionally kept on the caller side, because the exact set depends on
+/// the client flow; this function only enforces the universal rules.
+pub fn validate_response(
+    message: &Message,
+    expected_request_id: Option<u64>,
+) -> Result<(), MostroError> {
+    let inner = message.get_inner_message_kind();
+
+    if let Some(Payload::CantDo(reason)) = &inner.payload {
+        return Err(MostroError::MostroCantDo(
+            reason.clone().unwrap_or(CantDoReason::InvalidAction),
+        ));
+    }
+
+    if let Some(expected) = expected_request_id {
+        match inner.request_id {
+            Some(got) if got == expected => {}
+            Some(_) => {
+                return Err(MostroError::MostroInternalErr(
+                    ServiceError::UnexpectedError("mismatched request_id".to_string()),
+                ));
+            }
+            None => {
+                if !action_accepts_missing_request_id(&inner.action) {
+                    return Err(MostroError::MostroInternalErr(
+                        ServiceError::UnexpectedError(
+                            "missing request_id on a response that requires one".to_string(),
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Actions that may legitimately arrive without a `request_id` even when the
+/// caller was waiting on one (unsolicited server-initiated events).
+fn action_accepts_missing_request_id(action: &Action) -> bool {
+    matches!(
+        action,
+        Action::BuyerTookOrder
+            | Action::HoldInvoicePaymentAccepted
+            | Action::HoldInvoicePaymentSettled
+            | Action::HoldInvoicePaymentCanceled
+            | Action::WaitingSellerToPay
+            | Action::WaitingBuyerInvoice
+            | Action::BuyerInvoiceAccepted
+            | Action::PurchaseCompleted
+            | Action::Released
+            | Action::FiatSentOk
+            | Action::Canceled
+            | Action::CooperativeCancelInitiatedByPeer
+            | Action::CooperativeCancelAccepted
+            | Action::DisputeInitiatedByPeer
+            | Action::AdminSettled
+            | Action::AdminCanceled
+            | Action::AdminTookDispute
+            | Action::PaymentFailed
+            | Action::InvoiceUpdated
+            | Action::Rate
+            | Action::RateReceived
+            | Action::SendDm
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::message::{Action, MessageKind, Payload};
+    use uuid::uuid;
+
+    fn sample_order_message(request_id: Option<u64>) -> Message {
+        let peer = crate::message::Peer::new(
+            "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
+            None,
+        );
+        Message::Order(MessageKind::new(
+            Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+            request_id,
+            Some(1),
+            Action::FiatSentOk,
+            Some(Payload::Peer(peer)),
+        ))
+    }
+
+    #[tokio::test]
+    async fn wrap_then_unwrap_roundtrip() {
+        let trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+
+        let message = sample_order_message(Some(42));
+
+        let wrapped = wrap_message(
+            &message,
+            &trade_keys,
+            receiver_keys.public_key(),
+            WrapOptions::default(),
+        )
+        .await
+        .expect("wrap");
+
+        assert_eq!(wrapped.kind, Kind::GiftWrap);
+        assert!(wrapped
+            .tags
+            .iter()
+            .any(|t| t.as_slice().first().map(|s| s.as_str()) == Some("p")));
+
+        let unwrapped = unwrap_message(&wrapped, &receiver_keys)
+            .await
+            .expect("unwrap result")
+            .expect("unwrap some");
+
+        assert_eq!(unwrapped.sender, trade_keys.public_key());
+        assert_eq!(
+            unwrapped.message.as_json().unwrap(),
+            message.as_json().unwrap()
+        );
+        assert!(unwrapped.signature.is_some());
+    }
+
+    #[tokio::test]
+    async fn unwrap_with_wrong_trade_keys_returns_none() {
+        let trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+        let stranger_keys = Keys::generate();
+
+        let wrapped = wrap_message(
+            &sample_order_message(Some(1)),
+            &trade_keys,
+            receiver_keys.public_key(),
+            WrapOptions::default(),
+        )
+        .await
+        .expect("wrap");
+
+        let result = unwrap_message(&wrapped, &stranger_keys)
+            .await
+            .expect("call should not error");
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn signature_is_verifiable_with_trade_pubkey() {
+        let trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+        let message = sample_order_message(Some(7));
+
+        let wrapped = wrap_message(
+            &message,
+            &trade_keys,
+            receiver_keys.public_key(),
+            WrapOptions::default(),
+        )
+        .await
+        .unwrap();
+
+        let unwrapped = unwrap_message(&wrapped, &receiver_keys)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let sig = unwrapped.signature.expect("signed");
+        let json = unwrapped.message.as_json().unwrap();
+        assert!(Message::verify_signature(
+            json,
+            trade_keys.public_key(),
+            sig
+        ));
+    }
+
+    #[tokio::test]
+    async fn unsigned_wrap_has_no_signature() {
+        let trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+
+        let wrapped = wrap_message(
+            &sample_order_message(Some(3)),
+            &trade_keys,
+            receiver_keys.public_key(),
+            WrapOptions {
+                signed: false,
+                ..WrapOptions::default()
+            },
+        )
+        .await
+        .expect("wrap");
+
+        let unwrapped = unwrap_message(&wrapped, &receiver_keys)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(unwrapped.signature.is_none());
+    }
+
+    #[tokio::test]
+    async fn expiration_tag_is_set_when_provided() {
+        let trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+        let exp = Timestamp::from_secs(Timestamp::now().as_secs() + 3600);
+
+        let wrapped = wrap_message(
+            &sample_order_message(Some(1)),
+            &trade_keys,
+            receiver_keys.public_key(),
+            WrapOptions {
+                expiration: Some(exp),
+                ..WrapOptions::default()
+            },
+        )
+        .await
+        .expect("wrap");
+
+        let has_expiration = wrapped
+            .tags
+            .iter()
+            .any(|t| t.as_slice().first().map(|s| s.as_str()) == Some("expiration"));
+        assert!(has_expiration);
+    }
+
+    #[test]
+    fn validate_response_cant_do_short_circuits() {
+        let msg = Message::cant_do(
+            Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+            Some(5),
+            Some(Payload::CantDo(Some(CantDoReason::NotAuthorized))),
+        );
+        let err = validate_response(&msg, Some(5)).unwrap_err();
+        match err {
+            MostroError::MostroCantDo(CantDoReason::NotAuthorized) => {}
+            _ => panic!("expected CantDo(NotAuthorized)"),
+        }
+    }
+
+    #[test]
+    fn validate_response_request_id_match() {
+        let msg = sample_order_message(Some(9));
+        validate_response(&msg, Some(9)).unwrap();
+    }
+
+    #[test]
+    fn validate_response_request_id_mismatch_errors() {
+        let msg = sample_order_message(Some(9));
+        let err = validate_response(&msg, Some(10)).unwrap_err();
+        assert!(matches!(err, MostroError::MostroInternalErr(_)));
+    }
+
+    #[test]
+    fn validate_response_allows_unsolicited_actions_without_request_id() {
+        let msg = Message::Order(MessageKind::new(
+            Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+            None,
+            None,
+            Action::BuyerTookOrder,
+            None,
+        ));
+        validate_response(&msg, Some(1)).unwrap();
+    }
+
+    #[test]
+    fn validate_response_with_no_expected_id_is_ok() {
+        let msg = sample_order_message(None);
+        validate_response(&msg, None).unwrap();
+    }
+}

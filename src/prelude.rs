@@ -9,6 +9,9 @@ pub use crate::message::{
     Action, Message, MessageKind, Payload, PaymentFailedInfo, Peer, RestoreSessionInfo,
     RestoredDisputeHelper, RestoredDisputesInfo, RestoredOrderHelper, RestoredOrdersInfo,
 };
+pub use crate::nip59::{
+    unwrap_message, validate_response, wrap_message, UnwrappedMessage, WrapOptions,
+};
 pub use crate::order::{Kind, Order, SmallOrder, Status};
 pub use crate::rating::Rating;
 pub use crate::user::{User, UserInfo};
