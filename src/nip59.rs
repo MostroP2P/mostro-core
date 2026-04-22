@@ -133,32 +133,20 @@ fn gift_wrap_from_seal_with_pow(
 
     EventBuilder::new(Kind::GiftWrap, encrypted)
         .tags(tags)
-        .custom_created_at(random_past_timestamp())
+        .custom_created_at(Timestamp::tweaked(nip59::RANGE_RANDOM_TIMESTAMP_TWEAK))
         .pow(pow)
         .sign_with_keys(&ephemeral)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
 }
 
-/// Random timestamp in the recent past, per NIP-59 recommendation to blur
-/// real send time. Range: up to two days in the past.
-fn random_past_timestamp() -> Timestamp {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or_default();
-    // Deterministic-enough jitter sourced from the ephemeral key generation
-    // is not available here; use a pseudo-random seconds offset in [0, 172800).
-    let jitter = (Timestamp::now().as_secs() ^ now).rem_euclid(172_800);
-    Timestamp::from_secs(now.saturating_sub(jitter))
-}
-
 /// Try to open an incoming GiftWrap with the given `trade_keys`.
 ///
-/// Returns `Ok(None)` when the wrap was not addressed to these keys (the
-/// underlying `nip59::extract_rumor` call fails), so the caller can try
-/// multiple trade keys without treating each miss as a fatal error. Any
-/// other failure (JSON malformed, unexpected layer) yields `Err`.
+/// Returns `Ok(None)` only when the outer NIP-44 layer could not be
+/// decrypted with `trade_keys` — the canonical "not addressed to me"
+/// signal, so callers can try multiple trade keys without treating each
+/// miss as fatal. Every other failure (corrupted seal, malformed rumor
+/// JSON, seal/rumor pubkey mismatch, invalid signatures, etc.) yields
+/// `Err` so callers can tell "not mine" apart from "broken".
 pub async fn unwrap_message(
     event: &Event,
     trade_keys: &Keys,
@@ -171,7 +159,13 @@ pub async fn unwrap_message(
 
     let unwrapped = match nip59::extract_rumor(trade_keys, event).await {
         Ok(u) => u,
-        Err(_) => return Ok(None),
+        // Outer NIP-44 decrypt failed — wrap was not for us.
+        Err(nip59::Error::Signer(_)) => return Ok(None),
+        Err(e) => {
+            return Err(MostroError::MostroInternalErr(ServiceError::NostrError(
+                e.to_string(),
+            )));
+        }
     };
 
     let (message, sig_str): (Message, Option<String>) =
@@ -318,6 +312,35 @@ mod tests {
             message.as_json().unwrap()
         );
         assert!(unwrapped.signature.is_some());
+    }
+
+    #[tokio::test]
+    async fn unwrap_with_corrupted_seal_returns_err() {
+        let receiver_keys = Keys::generate();
+        let ephemeral = Keys::generate();
+
+        // GiftWrap addressed to `receiver_keys` whose outer ciphertext
+        // decrypts successfully but yields a string that is not a valid
+        // seal Event JSON. `extract_rumor` must surface this as an error,
+        // not be silently absorbed as `Ok(None)`.
+        let encrypted = nip44::encrypt(
+            ephemeral.secret_key(),
+            &receiver_keys.public_key(),
+            "not a seal",
+            nip44::Version::default(),
+        )
+        .expect("encrypt");
+
+        let corrupted = EventBuilder::new(Kind::GiftWrap, encrypted)
+            .tags([Tag::public_key(receiver_keys.public_key())])
+            .sign_with_keys(&ephemeral)
+            .expect("sign");
+
+        let result = unwrap_message(&corrupted, &receiver_keys).await;
+        assert!(
+            matches!(result, Err(MostroError::MostroInternalErr(_))),
+            "expected Err for corrupted gift wrap, got {result:?}",
+        );
     }
 
     #[tokio::test]
