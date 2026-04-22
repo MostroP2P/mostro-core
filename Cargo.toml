@@ -55,10 +55,13 @@ sqlx-crud = { version = "0.4.0", features = [
   "runtime-tokio-rustls",
 ], optional = true }
 wasm-bindgen = { version = "0.2.92", optional = true }
-nostr-sdk = "0.43.0"
+nostr-sdk = { version = "0.44.1", features = ["nip44", "nip59"] }
 bitcoin = "0.32.7"
 
 [features]
 default = ["wasm"]
 wasm = ["dep:wasm-bindgen"]
 sqlx = ["dep:wasm-bindgen", "dep:sqlx", "dep:sqlx-crud"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }

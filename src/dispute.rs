@@ -117,7 +117,7 @@ impl SolverDisputeInfo {
 
         if let Some(initiator) = initiator {
             let now = Timestamp::now();
-            let initiator_operating_days = (now.as_u64() - initiator.created_at as u64) / 86400;
+            let initiator_operating_days = (now.as_secs() - initiator.created_at as u64) / 86400;
             initiator_info = Some(UserInfo {
                 rating: initiator.total_rating,
                 reviews: initiator.total_reviews,
@@ -127,7 +127,7 @@ impl SolverDisputeInfo {
         }
         if let Some(counterpart) = counterpart {
             let now = Timestamp::now();
-            let couterpart_operating_days = (now.as_u64() - counterpart.created_at as u64) / 86400;
+            let couterpart_operating_days = (now.as_secs() - counterpart.created_at as u64) / 86400;
             counterpart_info = Some(UserInfo {
                 rating: counterpart.total_rating,
                 reviews: counterpart.total_reviews,

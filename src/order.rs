@@ -337,7 +337,7 @@ impl Order {
 
     /// Set the timestamp to now
     pub fn set_timestamp_now(&mut self) {
-        self.taken_at = Timestamp::now().as_u64() as i64
+        self.taken_at = Timestamp::now().as_secs() as i64
     }
 
     /// Check if a user is creating a full privacy order so he doesn't to have reputation
