@@ -1,3 +1,15 @@
+//! Protocol message envelope exchanged between clients and a Mostro node.
+//!
+//! The top-level type is [`Message`], a tagged union that carries a
+//! [`MessageKind`] together with a discriminator (order, dispute, DM, rate,
+//! can't-do, restore). [`MessageKind`] holds the shared fields present on
+//! every request/response: protocol version, optional identifier, trade
+//! index, [`Action`] and [`Payload`].
+//!
+//! In transit, messages are serialized to JSON, optionally signed with the
+//! sender's trade keys using [`Message::sign`], and wrapped in a NIP-59
+//! envelope by [`crate::nip59::wrap_message`].
+
 use crate::prelude::*;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
 use bitcoin::hashes::Hash;
@@ -12,73 +24,137 @@ use sqlx_crud::SqlxCrud;
 use std::fmt;
 use uuid::Uuid;
 
-/// One party of the trade
+/// Identity of a counterpart in a trade.
+///
+/// `Peer` bundles the counterpart's trade public key with an optional
+/// [`UserInfo`] snapshot so it can be embedded into messages that need to
+/// surface reputation (for example the peer disclosure sent with
+/// [`Action::FiatSentOk`]).
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Peer {
+    /// Trade public key of the peer (hex or npub).
     pub pubkey: String,
+    /// Optional reputation snapshot. Absent when the peer operates in full
+    /// privacy mode.
     pub reputation: Option<UserInfo>,
 }
 
 impl Peer {
+    /// Create a new [`Peer`].
     pub fn new(pubkey: String, reputation: Option<UserInfo>) -> Self {
         Self { pubkey, reputation }
     }
 
+    /// Parse a [`Peer`] from its JSON representation.
     pub fn from_json(json: &str) -> Result<Self, ServiceError> {
         serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
     }
 
+    /// Serialize the peer to a JSON string.
     pub fn as_json(&self) -> Result<String, ServiceError> {
         serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
     }
 }
 
-/// Action is used to identify each message between Mostro and users
+/// Discriminator describing the verb of a Mostro message.
+///
+/// `Action` values are serialized in `kebab-case`. Each action has its own
+/// expected [`Payload`] shape — see [`MessageKind::verify`] for the full
+/// matrix.
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub enum Action {
+    /// Publish a new order. Payload: [`Payload::Order`].
     NewOrder,
+    /// Take an existing `sell` order. Payload: optional
+    /// [`Payload::PaymentRequest`] or [`Payload::Amount`].
     TakeSell,
+    /// Take an existing `buy` order. Payload: optional [`Payload::Amount`].
     TakeBuy,
+    /// Request the taker to pay a Lightning invoice.
+    /// Payload: [`Payload::PaymentRequest`].
     PayInvoice,
+    /// Buyer notifies Mostro that fiat was sent.
     FiatSent,
+    /// Mostro acknowledges the fiat-sent notification to the seller.
     FiatSentOk,
+    /// Seller releases the hold invoice funds.
     Release,
+    /// Mostro confirms that the funds have been released.
     Released,
+    /// Cancel an order.
     Cancel,
+    /// Mostro confirms that the order was canceled.
     Canceled,
+    /// Local side started a cooperative cancel.
     CooperativeCancelInitiatedByYou,
+    /// Remote side started a cooperative cancel.
     CooperativeCancelInitiatedByPeer,
+    /// Local side opened a dispute.
     DisputeInitiatedByYou,
+    /// Remote side opened a dispute.
     DisputeInitiatedByPeer,
+    /// Both sides agreed on the cooperative cancel.
     CooperativeCancelAccepted,
+    /// Mostro accepted the buyer's payout invoice.
     BuyerInvoiceAccepted,
+    /// Trade completed successfully.
     PurchaseCompleted,
+    /// Mostro saw the hold-invoice payment accepted by the node.
     HoldInvoicePaymentAccepted,
+    /// Mostro saw the hold-invoice payment settled.
     HoldInvoicePaymentSettled,
+    /// Mostro saw the hold-invoice payment canceled.
     HoldInvoicePaymentCanceled,
+    /// Informational: waiting for the seller to pay the hold invoice.
     WaitingSellerToPay,
+    /// Informational: waiting for the buyer's payout invoice.
     WaitingBuyerInvoice,
+    /// Buyer sends/updates its payout invoice.
+    /// Payload: [`Payload::PaymentRequest`].
     AddInvoice,
+    /// Informational: a buyer has taken a sell order.
     BuyerTookOrder,
+    /// Server-initiated rating request.
     Rate,
+    /// Client-initiated rate. Payload: [`Payload::RatingUser`].
     RateUser,
+    /// Acknowledgement of a received rating.
     RateReceived,
+    /// Mostro returns a structured refusal. Payload: [`Payload::CantDo`].
     CantDo,
+    /// Client-initiated dispute.
     Dispute,
+    /// Admin cancels a trade.
     AdminCancel,
+    /// Admin cancel acknowledged.
     AdminCanceled,
+    /// Admin settles the hold invoice.
     AdminSettle,
+    /// Admin settle acknowledged.
     AdminSettled,
+    /// Admin registers a new dispute solver.
     AdminAddSolver,
+    /// Solver takes a dispute.
     AdminTakeDispute,
+    /// Solver took the dispute acknowledged.
     AdminTookDispute,
+    /// Notification that a Lightning payment failed.
+    /// Payload: [`Payload::PaymentFailed`].
     PaymentFailed,
+    /// Invoice associated with the order was updated.
     InvoiceUpdated,
+    /// Direct message between users. Payload: [`Payload::TextMessage`].
     SendDm,
+    /// Disclosure of a counterpart's trade pubkey. Payload: [`Payload::Peer`].
     TradePubkey,
+    /// Client asks Mostro to restore its session state. Payload must be `None`.
     RestoreSession,
+    /// Client asks Mostro for its last known trade index. Payload must be
+    /// `None`.
     LastTradeIndex,
+    /// Listing of orders in response to a query.
+    /// Payload: [`Payload::Ids`] or [`Payload::Orders`].
     Orders,
 }
 
@@ -88,20 +164,32 @@ impl fmt::Display for Action {
     }
 }
 
-/// Use this Message to establish communication between users and Mostro
+/// Top-level Mostro message exchanged between users and Mostro.
+///
+/// `Message` is a tagged union: every variant carries the shared
+/// [`MessageKind`] body, while the variant itself tells the receiver which
+/// channel the message belongs to (orders, disputes, DMs, rating, can't-do,
+/// session restore). Serializes as `kebab-case` JSON.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Message {
+    /// Order-channel message.
     Order(MessageKind),
+    /// Dispute-channel message.
     Dispute(MessageKind),
+    /// "Can't do" response returned by the Mostro node.
     CantDo(MessageKind),
+    /// Rating message (server-initiated rate request or client rate).
     Rate(MessageKind),
+    /// Direct message between users.
     Dm(MessageKind),
+    /// Session restore request/response.
     Restore(MessageKind),
 }
 
 impl Message {
-    /// New order message
+    /// Build a new `Message::Order` wrapping a freshly constructed
+    /// [`MessageKind`].
     pub fn new_order(
         id: Option<Uuid>,
         request_id: Option<u64>,
@@ -113,7 +201,8 @@ impl Message {
         Self::Order(kind)
     }
 
-    /// New dispute message
+    /// Build a new `Message::Dispute` wrapping a freshly constructed
+    /// [`MessageKind`].
     pub fn new_dispute(
         id: Option<Uuid>,
         request_id: Option<u64>,
@@ -126,19 +215,24 @@ impl Message {
         Self::Dispute(kind)
     }
 
+    /// Build a new `Message::Restore` with [`Action::RestoreSession`].
+    ///
+    /// According to [`MessageKind::verify`], the payload for a restore
+    /// request must be `None`. Any other payload yields an invalid message.
     pub fn new_restore(payload: Option<Payload>) -> Self {
         let kind = MessageKind::new(None, None, None, Action::RestoreSession, payload);
         Self::Restore(kind)
     }
 
-    /// New can't do template message message
+    /// Build a new `Message::CantDo` message (a structured refusal sent by
+    /// Mostro when a request cannot be fulfilled).
     pub fn cant_do(id: Option<Uuid>, request_id: Option<u64>, payload: Option<Payload>) -> Self {
         let kind = MessageKind::new(id, request_id, None, Action::CantDo, payload);
 
         Self::CantDo(kind)
     }
 
-    /// New DM message
+    /// Build a new `Message::Dm` carrying a direct message between users.
     pub fn new_dm(
         id: Option<Uuid>,
         request_id: Option<u64>,
@@ -150,17 +244,17 @@ impl Message {
         Self::Dm(kind)
     }
 
-    /// Get message from json string
+    /// Parse a [`Message`] from its JSON representation.
     pub fn from_json(json: &str) -> Result<Self, ServiceError> {
         serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
     }
 
-    /// Get message as json string
+    /// Serialize the message to a JSON string.
     pub fn as_json(&self) -> Result<String, ServiceError> {
         serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
     }
 
-    // Get inner message kind
+    /// Borrow the inner [`MessageKind`] regardless of the variant.
     pub fn get_inner_message_kind(&self) -> &MessageKind {
         match self {
             Message::Dispute(k)
@@ -172,7 +266,10 @@ impl Message {
         }
     }
 
-    // Get action from the inner message
+    /// Return the [`Action`] of the inner [`MessageKind`].
+    ///
+    /// Always returns `Some` for the current variant set; the `Option` is
+    /// kept for API stability.
     pub fn inner_action(&self) -> Option<Action> {
         match self {
             Message::Dispute(a)
@@ -184,7 +281,8 @@ impl Message {
         }
     }
 
-    /// Verify if is valid the inner message
+    /// Validate that the inner [`MessageKind`] is consistent with its
+    /// [`Action`]. Delegates to [`MessageKind::verify`].
     pub fn verify(&self) -> bool {
         match self {
             Message::Order(m)
@@ -196,6 +294,14 @@ impl Message {
         }
     }
 
+    /// Produce a Schnorr signature over the SHA-256 digest of `message`
+    /// using `keys`.
+    ///
+    /// This is the signature embedded in the rumor tuple when
+    /// [`crate::nip59::wrap_message`] is called with
+    /// [`WrapOptions::signed`](crate::nip59::WrapOptions::signed) set to
+    /// `true`. It binds a message to the sender's trade keys without
+    /// relying on the outer Nostr event signature.
     pub fn sign(message: String, keys: &Keys) -> Signature {
         let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
         let hash = hash.to_byte_array();
@@ -204,6 +310,11 @@ impl Message {
         keys.sign_schnorr(&message)
     }
 
+    /// Verify a signature previously produced by [`Message::sign`].
+    ///
+    /// Returns `true` when `sig` is a valid Schnorr signature of the
+    /// SHA-256 digest of `message` under `pubkey`, `false` otherwise
+    /// (including when `pubkey` has no x-only representation).
     pub fn verify_signature(message: String, pubkey: PublicKey, sig: Signature) -> bool {
         // Create payload hash
         let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
@@ -221,158 +332,208 @@ impl Message {
     }
 }
 
-/// Use this Message to establish communication between users and Mostro
+/// Body shared by every [`Message`] variant.
+///
+/// All Mostro protocol messages share this envelope: a protocol version,
+/// an optional client-chosen request id for correlation, a trade index used
+/// to enforce strictly increasing sequences per user, an optional
+/// order/dispute id, an [`Action`] and an optional [`Payload`].
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MessageKind {
-    /// Message version
+    /// Mostro protocol version. Set to
+    /// `PROTOCOL_VER` by [`MessageKind::new`].
     pub version: u8,
-    /// Request_id for test on client
+    /// Client-chosen correlation id, echoed back on responses so the client
+    /// can match them to in-flight requests.
     pub request_id: Option<u64>,
-    /// Trade key index
+    /// Trade index attached to this message. Must be strictly greater than
+    /// the last trade index Mostro has seen for the sender.
     pub trade_index: Option<i64>,
-    /// Message id is not mandatory
+    /// Optional target identifier (usually the id of an [`crate::order::Order`]
+    /// or [`crate::dispute::Dispute`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
-    /// Action to be taken
+    /// Verb of the message.
     pub action: Action,
-    /// Payload of the Message
+    /// Payload attached to the action. The allowed shape for a given action
+    /// is enforced by [`MessageKind::verify`].
     pub payload: Option<Payload>,
 }
 
+/// Alias for a signed integer amount in satoshis.
 type Amount = i64;
 
-/// Payment failure retry information
+/// Retry configuration for a failed Lightning payment.
+///
+/// Sent inside a [`Payload::PaymentFailed`] so the client knows how many
+/// retries to expect and how long to wait between them.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PaymentFailedInfo {
-    /// Maximum number of payment attempts
+    /// Maximum number of payment attempts Mostro will perform.
     pub payment_attempts: u32,
-    /// Retry interval in seconds between payment attempts
+    /// Delay in seconds between two retry attempts.
     pub payment_retries_interval: u32,
 }
 
-/// Helper struct for faster order-restore queries (used by mostrod).
-/// Intended as a lightweight row-mapper when fetching restore metadata.
+/// Row-mapper used by `mostrod` when fetching metadata for session restore.
+///
+/// Not intended as a general-purpose order representation — field names are
+/// chosen to match the SQL `SELECT` aliases used by the server query.
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredOrderHelper {
+    /// Order id.
     pub id: Uuid,
+    /// Order status, serialized as kebab-case.
     pub status: String,
+    /// Master identity pubkey of the buyer, if any.
     pub master_buyer_pubkey: Option<String>,
+    /// Master identity pubkey of the seller, if any.
     pub master_seller_pubkey: Option<String>,
+    /// Trade index the buyer used on this order.
     pub trade_index_buyer: Option<i64>,
+    /// Trade index the seller used on this order.
     pub trade_index_seller: Option<i64>,
 }
 
-/// Information about the dispute to be restored in the new client.
-/// Note: field names are chosen to match expected SQL SELECT aliases in mostrod (e.g. `status` aliased as `dispute_status`).
+/// Row-mapper used by `mostrod` when fetching disputes for session restore.
+///
+/// Field names are chosen to match the SQL `SELECT` aliases in the restore
+/// query (in particular `status` is aliased as `dispute_status`).
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredDisputeHelper {
+    /// Dispute id.
     pub dispute_id: Uuid,
+    /// Order id the dispute is attached to.
     pub order_id: Uuid,
+    /// Dispute status, serialized as kebab-case.
     pub dispute_status: String,
+    /// Master identity pubkey of the buyer, if any.
     pub master_buyer_pubkey: Option<String>,
+    /// Master identity pubkey of the seller, if any.
     pub master_seller_pubkey: Option<String>,
+    /// Trade index the buyer used on the parent order.
     pub trade_index_buyer: Option<i64>,
+    /// Trade index the seller used on the parent order.
     pub trade_index_seller: Option<i64>,
-    /// Indicates whether the buyer has initiated a dispute for this order.
-    /// Used in conjunction with `seller_dispute` to derive the `initiator` field in `RestoredDisputesInfo`.
+    /// Whether the buyer has initiated a dispute for this order.
+    /// Combined with [`Self::seller_dispute`] to derive
+    /// [`RestoredDisputesInfo::initiator`].
     pub buyer_dispute: bool,
-    /// Indicates whether the seller has initiated a dispute for this order.
-    /// Used in conjunction with `buyer_dispute` to derive the `initiator` field in `RestoredDisputesInfo`.
+    /// Whether the seller has initiated a dispute for this order.
+    /// Combined with [`Self::buyer_dispute`] to derive
+    /// [`RestoredDisputesInfo::initiator`].
     pub seller_dispute: bool,
-    /// Public key of the solver assigned to the dispute, None if no solver has taken it.
+    /// Public key of the solver assigned to the dispute, `None` if no
+    /// solver has taken it.
     pub solver_pubkey: Option<String>,
 }
 
-/// Information about the order to be restored in the new client
+/// Minimal per-order information returned to a client on session restore.
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredOrdersInfo {
-    /// Id of the order
+    /// Id of the order.
     pub order_id: Uuid,
-    /// Trade index of the order
+    /// Trade index of the order as seen by the requesting user.
     pub trade_index: i64,
-    /// Status of the order
+    /// Current status of the order, serialized as kebab-case.
     pub status: String,
 }
 
-/// Enum representing who initiated a dispute
+/// Identifies which party of an order opened a dispute.
 #[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 #[cfg_attr(feature = "sqlx", sqlx(type_name = "TEXT", rename_all = "lowercase"))]
 pub enum DisputeInitiator {
+    /// The buyer opened the dispute.
     Buyer,
+    /// The seller opened the dispute.
     Seller,
 }
 
-/// Information about the dispute to be restored in the new client
+/// Minimal per-dispute information returned to a client on session restore.
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredDisputesInfo {
-    /// Id of the dispute
+    /// Id of the dispute.
     pub dispute_id: Uuid,
-    /// Order id of the dispute
+    /// Id of the order the dispute is attached to.
     pub order_id: Uuid,
-    /// Trade index of the dispute
+    /// Trade index of the dispute as seen by the requesting user.
     pub trade_index: i64,
-    /// Status of the dispute
+    /// Current status of the dispute, serialized as kebab-case.
     pub status: String,
-    /// Who initiated the dispute: Buyer, Seller, or null if unknown
+    /// Who initiated the dispute: [`DisputeInitiator::Buyer`],
+    /// [`DisputeInitiator::Seller`], or `None` when unknown.
     pub initiator: Option<DisputeInitiator>,
-    /// Public key of the solver assigned to the dispute, None if no solver has taken it yet
+    /// Public key of the solver assigned to the dispute, `None` if no
+    /// solver has taken it yet.
     pub solver_pubkey: Option<String>,
 }
 
-/// Restore session user info
+/// Bundle of orders and disputes returned on a session restore.
+///
+/// Carried inside [`Payload::RestoreData`]. The server typically sends this
+/// struct in the response to a [`Action::RestoreSession`] request.
 #[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct RestoreSessionInfo {
-    /// Vector of orders of the user requesting the restore of data
+    /// Orders associated with the requesting user.
     #[serde(rename = "orders")]
     pub restore_orders: Vec<RestoredOrdersInfo>,
-    /// Vector of disputes of the user requesting the restore of data
+    /// Disputes associated with the requesting user.
     #[serde(rename = "disputes")]
     pub restore_disputes: Vec<RestoredDisputesInfo>,
 }
 
-/// Message payload
+/// Typed payload attached to a [`MessageKind`].
+///
+/// Each variant corresponds to a set of [`Action`] values that can legally
+/// carry it (see [`MessageKind::verify`]). Serialized in `snake_case` so
+/// that the variant name is the JSON discriminator.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum Payload {
-    /// Order
+    /// A compact representation of an order used by [`Action::NewOrder`].
     Order(SmallOrder),
-    /// Payment request
+    /// Lightning payment request plus optional amount override.
+    ///
+    /// Used by [`Action::PayInvoice`], [`Action::AddInvoice`] and
+    /// [`Action::TakeSell`]. The [`SmallOrder`] carries the matching order
+    /// when relevant; the `String` is a BOLT-11 invoice.
     PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
-    /// Use to send a message to another user
+    /// Free-form text message used by DMs.
     TextMessage(String),
-    /// Peer information
+    /// Peer disclosure (trade pubkey and optional reputation).
     Peer(Peer),
-    /// Used to rate a user
+    /// Rating value the user wants to attach to a completed trade.
     RatingUser(u8),
-    /// In some cases we need to send an amount
+    /// Raw amount in satoshis (for actions that accept an amount override).
     Amount(Amount),
-    /// Dispute
+    /// Dispute context: the dispute id plus optional
+    /// [`SolverDisputeInfo`] bundle sent to solvers.
     Dispute(Uuid, Option<SolverDisputeInfo>),
-    /// Here the reason why we can't do the action
+    /// Reason carried by a [`Action::CantDo`] response.
     CantDo(Option<CantDoReason>),
-    /// This is used by the maker of a range order only on
-    /// messages with action release and fiat-sent
-    /// to inform the next trade pubkey and trade index
+    /// Next trade key and index announced by the maker of a range order
+    /// when it emits [`Action::Release`] or [`Action::FiatSent`].
     NextTrade(String, u32),
-    /// Payment failure retry configuration information
+    /// Retry configuration surfaced by [`Action::PaymentFailed`].
     PaymentFailed(PaymentFailedInfo),
-    /// Restore session data with orders and disputes
+    /// Payload returned by the server on a session restore.
     RestoreData(RestoreSessionInfo),
-    /// IDs array
+    /// Vector of order ids (lightweight listing).
     Ids(Vec<Uuid>),
-    /// Orders array
+    /// Vector of [`SmallOrder`] values (full listing).
     Orders(Vec<SmallOrder>),
 }
 
 #[allow(dead_code)]
 impl MessageKind {
-    /// New message
+    /// Build a new [`MessageKind`] stamped with the current protocol
+    /// version (`PROTOCOL_VER`).
     pub fn new(
         id: Option<Uuid>,
         request_id: Option<u64>,
@@ -389,21 +550,26 @@ impl MessageKind {
             payload,
         }
     }
-    /// Get message from json string
+    /// Parse a [`MessageKind`] from its JSON representation.
     pub fn from_json(json: &str) -> Result<Self, ServiceError> {
         serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
     }
-    /// Get message as json string
+    /// Serialize the [`MessageKind`] to a JSON string.
     pub fn as_json(&self) -> Result<String, ServiceError> {
         serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
     }
 
-    // Get action from the inner message
+    /// Return a clone of the [`Action`] carried by this message.
     pub fn get_action(&self) -> Action {
         self.action.clone()
     }
 
-    /// Get the next trade keys when order is settled
+    /// Extract the `(next_trade_pubkey, next_trade_index)` pair from a
+    /// [`Payload::NextTrade`] payload.
+    ///
+    /// Returns `Ok(None)` when there is no payload at all and
+    /// [`ServiceError::InvalidPayload`] when the payload is present but of
+    /// a different variant.
     pub fn get_next_trade_key(&self) -> Result<Option<(String, u32)>, ServiceError> {
         match &self.payload {
             Some(Payload::NextTrade(key, index)) => Ok(Some((key.to_string(), *index))),
@@ -412,6 +578,13 @@ impl MessageKind {
         }
     }
 
+    /// Extract the rating value from a [`Payload::RatingUser`] payload,
+    /// validating it against
+    /// [`MIN_RATING`]`..=`[`MAX_RATING`].
+    ///
+    /// Returns [`ServiceError::InvalidRating`] when the payload shape is
+    /// wrong and [`ServiceError::InvalidRatingValue`] when the value is out
+    /// of range.
     pub fn get_rating(&self) -> Result<u8, ServiceError> {
         if let Some(Payload::RatingUser(v)) = self.payload.to_owned() {
             if !(MIN_RATING..=MAX_RATING).contains(&v) {
@@ -423,7 +596,12 @@ impl MessageKind {
         }
     }
 
-    /// Verify if is valid message
+    /// Check that the payload, id and trade index are consistent with the
+    /// action carried by this message.
+    ///
+    /// Returns `true` when the combination is well-formed and `false`
+    /// otherwise; Mostro uses this method to reject malformed requests
+    /// before processing them.
     pub fn verify(&self) -> bool {
         match &self.action {
             Action::NewOrder => matches!(&self.payload, Some(Payload::Order(_))),
@@ -494,6 +672,10 @@ impl MessageKind {
         }
     }
 
+    /// Return the [`SmallOrder`] carried by a [`Action::NewOrder`] message.
+    ///
+    /// Yields `None` if the action is not `NewOrder` or the payload is of a
+    /// different variant.
     pub fn get_order(&self) -> Option<&SmallOrder> {
         if self.action != Action::NewOrder {
             return None;
@@ -504,6 +686,11 @@ impl MessageKind {
         }
     }
 
+    /// Return the Lightning payment request embedded in a message.
+    ///
+    /// Valid only for [`Action::TakeSell`], [`Action::AddInvoice`] and
+    /// [`Action::NewOrder`]. For `NewOrder`, the invoice is read from the
+    /// [`SmallOrder::buyer_invoice`] field. Returns `None` otherwise.
     pub fn get_payment_request(&self) -> Option<String> {
         if self.action != Action::TakeSell
             && self.action != Action::AddInvoice
@@ -518,6 +705,9 @@ impl MessageKind {
         }
     }
 
+    /// Return the amount override embedded in a [`Action::TakeSell`] or
+    /// [`Action::TakeBuy`] message, either from a [`Payload::Amount`] or
+    /// from the third element of a [`Payload::PaymentRequest`].
     pub fn get_amount(&self) -> Option<Amount> {
         if self.action != Action::TakeSell && self.action != Action::TakeBuy {
             return None;
@@ -529,10 +719,13 @@ impl MessageKind {
         }
     }
 
+    /// Borrow the optional payload.
     pub fn get_payload(&self) -> Option<&Payload> {
         self.payload.as_ref()
     }
 
+    /// Return `(true, index)` when the message carries a trade index,
+    /// `(false, 0)` otherwise.
     pub fn has_trade_index(&self) -> (bool, i64) {
         if let Some(index) = self.trade_index {
             return (true, index);
@@ -540,6 +733,7 @@ impl MessageKind {
         (false, 0)
     }
 
+    /// Return the trade index carried by the message, or `0` when absent.
     pub fn trade_index(&self) -> i64 {
         if let Some(index) = self.trade_index {
             return index;

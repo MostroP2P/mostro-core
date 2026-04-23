@@ -1,3 +1,12 @@
+//! Orders and their lifecycle.
+//!
+//! [`Order`] is the database-backed record for a trade between a buyer and a
+//! seller on Mostro. Orders have a [`Kind`] (buy or sell) and a [`Status`]
+//! that evolves through a small state machine as the trade progresses.
+//!
+//! [`SmallOrder`] is a compact, wire-friendly view of an order used when
+//! broadcasting via Nostr or surfacing minimal information to clients.
+
 use crate::prelude::*;
 use nostr_sdk::{PublicKey, Timestamp};
 use serde::{Deserialize, Serialize};
@@ -9,18 +18,23 @@ use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 
-/// Orders can be only Buy or Sell
+/// Direction of an order: the maker wants to buy or sell sats.
 #[wasm_bindgen]
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Kind {
+    /// The maker wants to buy sats in exchange for fiat.
     Buy,
+    /// The maker wants to sell sats in exchange for fiat.
     Sell,
 }
 
 impl FromStr for Kind {
     type Err = ();
 
+    /// Parse a [`Kind`] from `"buy"` or `"sell"` (case-insensitive).
+    ///
+    /// Returns `Err(())` for any other input.
     fn from_str(kind: &str) -> std::result::Result<Self, Self::Err> {
         match kind.to_lowercase().as_str() {
             "buy" => std::result::Result::Ok(Self::Buy),
@@ -39,25 +53,43 @@ impl Display for Kind {
     }
 }
 
-/// Each status that an order can have
+/// Lifecycle status of an [`Order`].
+///
+/// Values are serialized in `kebab-case`, matching the representation stored
+/// in the database and sent over the wire.
 #[wasm_bindgen]
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Status {
+    /// Order is published and available to be taken.
     Active,
+    /// Order was canceled by the maker or the taker.
     Canceled,
+    /// Order was canceled by an admin.
     CanceledByAdmin,
+    /// Order was settled by an admin (solver) after a dispute.
     SettledByAdmin,
+    /// Order was completed by an admin after a dispute.
     CompletedByAdmin,
+    /// Order is currently in dispute.
     Dispute,
+    /// Order expired before being taken or completed.
     Expired,
+    /// Buyer has marked fiat as sent; waiting for the seller to release.
     FiatSent,
+    /// Hold invoice has been settled; payment to the buyer is in flight.
     SettledHoldInvoice,
+    /// Order has been created but not yet published.
     Pending,
+    /// Trade completed successfully.
     Success,
+    /// Waiting for the buyer's payout invoice.
     WaitingBuyerInvoice,
+    /// Waiting for the seller to pay the hold invoice.
     WaitingPayment,
+    /// Both parties agreed to cooperatively cancel the trade.
     CooperativelyCanceled,
+    /// Order has been taken and the trade is in progress.
     InProgress,
 }
 
@@ -107,52 +139,107 @@ impl FromStr for Status {
         }
     }
 }
-/// Database representation of an order
+/// Persistent representation of a Mostro order.
+///
+/// This is the canonical on-disk record kept by a Mostro node. All fields
+/// are stored so an order can be recomputed / restarted from its row alone;
+/// clients usually work with the lighter [`SmallOrder`] view.
+///
+/// Timestamps are Unix seconds; `hash` / `preimage` refer to the hold
+/// invoice used to lock the seller's funds.
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct Order {
+    /// Unique order identifier.
     pub id: Uuid,
+    /// Order kind ([`Kind::Buy`] or [`Kind::Sell`]), serialized as
+    /// kebab-case.
     pub kind: String,
+    /// Nostr event id of the order publication.
     pub event_id: String,
+    /// Payment hash of the seller's hold invoice, once generated.
     pub hash: Option<String>,
+    /// Preimage revealed when the hold invoice is settled.
     pub preimage: Option<String>,
+    /// Trade public key of the order creator (maker).
     pub creator_pubkey: String,
+    /// Trade public key of the party who initiated a cancel, if any.
     pub cancel_initiator_pubkey: Option<String>,
+    /// Buyer trade public key.
     pub buyer_pubkey: Option<String>,
+    /// Buyer master identity pubkey. Equal to `buyer_pubkey` when the
+    /// buyer operates in full-privacy mode.
     pub master_buyer_pubkey: Option<String>,
+    /// Seller trade public key.
     pub seller_pubkey: Option<String>,
+    /// Seller master identity pubkey. Equal to `seller_pubkey` when the
+    /// seller operates in full-privacy mode.
     pub master_seller_pubkey: Option<String>,
+    /// Current [`Status`] of the order, serialized as kebab-case.
     pub status: String,
+    /// `true` if the sats amount was computed from a live market price.
     pub price_from_api: bool,
+    /// Premium percentage applied on top of the spot price.
     pub premium: i64,
+    /// Free-form payment method description (e.g. "SEPA,Bank transfer").
     pub payment_method: String,
+    /// Sats amount. `0` means the amount is computed at take-time from the
+    /// fiat amount and the current market price.
     pub amount: i64,
+    /// Lower bound of a range order (fiat amount). `None` for fixed orders.
     pub min_amount: Option<i64>,
+    /// Upper bound of a range order (fiat amount). `None` for fixed orders.
     pub max_amount: Option<i64>,
+    /// `true` when the buyer has initiated a dispute on this order.
     pub buyer_dispute: bool,
+    /// `true` when the seller has initiated a dispute on this order.
     pub seller_dispute: bool,
+    /// `true` when the buyer has initiated a cooperative cancel.
     pub buyer_cooperativecancel: bool,
+    /// `true` when the seller has initiated a cooperative cancel.
     pub seller_cooperativecancel: bool,
+    /// Mostro fee charged for this trade, in sats.
     pub fee: i64,
+    /// Lightning routing fee observed when paying the buyer.
     pub routing_fee: i64,
+    /// Optional developer-fee portion of `fee`.
     pub dev_fee: i64,
+    /// `true` once the developer fee has been paid out.
     pub dev_fee_paid: bool,
+    /// Payment hash of the developer-fee payment, when available.
     pub dev_fee_payment_hash: Option<String>,
+    /// Fiat currency code (e.g. "EUR", "USD").
     pub fiat_code: String,
+    /// Fiat amount of the trade.
     pub fiat_amount: i64,
+    /// Buyer's Lightning payout invoice, once provided.
     pub buyer_invoice: Option<String>,
+    /// Parent order id for orders derived from a range parent.
     pub range_parent_id: Option<Uuid>,
+    /// Unix timestamp (seconds) when the hold invoice was locked in.
     pub invoice_held_at: i64,
+    /// Unix timestamp (seconds) when the order was taken.
     pub taken_at: i64,
+    /// Unix timestamp (seconds) when the order was created.
     pub created_at: i64,
+    /// `true` once the buyer has rated the counterpart.
     pub buyer_sent_rate: bool,
+    /// `true` once the seller has rated the counterpart.
     pub seller_sent_rate: bool,
+    /// `true` if the latest payment attempt to the buyer failed.
     pub failed_payment: bool,
+    /// Number of payment attempts performed so far.
     pub payment_attempts: i64,
+    /// Unix timestamp (seconds) when the order expires automatically.
     pub expires_at: i64,
+    /// Trade index used by the seller when creating / taking the order.
     pub trade_index_seller: Option<i64>,
+    /// Trade index used by the buyer when creating / taking the order.
     pub trade_index_buyer: Option<i64>,
+    /// Trade public key announced by a range-order maker for the next
+    /// trade in the same range.
     pub next_trade_pubkey: Option<String>,
+    /// Trade index announced by a range-order maker for the next trade.
     pub next_trade_index: Option<i64>,
 }
 
@@ -193,7 +280,11 @@ impl From<SmallOrder> for Order {
 }
 
 impl Order {
-    /// Convert an order to a small order
+    /// Build a [`SmallOrder`] suitable for broadcasting as a new order event.
+    ///
+    /// Copies the tradable fields (amounts, payment method, premium, etc.)
+    /// from `self`. Trade pubkeys are left unset because a new order is
+    /// published before a counterpart is assigned.
     pub fn as_new_order(&self) -> SmallOrder {
         SmallOrder::new(
             Some(self.id),
@@ -213,7 +304,10 @@ impl Order {
             Some(self.expires_at),
         )
     }
-    /// Get the kind of the order
+    /// Parse the order kind from the string-encoded field.
+    ///
+    /// Returns [`ServiceError::InvalidOrderKind`] when `self.kind` does not
+    /// match a known [`Kind`] variant.
     pub fn get_order_kind(&self) -> Result<Kind, ServiceError> {
         if let Ok(kind) = Kind::from_str(&self.kind) {
             Ok(kind)
@@ -222,7 +316,10 @@ impl Order {
         }
     }
 
-    /// Get the status of the order in case
+    /// Parse the order status from the string-encoded field.
+    ///
+    /// Returns [`ServiceError::InvalidOrderStatus`] when `self.status` does
+    /// not match a known [`Status`] variant.
     pub fn get_order_status(&self) -> Result<Status, ServiceError> {
         if let Ok(status) = Status::from_str(&self.status) {
             Ok(status)
@@ -231,7 +328,10 @@ impl Order {
         }
     }
 
-    /// Compare the status of the order
+    /// Check that the order is currently in a specific [`Status`].
+    ///
+    /// Returns `Ok(())` on match and [`CantDoReason::InvalidOrderStatus`]
+    /// either on mismatch or when the stored status cannot be parsed.
     pub fn check_status(&self, status: Status) -> Result<(), CantDoReason> {
         match Status::from_str(&self.status) {
             Ok(s) => match s == status {
@@ -242,14 +342,14 @@ impl Order {
         }
     }
 
-    /// Check if the order is a buy order
+    /// Assert that the order is a [`Kind::Buy`] order.
     pub fn is_buy_order(&self) -> Result<(), CantDoReason> {
         if self.kind != Kind::Buy.to_string() {
             return Err(CantDoReason::InvalidOrderKind);
         }
         Ok(())
     }
-    /// Check if the order is a sell order
+    /// Assert that the order is a [`Kind::Sell`] order.
     pub fn is_sell_order(&self) -> Result<(), CantDoReason> {
         if self.kind != Kind::Sell.to_string() {
             return Err(CantDoReason::InvalidOrderKind);
@@ -257,7 +357,9 @@ impl Order {
         Ok(())
     }
 
-    /// Check if the sender is the creator of the order
+    /// Assert that `sender` is the maker (creator) of the order.
+    ///
+    /// Returns [`CantDoReason::InvalidPubkey`] when the pubkeys differ.
     pub fn sent_from_maker(&self, sender: PublicKey) -> Result<(), CantDoReason> {
         let sender = sender.to_string();
         if self.creator_pubkey != sender {
@@ -266,7 +368,10 @@ impl Order {
         Ok(())
     }
 
-    /// Check if the sender is the creator of the order
+    /// Assert that `sender` is **not** the maker of the order.
+    ///
+    /// Returns [`CantDoReason::InvalidPubkey`] when `sender` matches
+    /// `self.creator_pubkey`.
     pub fn not_sent_from_maker(&self, sender: PublicKey) -> Result<(), CantDoReason> {
         let sender = sender.to_string();
         if self.creator_pubkey == sender {
@@ -275,7 +380,7 @@ impl Order {
         Ok(())
     }
 
-    /// Get the creator pubkey
+    /// Parse the maker's public key as a Nostr [`PublicKey`].
     pub fn get_creator_pubkey(&self) -> Result<PublicKey, ServiceError> {
         match PublicKey::from_str(self.creator_pubkey.as_ref()) {
             Ok(pk) => Ok(pk),
@@ -283,7 +388,10 @@ impl Order {
         }
     }
 
-    /// Get the buyer pubkey
+    /// Parse the buyer trade public key.
+    ///
+    /// Returns [`ServiceError::InvalidPubkey`] when the field is absent or
+    /// cannot be parsed.
     pub fn get_buyer_pubkey(&self) -> Result<PublicKey, ServiceError> {
         if let Some(pk) = self.buyer_pubkey.as_ref() {
             PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
@@ -291,7 +399,10 @@ impl Order {
             Err(ServiceError::InvalidPubkey)
         }
     }
-    /// Get the seller pubkey
+    /// Parse the seller trade public key.
+    ///
+    /// Returns [`ServiceError::InvalidPubkey`] when the field is absent or
+    /// cannot be parsed.
     pub fn get_seller_pubkey(&self) -> Result<PublicKey, ServiceError> {
         if let Some(pk) = self.seller_pubkey.as_ref() {
             PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
@@ -299,7 +410,7 @@ impl Order {
             Err(ServiceError::InvalidPubkey)
         }
     }
-    /// Get the master buyer pubkey
+    /// Parse the buyer master identity public key.
     pub fn get_master_buyer_pubkey(&self) -> Result<PublicKey, ServiceError> {
         if let Some(pk) = self.master_buyer_pubkey.as_ref() {
             PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
@@ -307,7 +418,7 @@ impl Order {
             Err(ServiceError::InvalidPubkey)
         }
     }
-    /// Get the master seller pubkey
+    /// Parse the seller master identity public key.
     pub fn get_master_seller_pubkey(&self) -> Result<PublicKey, ServiceError> {
         if let Some(pk) = self.master_seller_pubkey.as_ref() {
             PublicKey::from_str(pk).map_err(|_| ServiceError::InvalidPubkey)
@@ -316,11 +427,17 @@ impl Order {
         }
     }
 
-    /// Check if the order is a range order
+    /// `true` when both `min_amount` and `max_amount` are set, i.e. this is
+    /// a range order.
     pub fn is_range_order(&self) -> bool {
         self.min_amount.is_some() && self.max_amount.is_some()
     }
 
+    /// Increment the payment-failure counter.
+    ///
+    /// On the first failure, sets [`Self::failed_payment`] to `true` and
+    /// [`Self::payment_attempts`] to `1`. On subsequent failures the counter
+    /// is bumped, capped at `retries_number`.
     pub fn count_failed_payment(&mut self, retries_number: i64) {
         if !self.failed_payment {
             self.failed_payment = true;
@@ -330,19 +447,25 @@ impl Order {
         }
     }
 
-    /// Check if the order has no amount
+    /// `true` when `amount == 0`, meaning the sats amount is not fixed and
+    /// will be computed from the fiat amount and market price.
     pub fn has_no_amount(&self) -> bool {
         self.amount == 0
     }
 
-    /// Set the timestamp to now
+    /// Set [`Self::taken_at`] to the current Unix timestamp.
     pub fn set_timestamp_now(&mut self) {
         self.taken_at = Timestamp::now().as_secs() as i64
     }
 
-    /// Check if a user is creating a full privacy order so he doesn't to have reputation
-    /// compare master keys with the order keys if they are the same the user is in full privacy mode
-    /// otherwise the user is not in normal mode and has a reputation
+    /// Compare the trade pubkeys against the master pubkeys to detect which
+    /// sides of the trade are operating in full privacy mode.
+    ///
+    /// Returns a `(buyer_normal_idkey, seller_normal_idkey)` tuple. Each
+    /// value is `Some(master_pubkey)` when that side is running in normal
+    /// mode (trade key differs from master key, so the user is willing to
+    /// associate the trade with its reputation); `None` when the side is in
+    /// full privacy mode.
     pub fn is_full_privacy_order(&self) -> Result<(Option<String>, Option<String>), ServiceError> {
         let (mut normal_buyer_idkey, mut normal_seller_idkey) = (None, None);
 
@@ -362,10 +485,13 @@ impl Order {
 
         Ok((normal_buyer_idkey, normal_seller_idkey))
     }
-    /// Setup the dispute status
+    /// Mark the order as in dispute and record which side initiated it.
     ///
-    /// If the pubkey is the buyer, set the buyer dispute to true
-    /// If the pubkey is the seller, set the seller dispute to true
+    /// When `is_buyer_dispute` is `true` the buyer flag is set, otherwise
+    /// the seller flag. The order status is then transitioned to
+    /// [`Status::Dispute`]. Returns
+    /// [`CantDoReason::DisputeCreationError`] when the appropriate flag was
+    /// already set (avoids registering the same dispute twice).
     pub fn setup_dispute(&mut self, is_buyer_dispute: bool) -> Result<(), CantDoReason> {
         // Get the opposite dispute status
         let is_seller_dispute = !is_buyer_dispute;
@@ -394,33 +520,57 @@ impl Order {
     }
 }
 
-/// We use this struct to create a new order
+/// Compact, wire-friendly view of an order.
+///
+/// `SmallOrder` carries the fields needed to publish a new order or to show
+/// a listing entry to a client, without the bookkeeping fields kept in
+/// [`Order`] (hold invoice hash, fees, dispute flags, etc.). It is the shape
+/// used by [`Payload::Order`] and siblings.
+///
+/// Unknown fields are rejected at deserialization time (`deny_unknown_fields`).
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct SmallOrder {
+    /// Order id. `None` for orders that have not been persisted yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
+    /// Order kind.
     pub kind: Option<Kind>,
+    /// Current status.
     pub status: Option<Status>,
+    /// Sats amount. `0` when the sats amount is derived from the fiat
+    /// amount and live market price.
     pub amount: i64,
+    /// Fiat currency code (e.g. "EUR").
     pub fiat_code: String,
+    /// Lower bound of a range order (fiat amount).
     pub min_amount: Option<i64>,
+    /// Upper bound of a range order (fiat amount).
     pub max_amount: Option<i64>,
+    /// Fiat amount of the trade.
     pub fiat_amount: i64,
+    /// Free-form payment method description.
     pub payment_method: String,
+    /// Premium percentage applied on top of the spot price.
     pub premium: i64,
+    /// Buyer trade public key, when known.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buyer_trade_pubkey: Option<String>,
+    /// Seller trade public key, when known.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seller_trade_pubkey: Option<String>,
+    /// Buyer's Lightning payout invoice, when already provided.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub buyer_invoice: Option<String>,
+    /// Unix timestamp (seconds) when the order was created.
     pub created_at: Option<i64>,
+    /// Unix timestamp (seconds) when the order expires automatically.
     pub expires_at: Option<i64>,
 }
 
 #[allow(dead_code)]
 impl SmallOrder {
+    /// Construct a new [`SmallOrder`] from all of its fields.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Option<Uuid>,
@@ -457,17 +607,18 @@ impl SmallOrder {
             expires_at,
         }
     }
-    /// New order from json string
+    /// Parse a [`SmallOrder`] from its JSON representation.
     pub fn from_json(json: &str) -> Result<Self, ServiceError> {
         serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
     }
 
-    /// Get order as json string
+    /// Serialize the order to a JSON string.
     pub fn as_json(&self) -> Result<String, ServiceError> {
         serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
     }
 
-    /// Get the amount of sats or the string "Market price"
+    /// Return the sats amount as a string, or the literal `"Market price"`
+    /// when the amount is `0` (to be computed at take-time).
     pub fn sats_amount(&self) -> String {
         if self.amount == 0 {
             "Market price".to_string()
@@ -475,7 +626,9 @@ impl SmallOrder {
             self.amount.to_string()
         }
     }
-    /// Check if fiat_amount is positive
+    /// Assert that the fiat amount is strictly positive.
+    ///
+    /// Returns [`CantDoReason::InvalidAmount`] otherwise.
     pub fn check_fiat_amount(&self) -> Result<(), CantDoReason> {
         if self.fiat_amount <= 0 {
             return Err(CantDoReason::InvalidAmount);
@@ -483,7 +636,12 @@ impl SmallOrder {
         Ok(())
     }
 
-    /// Check if amount (sats) is non-negative when explicitly set
+    /// Assert that the sats amount is non-negative.
+    ///
+    /// A value of `0` is explicitly accepted because it signals that the
+    /// sats amount will be derived from the fiat amount and the market
+    /// price at take-time. Returns [`CantDoReason::InvalidAmount`] when the
+    /// amount is negative.
     pub fn check_amount(&self) -> Result<(), CantDoReason> {
         if self.amount < 0 {
             return Err(CantDoReason::InvalidAmount);
@@ -491,7 +649,11 @@ impl SmallOrder {
         Ok(())
     }
 
-    /// Check if the order has a zero amount and a premium or fiat amount
+    /// Reject orders that set both `amount` and `premium` at the same time.
+    ///
+    /// A premium only makes sense when the sats amount is market-priced;
+    /// combining a fixed sats amount with a premium is ambiguous and
+    /// returns [`CantDoReason::InvalidParameters`].
     pub fn check_zero_amount_with_premium(&self) -> Result<(), CantDoReason> {
         let premium = (self.premium != 0).then_some(self.premium);
         let sats_amount = (self.amount != 0).then_some(self.amount);
@@ -502,7 +664,13 @@ impl SmallOrder {
         Ok(())
     }
 
-    /// Check if the order is a range order and if the amount is zero
+    /// Validate the bounds of a range order and push them into `amounts`.
+    ///
+    /// When both `min_amount` and `max_amount` are set, they must be
+    /// non-negative, `min < max`, and `amount` must be `0` (range orders
+    /// cannot fix the sats amount). On success, `amounts` is cleared and
+    /// replaced with `[min, max]`. On failure returns
+    /// [`CantDoReason::InvalidAmount`].
     pub fn check_range_order_limits(&self, amounts: &mut Vec<i64>) -> Result<(), CantDoReason> {
         // Check if the min and max amount are valid and update the vector
         if let (Some(min), Some(max)) = (self.min_amount, self.max_amount) {
@@ -522,7 +690,12 @@ impl SmallOrder {
         Ok(())
     }
 
-    /// Check if the fiat currency is accepted
+    /// Verify that the order's fiat code appears in the list of accepted
+    /// currencies.
+    ///
+    /// An empty allowlist disables the check (every currency is accepted).
+    /// Returns [`CantDoReason::InvalidFiatCurrency`] when the currency is
+    /// not allowed.
     pub fn check_fiat_currency(
         &self,
         fiat_currencies_accepted: &[String],

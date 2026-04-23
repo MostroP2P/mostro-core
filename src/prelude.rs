@@ -1,7 +1,14 @@
-// This module re-exports commonly used types and traits for convenience.
-// It allows users to import everything they need from a single module
-//
-//! Prelude
+//! Convenience re-exports and shared constants.
+//!
+//! This module gathers the types you are most likely to need when building a
+//! Mostro client or daemon so they can be imported in bulk:
+//!
+//! ```
+//! use mostro_core::prelude::*;
+//! ```
+//!
+//! It also defines the Nostr event kinds used by the protocol and the minimum
+//! and maximum rating bounds.
 
 pub use crate::dispute::{Dispute, SolverDisputeInfo, Status as DisputeStatus};
 pub use crate::error::{CantDoReason, MostroError, ServiceError};
@@ -18,14 +25,20 @@ pub use crate::user::{User, UserInfo};
 pub(crate) use serde::{Deserialize, Serialize};
 pub use MostroError::*;
 
-/// CONSTANTS exported for convenience
-// Max rating for a user
+/// Maximum rating value a user can receive.
 pub const MAX_RATING: u8 = 5;
-// Min rating for a user
+/// Minimum rating value a user can receive.
 pub const MIN_RATING: u8 = 1;
-// Addressable event kind must be between 30000 and 39999 (NIP-1)
+/// Nostr event kind used by Mostro to publish orders.
+///
+/// Addressable event kinds are in the `30000..=39999` range (NIP-01).
 pub const NOSTR_ORDER_EVENT_KIND: u16 = 38383;
+/// Nostr event kind used to publish user ratings.
 pub const NOSTR_RATING_EVENT_KIND: u16 = 38384;
+/// Nostr event kind used to publish node information events.
 pub const NOSTR_INFO_EVENT_KIND: u16 = 38385;
+/// Nostr event kind used to publish disputes.
 pub const NOSTR_DISPUTE_EVENT_KIND: u16 = 38386;
+/// Current Mostro protocol version. Embedded in every outgoing
+/// [`MessageKind`](crate::message::MessageKind).
 pub(crate) const PROTOCOL_VER: u8 = 1;
