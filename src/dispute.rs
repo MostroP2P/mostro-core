@@ -1,3 +1,14 @@
+//! Dispute representation and lifecycle states.
+//!
+//! A [`Dispute`] is opened when one of the counterparts of a trade asks
+//! Mostro to involve a solver. The dispute moves through a small state
+//! machine described by [`Status`] until it is either settled, refunded or
+//! released.
+//!
+//! [`SolverDisputeInfo`] is the payload surfaced to solvers with all the
+//! trade details they need to render the dispute in their UI without
+//! loading additional data.
+
 use crate::{order::Order, user::User, user::UserInfo};
 use chrono::Utc;
 use nostr_sdk::Timestamp;
@@ -9,21 +20,22 @@ use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 
-/// Each status that a dispute can have
+/// Lifecycle status of a [`Dispute`].
 #[cfg_attr(feature = "sqlx", derive(Type))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Status {
-    /// Dispute initiated and waiting to be taken by a solver
+    /// Dispute has been initiated and is waiting to be taken by a solver.
     #[default]
     Initiated,
-    /// Taken by a solver
+    /// A solver has taken the dispute and is working on it.
     InProgress,
-    /// Canceled by admin/solver and refunded to seller
+    /// Admin/solver canceled the trade and refunded the seller.
     SellerRefunded,
-    /// Settled seller's invoice by admin/solver and started to pay sats to buyer
+    /// Admin/solver settled the seller's hold invoice and initiated payment
+    /// to the buyer.
     Settled,
-    /// Released by the seller
+    /// The seller released the funds before the dispute was resolved.
     Released,
 }
 
@@ -42,6 +54,9 @@ impl Display for Status {
 impl FromStr for Status {
     type Err = ();
 
+    /// Parse a [`Status`] from its kebab-case string representation.
+    ///
+    /// Returns `Err(())` if `s` does not match a known variant.
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s {
             "initiated" => std::result::Result::Ok(Self::Initiated),
@@ -54,54 +69,96 @@ impl FromStr for Status {
     }
 }
 
-/// Database representation of a dispute
+/// Database representation of a dispute.
+///
+/// Disputes are always bound to a parent [`Order`]; `order_previous_status`
+/// preserves the status the order had before the dispute was filed so that
+/// it can be restored if the dispute is dismissed.
 #[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct Dispute {
-    /// Unique identifier for the dispute
+    /// Unique identifier for the dispute.
     pub id: Uuid,
-    /// Order ID that the dispute is related to
+    /// Id of the order the dispute is attached to.
     pub order_id: Uuid,
-    /// Status of the dispute
+    /// Current [`Status`] of the dispute, serialized as kebab-case.
     pub status: String,
-    /// Previous status of the order before the dispute was created
+    /// The status the underlying order had before the dispute was opened.
     pub order_previous_status: String,
-    /// Public key of the solver
+    /// Public key of the solver that has taken the dispute, if any.
     pub solver_pubkey: Option<String>,
-    /// Timestamp when the dispute was created
+    /// Unix timestamp (seconds) when the dispute was created.
     pub created_at: i64,
-    /// Timestamp when the dispute was taken by a solver
+    /// Unix timestamp (seconds) when the dispute was taken by a solver.
+    /// `0` when it has not been taken yet.
     pub taken_at: i64,
 }
 
+/// Extended dispute view for solvers.
+///
+/// Bundles the [`Dispute`] together with the key fields of its parent
+/// [`Order`] so a solver UI can render everything needed without additional
+/// database lookups, while still respecting the `full privacy` setting of
+/// each counterpart.
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct SolverDisputeInfo {
+    /// Order id the dispute is attached to.
     pub id: Uuid,
+    /// Order kind (`buy` or `sell`), serialized as kebab-case.
     pub kind: String,
+    /// Order status at the time the dispute view was built.
     pub status: String,
+    /// Payment hash of the hold invoice.
     pub hash: Option<String>,
+    /// Preimage revealed once the hold invoice is settled.
     pub preimage: Option<String>,
+    /// Status the order had immediately before the dispute was opened.
     pub order_previous_status: String,
+    /// Trade public key of the dispute initiator.
     pub initiator_pubkey: String,
+    /// Buyer's trade public key, if available.
     pub buyer_pubkey: Option<String>,
+    /// Seller's trade public key, if available.
     pub seller_pubkey: Option<String>,
+    /// `true` when the initiator is operating in full privacy mode, hiding
+    /// its reputation.
     pub initiator_full_privacy: bool,
+    /// `true` when the counterpart is operating in full privacy mode.
     pub counterpart_full_privacy: bool,
+    /// Reputation snapshot of the initiator, when privacy allows it.
     pub initiator_info: Option<UserInfo>,
+    /// Reputation snapshot of the counterpart, when privacy allows it.
     pub counterpart_info: Option<UserInfo>,
+    /// Premium percentage applied to the order price.
     pub premium: i64,
+    /// Payment method agreed upon for the fiat leg.
     pub payment_method: String,
+    /// Sats amount of the trade.
     pub amount: i64,
+    /// Fiat amount of the trade.
     pub fiat_amount: i64,
+    /// Mostro fee charged for the trade.
     pub fee: i64,
+    /// Lightning routing fee paid when settling the trade.
     pub routing_fee: i64,
+    /// Buyer's Lightning invoice, if already provided.
     pub buyer_invoice: Option<String>,
+    /// Unix timestamp (seconds) when the hold invoice was locked in.
     pub invoice_held_at: i64,
+    /// Unix timestamp (seconds) when the order was taken.
     pub taken_at: i64,
+    /// Unix timestamp (seconds) when the order was created.
     pub created_at: i64,
 }
 
 impl SolverDisputeInfo {
+    /// Build a [`SolverDisputeInfo`] from an order, its dispute and the
+    /// optional [`User`] records of both counterparts.
+    ///
+    /// When a [`User`] is provided, the corresponding privacy flag is set to
+    /// `false` and a [`UserInfo`] snapshot is included (rating, reviews,
+    /// operating days computed from `created_at`). When a [`User`] is `None`,
+    /// the party is considered to be operating in full privacy mode.
     pub fn new(
         order: &Order,
         dispute: &Dispute,
@@ -165,6 +222,13 @@ impl SolverDisputeInfo {
 }
 
 impl Dispute {
+    /// Create a new dispute for an order.
+    ///
+    /// The dispute starts in [`Status::Initiated`] with a fresh UUID, the
+    /// current timestamp as `created_at`, no solver assigned and `taken_at`
+    /// set to `0`. `order_status` should be the current status of the order
+    /// at the moment the dispute is filed; it is preserved in
+    /// `order_previous_status`.
     pub fn new(order_id: Uuid, order_status: String) -> Self {
         Self {
             id: Uuid::new_v4(),
