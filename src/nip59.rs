@@ -180,11 +180,8 @@ pub async fn unwrap_message(
 
     // Decrypt outer GiftWrap using (receiver_secret, ephemeral_pub).
     // Failure here is the "not addressed to me" signal.
-    let seal_json = match nip44::decrypt(
-        receiver_keys.secret_key(),
-        &event.pubkey,
-        &event.content,
-    ) {
+    let seal_json = match nip44::decrypt(receiver_keys.secret_key(), &event.pubkey, &event.content)
+    {
         Ok(s) => s,
         Err(_) => return Ok(None),
     };
@@ -201,13 +198,11 @@ pub async fn unwrap_message(
         ));
     }
 
-    seal.verify_signature()
-        .then_some(())
-        .ok_or_else(|| {
-            MostroError::MostroInternalErr(ServiceError::NostrError(
-                "invalid seal signature".to_string(),
-            ))
-        })?;
+    seal.verify_signature().then_some(()).ok_or_else(|| {
+        MostroError::MostroInternalErr(ServiceError::NostrError(
+            "invalid seal signature".to_string(),
+        ))
+    })?;
 
     // Decrypt the seal content using (receiver_secret, seal.pubkey). In
     // Mostro, seal.pubkey is the sender's identity key, which is also the
@@ -222,6 +217,12 @@ pub async fn unwrap_message(
             "malformed rumor JSON: {e}"
         )))
     })?;
+
+    if rumor.kind != Kind::TextNote {
+        return Err(MostroError::MostroInternalErr(
+            ServiceError::UnexpectedError("rumor is not a TextNote".to_string()),
+        ));
+    }
 
     let (message, sig_str): (Message, Option<String>) = serde_json::from_str(&rumor.content)
         .map_err(|_| MostroError::MostroInternalErr(ServiceError::MessageSerializationError))?;
