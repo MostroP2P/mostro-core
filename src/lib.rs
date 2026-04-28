@@ -64,7 +64,8 @@
 //! * [`rating`] — Nostr-tag-encoded reputation helper.
 //! * [`error`] — unified error taxonomy ([`MostroError`], [`ServiceError`],
 //!   [`CantDoReason`]).
-//! * [`nip59`] — GiftWrap wrap/unwrap transport.
+//! * [`nip59`] — GiftWrap wrap/unwrap transport for protocol messages.
+//! * [`chat`] — P2P buyer/seller and admin/party chat envelope.
 //! * [`prelude`] — convenience re-exports.
 //!
 //! [`MostroError`]: crate::error::MostroError
@@ -74,6 +75,7 @@
 #![doc(html_root_url = "https://docs.rs/mostro-core")]
 #![warn(missing_docs)]
 
+pub mod chat;
 pub mod dispute;
 pub mod error;
 pub mod message;

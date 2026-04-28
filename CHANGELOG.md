@@ -1,3 +1,10 @@
+## What's Changed in Unreleased
+
+### 🚀 Features
+
+
+* add `chat` module: ECDH-derived `SharedKey`, NIP-44 wrap/unwrap of P2P chat gift wraps, and a relay `chat_filter` for buyer/seller and admin/party conversations.
+
 ## Verifying the Release
 In order to verify the release, you'll need to have gpg or gpg2 installed on your system. Once you've obtained a copy (and hopefully verified that as well), you'll first need to import the keys that have signed this release if you haven't done so already:
 ```bash
