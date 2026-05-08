@@ -1207,7 +1207,10 @@ mod test {
                     slash_buyer: false,
                 })),
             ));
-            assert!(with_resolution.verify(), "{action:?} + BondResolution should verify");
+            assert!(
+                with_resolution.verify(),
+                "{action:?} + BondResolution should verify"
+            );
 
             let without_payload = Message::Order(MessageKind::new(
                 Some(uuid),
