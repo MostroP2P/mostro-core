@@ -74,6 +74,13 @@ pub enum Action {
     /// Request the taker to pay a Lightning invoice.
     /// Payload: [`Payload::PaymentRequest`].
     PayInvoice,
+    /// Mostro delivers the bolt11 hold invoice that the taker must pay as
+    /// their anti-abuse bond. Same payload shape and direction as
+    /// [`Action::PayInvoice`] (Mostro → user); only the discriminator
+    /// differs so clients can tell the bond invoice apart from the trade
+    /// hold invoice that follows.
+    /// Payload: [`Payload::PaymentRequest`].
+    PayBondInvoice,
     /// Buyer notifies Mostro that fiat was sent.
     FiatSent,
     /// Mostro acknowledges the fiat-sent notification to the seller.
@@ -515,9 +522,10 @@ pub enum Payload {
     Order(SmallOrder),
     /// Lightning payment request plus optional amount override.
     ///
-    /// Used by [`Action::PayInvoice`], [`Action::AddInvoice`] and
-    /// [`Action::TakeSell`]. The [`SmallOrder`] carries the matching order
-    /// when relevant; the `String` is a BOLT-11 invoice.
+    /// Used by [`Action::PayInvoice`], [`Action::PayBondInvoice`],
+    /// [`Action::AddInvoice`] and [`Action::TakeSell`]. The [`SmallOrder`]
+    /// carries the matching order when relevant; the `String` is a BOLT-11
+    /// invoice.
     PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
     /// Free-form text message used by DMs.
     TextMessage(String),
@@ -623,7 +631,7 @@ impl MessageKind {
     pub fn verify(&self) -> bool {
         match &self.action {
             Action::NewOrder => matches!(&self.payload, Some(Payload::Order(_))),
-            Action::PayInvoice | Action::AddInvoice => {
+            Action::PayInvoice | Action::PayBondInvoice | Action::AddInvoice => {
                 if self.id.is_none() {
                     return false;
                 }
@@ -1264,6 +1272,7 @@ mod test {
             Action::TakeSell,
             Action::TakeBuy,
             Action::PayInvoice,
+            Action::PayBondInvoice,
             Action::FiatSent,
             Action::FiatSentOk,
             Action::Release,
@@ -1368,6 +1377,66 @@ mod test {
         );
         let msg = Message::from_json(&json).unwrap();
         assert!(msg.verify());
+    }
+
+    #[test]
+    fn test_pay_bond_invoice_wire_format_and_verify() {
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let bolt11 = "lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e".to_string();
+
+        let msg = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::PayBondInvoice,
+            Some(Payload::PaymentRequest(None, bolt11.clone(), None)),
+        ));
+        assert!(msg.verify());
+
+        // Wire format must use the kebab-case discriminator.
+        let json = msg.as_json().unwrap();
+        assert!(
+            json.contains("\"action\":\"pay-bond-invoice\""),
+            "expected kebab-case discriminator, got: {json}"
+        );
+
+        // Roundtrip preserves the variant.
+        let decoded = Message::from_json(&json).unwrap();
+        assert!(decoded.verify());
+        assert!(matches!(
+            decoded.inner_action(),
+            Some(Action::PayBondInvoice)
+        ));
+
+        // Same id / payload constraints as PayInvoice: missing id is invalid.
+        let no_id = Message::Order(MessageKind::new(
+            None,
+            Some(1),
+            Some(2),
+            Action::PayBondInvoice,
+            Some(Payload::PaymentRequest(None, bolt11.clone(), None)),
+        ));
+        assert!(!no_id.verify());
+
+        // Wrong payload shape is rejected.
+        let wrong_payload = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::PayBondInvoice,
+            Some(Payload::TextMessage("nope".to_string())),
+        ));
+        assert!(!wrong_payload.verify());
+
+        // Missing payload is rejected (PaymentRequest is required).
+        let no_payload = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::PayBondInvoice,
+            None,
+        ));
+        assert!(!no_payload.verify());
     }
 
     #[test]

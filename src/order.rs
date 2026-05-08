@@ -87,6 +87,11 @@ pub enum Status {
     WaitingBuyerInvoice,
     /// Waiting for the seller to pay the hold invoice.
     WaitingPayment,
+    /// Order has been matched to a taker but Mostro is awaiting the taker's
+    /// bond hold-invoice payment before starting the trade flow. Distinct
+    /// from [`Status::Pending`] (advertised, no taker yet) and from
+    /// [`Status::WaitingPayment`] (trade escrow expected from the seller).
+    WaitingTakerBond,
     /// Both parties agreed to cooperatively cancel the trade.
     CooperativelyCanceled,
     /// Order has been taken and the trade is in progress.
@@ -109,6 +114,7 @@ impl Display for Status {
             Status::Success => write!(f, "success"),
             Status::WaitingBuyerInvoice => write!(f, "waiting-buyer-invoice"),
             Status::WaitingPayment => write!(f, "waiting-payment"),
+            Status::WaitingTakerBond => write!(f, "waiting-taker-bond"),
             Status::CooperativelyCanceled => write!(f, "cooperatively-canceled"),
             Status::InProgress => write!(f, "in-progress"),
         }
@@ -133,6 +139,7 @@ impl FromStr for Status {
             "success" => std::result::Result::Ok(Self::Success),
             "waiting-buyer-invoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
             "waiting-payment" => std::result::Result::Ok(Self::WaitingPayment),
+            "waiting-taker-bond" => std::result::Result::Ok(Self::WaitingTakerBond),
             "cooperatively-canceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
             "in-progress" => std::result::Result::Ok(Self::InProgress),
             _ => Err(()),
@@ -758,6 +765,20 @@ mod tests {
         assert_eq!(Status::CompletedByAdmin.to_string(), "completed-by-admin");
         assert_eq!(Status::FiatSent.to_string(), "fiat-sent");
         assert_ne!(Status::Pending.to_string(), "Pending");
+    }
+
+    #[test]
+    fn test_status_waiting_taker_bond_roundtrip() {
+        assert_eq!(Status::WaitingTakerBond.to_string(), "waiting-taker-bond");
+        assert_eq!(
+            Status::from_str("waiting-taker-bond").unwrap(),
+            Status::WaitingTakerBond
+        );
+        // serde representation must match the string form.
+        let json = serde_json::to_string(&Status::WaitingTakerBond).unwrap();
+        assert_eq!(json, "\"waiting-taker-bond\"");
+        let back: Status = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, Status::WaitingTakerBond);
     }
 
     #[test]
