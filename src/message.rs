@@ -495,7 +495,7 @@ pub struct RestoreSessionInfo {
 /// outcome (settle vs cancel). Absent payload (`null`) ⇒ neither bond is
 /// slashed (release-by-default, coherent with the "when in doubt, release"
 /// invariant).
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
 pub struct BondResolution {
     /// Slash the seller's bond (if posted).
     pub slash_seller: bool,
@@ -1256,13 +1256,51 @@ mod test {
             slash_buyer: true,
         });
 
-        // Regular trade actions must reject BondResolution.
+        // Every Action except AdminSettle / AdminCancel must reject a
+        // BondResolution payload. Listed explicitly (no strum) so that adding
+        // a new Action variant forces a compile-error reminder here.
         for action in [
+            Action::NewOrder,
+            Action::TakeSell,
+            Action::TakeBuy,
+            Action::PayInvoice,
             Action::FiatSent,
+            Action::FiatSentOk,
             Action::Release,
+            Action::Released,
             Action::Cancel,
+            Action::Canceled,
+            Action::CooperativeCancelInitiatedByYou,
+            Action::CooperativeCancelInitiatedByPeer,
+            Action::DisputeInitiatedByYou,
+            Action::DisputeInitiatedByPeer,
+            Action::CooperativeCancelAccepted,
+            Action::BuyerInvoiceAccepted,
+            Action::PurchaseCompleted,
+            Action::HoldInvoicePaymentAccepted,
+            Action::HoldInvoicePaymentSettled,
+            Action::HoldInvoicePaymentCanceled,
+            Action::WaitingSellerToPay,
+            Action::WaitingBuyerInvoice,
+            Action::AddInvoice,
+            Action::BuyerTookOrder,
+            Action::Rate,
+            Action::RateUser,
+            Action::RateReceived,
+            Action::CantDo,
             Action::Dispute,
+            Action::AdminCanceled,
+            Action::AdminSettled,
+            Action::AdminAddSolver,
+            Action::AdminTakeDispute,
+            Action::AdminTookDispute,
+            Action::PaymentFailed,
+            Action::InvoiceUpdated,
             Action::SendDm,
+            Action::TradePubkey,
+            Action::RestoreSession,
+            Action::LastTradeIndex,
+            Action::Orders,
         ] {
             let msg = Message::Order(MessageKind::new(
                 Some(uuid),
