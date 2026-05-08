@@ -488,6 +488,21 @@ pub struct RestoreSessionInfo {
     pub restore_disputes: Vec<RestoredDisputesInfo>,
 }
 
+/// Bond resolution carried by [`Action::AdminSettle`] /
+/// [`Action::AdminCancel`].
+///
+/// Lets the solver express slash decisions independently from the trade
+/// outcome (settle vs cancel). Absent payload (`null`) ⇒ neither bond is
+/// slashed (release-by-default, coherent with the "when in doubt, release"
+/// invariant).
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
+pub struct BondResolution {
+    /// Slash the seller's bond (if posted).
+    pub slash_seller: bool,
+    /// Slash the buyer's bond (if posted).
+    pub slash_buyer: bool,
+}
+
 /// Typed payload attached to a [`MessageKind`].
 ///
 /// Each variant corresponds to a set of [`Action`] values that can legally
@@ -528,6 +543,9 @@ pub enum Payload {
     Ids(Vec<Uuid>),
     /// Vector of [`SmallOrder`] values (full listing).
     Orders(Vec<SmallOrder>),
+    /// Slash decisions carried by [`Action::AdminSettle`] /
+    /// [`Action::AdminCancel`]. See [`BondResolution`].
+    BondResolution(BondResolution),
 }
 
 #[allow(dead_code)]
@@ -611,6 +629,12 @@ impl MessageKind {
                 }
                 matches!(&self.payload, Some(Payload::PaymentRequest(_, _, _)))
             }
+            Action::AdminSettle | Action::AdminCancel => {
+                if self.id.is_none() {
+                    return false;
+                }
+                matches!(&self.payload, None | Some(Payload::BondResolution(_)))
+            }
             Action::TakeSell
             | Action::TakeBuy
             | Action::FiatSent
@@ -618,9 +642,7 @@ impl MessageKind {
             | Action::Release
             | Action::Released
             | Action::Dispute
-            | Action::AdminCancel
             | Action::AdminCanceled
-            | Action::AdminSettle
             | Action::AdminSettled
             | Action::Rate
             | Action::RateReceived
@@ -648,7 +670,7 @@ impl MessageKind {
                 if self.id.is_none() {
                     return false;
                 }
-                true
+                !matches!(&self.payload, Some(Payload::BondResolution(_)))
             }
             Action::LastTradeIndex | Action::RestoreSession => self.payload.is_none(),
             Action::PaymentFailed => {
@@ -1166,6 +1188,186 @@ mod test {
         );
         let msg = Message::Restore(kind);
         assert!(!msg.verify());
+    }
+
+    #[test]
+    fn test_bond_resolution_admin_actions_accept_payload_or_none() {
+        use crate::message::BondResolution;
+
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+
+        for action in [Action::AdminSettle, Action::AdminCancel] {
+            let with_resolution = Message::Order(MessageKind::new(
+                Some(uuid),
+                Some(1),
+                Some(2),
+                action.clone(),
+                Some(Payload::BondResolution(BondResolution {
+                    slash_seller: true,
+                    slash_buyer: false,
+                })),
+            ));
+            assert!(
+                with_resolution.verify(),
+                "{action:?} + BondResolution should verify"
+            );
+
+            let without_payload = Message::Order(MessageKind::new(
+                Some(uuid),
+                Some(1),
+                Some(2),
+                action.clone(),
+                None,
+            ));
+            assert!(without_payload.verify(), "{action:?} + None should verify");
+
+            // Wrong payload type must be rejected for these admin actions.
+            let wrong = Message::Order(MessageKind::new(
+                Some(uuid),
+                Some(1),
+                Some(2),
+                action.clone(),
+                Some(Payload::TextMessage("nope".to_string())),
+            ));
+            assert!(!wrong.verify(), "{action:?} + TextMessage must be rejected");
+
+            // Missing id is still invalid.
+            let no_id = Message::Order(MessageKind::new(
+                None,
+                Some(1),
+                Some(2),
+                action,
+                Some(Payload::BondResolution(BondResolution {
+                    slash_seller: false,
+                    slash_buyer: false,
+                })),
+            ));
+            assert!(!no_id.verify(), "admin action without id must be rejected");
+        }
+    }
+
+    #[test]
+    fn test_bond_resolution_rejected_on_non_admin_actions() {
+        use crate::message::BondResolution;
+
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let payload = Payload::BondResolution(BondResolution {
+            slash_seller: true,
+            slash_buyer: true,
+        });
+
+        // Every Action except AdminSettle / AdminCancel must reject a
+        // BondResolution payload. Listed explicitly (no strum) so that adding
+        // a new Action variant forces a compile-error reminder here.
+        for action in [
+            Action::NewOrder,
+            Action::TakeSell,
+            Action::TakeBuy,
+            Action::PayInvoice,
+            Action::FiatSent,
+            Action::FiatSentOk,
+            Action::Release,
+            Action::Released,
+            Action::Cancel,
+            Action::Canceled,
+            Action::CooperativeCancelInitiatedByYou,
+            Action::CooperativeCancelInitiatedByPeer,
+            Action::DisputeInitiatedByYou,
+            Action::DisputeInitiatedByPeer,
+            Action::CooperativeCancelAccepted,
+            Action::BuyerInvoiceAccepted,
+            Action::PurchaseCompleted,
+            Action::HoldInvoicePaymentAccepted,
+            Action::HoldInvoicePaymentSettled,
+            Action::HoldInvoicePaymentCanceled,
+            Action::WaitingSellerToPay,
+            Action::WaitingBuyerInvoice,
+            Action::AddInvoice,
+            Action::BuyerTookOrder,
+            Action::Rate,
+            Action::RateUser,
+            Action::RateReceived,
+            Action::CantDo,
+            Action::Dispute,
+            Action::AdminCanceled,
+            Action::AdminSettled,
+            Action::AdminAddSolver,
+            Action::AdminTakeDispute,
+            Action::AdminTookDispute,
+            Action::PaymentFailed,
+            Action::InvoiceUpdated,
+            Action::SendDm,
+            Action::TradePubkey,
+            Action::RestoreSession,
+            Action::LastTradeIndex,
+            Action::Orders,
+        ] {
+            let msg = Message::Order(MessageKind::new(
+                Some(uuid),
+                Some(1),
+                Some(2),
+                action.clone(),
+                Some(payload.clone()),
+            ));
+            assert!(
+                !msg.verify(),
+                "{action:?} must reject BondResolution payload"
+            );
+        }
+    }
+
+    #[test]
+    fn test_bond_resolution_wire_format() {
+        use crate::message::BondResolution;
+
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let msg = Message::Order(MessageKind::new(
+            Some(uuid),
+            None,
+            None,
+            Action::AdminCancel,
+            Some(Payload::BondResolution(BondResolution {
+                slash_seller: true,
+                slash_buyer: false,
+            })),
+        ));
+
+        let json = msg.as_json().unwrap();
+        // Variant discriminator must be the snake_case `bond_resolution`.
+        assert!(
+            json.contains("\"bond_resolution\""),
+            "expected snake_case discriminator, got: {json}"
+        );
+        assert!(json.contains("\"slash_seller\":true"));
+        assert!(json.contains("\"slash_buyer\":false"));
+
+        // Roundtrip preserves the variant.
+        let decoded = Message::from_json(&json).unwrap();
+        assert!(decoded.verify());
+        if let Message::Order(kind) = decoded {
+            match kind.payload {
+                Some(Payload::BondResolution(b)) => {
+                    assert!(b.slash_seller);
+                    assert!(!b.slash_buyer);
+                }
+                other => panic!("expected BondResolution payload, got {other:?}"),
+            }
+        } else {
+            panic!("expected Order message");
+        }
+    }
+
+    #[test]
+    fn test_bond_resolution_legacy_null_payload() {
+        // payload = null on AdminSettle/AdminCancel must keep verifying so
+        // pre-BondResolution clients keep working (interpreted as "no slash"
+        // by the server).
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let json = format!(
+            r#"{{"order":{{"version":1,"id":"{uuid}","action":"admin-cancel","payload":null}}}}"#
+        );
+        let msg = Message::from_json(&json).unwrap();
+        assert!(msg.verify());
     }
 
     #[test]
