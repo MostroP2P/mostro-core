@@ -48,6 +48,11 @@ pub enum CantDoReason {
     InvalidPubkey,
     /// One or more request parameters are invalid.
     InvalidParameters,
+    /// The provided payload is the wrong shape for this action,
+    /// or carries values that cannot be processed (e.g. a
+    /// `BondResolution` requesting a slash against a side with no
+    /// active bond row). The caller should correct and resend.
+    InvalidPayload,
     /// The targeted order has already been canceled.
     OrderAlreadyCanceled,
     /// User creation failed on the server side.
@@ -227,5 +232,18 @@ impl std::fmt::Display for ServiceError {
             ServiceError::EncryptionError(e) => write!(f, "Encryption error: {}", e),
             ServiceError::DecryptionError(e) => write!(f, "Decryption error: {}", e),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_payload_serializes_to_snake_case() {
+        let json = serde_json::to_string(&CantDoReason::InvalidPayload).unwrap();
+        assert_eq!(json, "\"invalid_payload\"");
+        let round: CantDoReason = serde_json::from_str(&json).unwrap();
+        assert_eq!(round, CantDoReason::InvalidPayload);
     }
 }
