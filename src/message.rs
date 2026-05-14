@@ -120,6 +120,13 @@ pub enum Action {
     /// Buyer sends/updates its payout invoice.
     /// Payload: [`Payload::PaymentRequest`].
     AddInvoice,
+    /// Taker sends a Lightning invoice that Mostro must pay out as the
+    /// taker's anti-abuse bond. Same payload shape and direction as
+    /// [`Action::AddInvoice`] (user → Mostro); only the discriminator
+    /// differs so Mostro can tell a bond-payout invoice apart from a
+    /// buyer's trade payout invoice.
+    /// Payload: [`Payload::PaymentRequest`].
+    AddBondInvoice,
     /// Informational: a buyer has taken a sell order.
     BuyerTookOrder,
     /// Server-initiated rating request.
@@ -523,7 +530,8 @@ pub enum Payload {
     /// Lightning payment request plus optional amount override.
     ///
     /// Used by [`Action::PayInvoice`], [`Action::PayBondInvoice`],
-    /// [`Action::AddInvoice`] and [`Action::TakeSell`]. The [`SmallOrder`]
+    /// [`Action::AddInvoice`], [`Action::AddBondInvoice`] and
+    /// [`Action::TakeSell`]. The [`SmallOrder`]
     /// carries the matching order when relevant; the `String` is a BOLT-11
     /// invoice.
     PaymentRequest(Option<SmallOrder>, String, Option<Amount>),
@@ -631,7 +639,10 @@ impl MessageKind {
     pub fn verify(&self) -> bool {
         match &self.action {
             Action::NewOrder => matches!(&self.payload, Some(Payload::Order(_))),
-            Action::PayInvoice | Action::PayBondInvoice | Action::AddInvoice => {
+            Action::PayInvoice
+            | Action::PayBondInvoice
+            | Action::AddInvoice
+            | Action::AddBondInvoice => {
                 if self.id.is_none() {
                     return false;
                 }
@@ -718,12 +729,14 @@ impl MessageKind {
 
     /// Return the Lightning payment request embedded in a message.
     ///
-    /// Valid only for [`Action::TakeSell`], [`Action::AddInvoice`] and
-    /// [`Action::NewOrder`]. For `NewOrder`, the invoice is read from the
-    /// [`SmallOrder::buyer_invoice`] field. Returns `None` otherwise.
+    /// Valid only for [`Action::TakeSell`], [`Action::AddInvoice`],
+    /// [`Action::AddBondInvoice`] and [`Action::NewOrder`]. For `NewOrder`,
+    /// the invoice is read from the [`SmallOrder::buyer_invoice`] field.
+    /// Returns `None` otherwise.
     pub fn get_payment_request(&self) -> Option<String> {
         if self.action != Action::TakeSell
             && self.action != Action::AddInvoice
+            && self.action != Action::AddBondInvoice
             && self.action != Action::NewOrder
         {
             return None;
@@ -1292,6 +1305,7 @@ mod test {
             Action::WaitingSellerToPay,
             Action::WaitingBuyerInvoice,
             Action::AddInvoice,
+            Action::AddBondInvoice,
             Action::BuyerTookOrder,
             Action::Rate,
             Action::RateUser,
@@ -1437,6 +1451,73 @@ mod test {
             None,
         ));
         assert!(!no_payload.verify());
+    }
+
+    #[test]
+    fn test_add_bond_invoice_wire_format_and_verify() {
+        let uuid = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let bolt11 = "lnbcrt78510n1pj59wmepp50677g8tffdqa2p8882y0x6newny5vtz0hjuyngdwv226nanv4uzsdqqcqzzsxqyz5vqsp5skn973360gp4yhlpmefwvul5hs58lkkl3u3ujvt57elmp4zugp4q9qyyssqw4nzlr72w28k4waycf27qvgzc9sp79sqlw83j56txltz4va44j7jda23ydcujj9y5k6k0rn5ms84w8wmcmcyk5g3mhpqepf7envhdccp72nz6e".to_string();
+
+        let msg = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::AddBondInvoice,
+            Some(Payload::PaymentRequest(None, bolt11.clone(), None)),
+        ));
+        assert!(msg.verify());
+
+        // Wire format must use the kebab-case discriminator.
+        let json = msg.as_json().unwrap();
+        assert!(
+            json.contains("\"action\":\"add-bond-invoice\""),
+            "expected kebab-case discriminator, got: {json}"
+        );
+
+        // Roundtrip preserves the variant.
+        let decoded = Message::from_json(&json).unwrap();
+        assert!(decoded.verify());
+        assert!(matches!(
+            decoded.inner_action(),
+            Some(Action::AddBondInvoice)
+        ));
+
+        // Same id / payload constraints as AddInvoice: missing id is invalid.
+        let no_id = Message::Order(MessageKind::new(
+            None,
+            Some(1),
+            Some(2),
+            Action::AddBondInvoice,
+            Some(Payload::PaymentRequest(None, bolt11.clone(), None)),
+        ));
+        assert!(!no_id.verify());
+
+        // Wrong payload shape is rejected.
+        let wrong_payload = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::AddBondInvoice,
+            Some(Payload::TextMessage("nope".to_string())),
+        ));
+        assert!(!wrong_payload.verify());
+
+        // Missing payload is rejected (PaymentRequest is required).
+        let no_payload = Message::Order(MessageKind::new(
+            Some(uuid),
+            Some(1),
+            Some(2),
+            Action::AddBondInvoice,
+            None,
+        ));
+        assert!(!no_payload.verify());
+
+        // get_payment_request must surface the bolt11 for AddBondInvoice.
+        if let Message::Order(kind) = &msg {
+            assert_eq!(kind.get_payment_request(), Some(bolt11));
+        } else {
+            panic!("expected Message::Order");
+        }
     }
 
     #[test]
