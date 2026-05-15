@@ -517,6 +517,33 @@ pub struct BondResolution {
     pub slash_buyer: bool,
 }
 
+/// Outbound side of the bond payout invoice request carried by
+/// [`Action::AddBondInvoice`] (Mostro → winning counterparty).
+///
+/// Asks the recipient for a bolt11 sized at `order.amount` (= the
+/// counterparty share of a slashed bond) and ships the slash anchor
+/// `slashed_at` so the client can compute the forfeit deadline as
+/// `slashed_at + bond_payout_claim_window_days * 86_400` — accurate even
+/// when the message lands days late because the recipient or their relay
+/// was offline.
+///
+/// The reply (counterparty → Mostro) reuses [`Payload::PaymentRequest`]
+/// with the actual bolt11 in the second tuple slot, so the two
+/// directions of the same action are wire-distinguishable by payload
+/// shape rather than by message ordering.
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct BondPayoutRequest {
+    /// Order context (id, kind, `amount` = counterparty share in sats,
+    /// fiat metadata, etc.). Same [`SmallOrder`] shape the client
+    /// already renders for other order-bearing actions.
+    pub order: SmallOrder,
+    /// Unix timestamp (seconds, UTC) at which Mostro recorded the slash
+    /// decision. Frozen at the `Locked → PendingPayout` CAS and shipped
+    /// verbatim on every cadence retry of this request — clients can
+    /// rely on it as a fixed anchor.
+    pub slashed_at: i64,
+}
+
 /// Typed payload attached to a [`MessageKind`].
 ///
 /// Each variant corresponds to a set of [`Action`] values that can legally
@@ -562,6 +589,12 @@ pub enum Payload {
     /// Slash decisions carried by [`Action::AdminSettle`] /
     /// [`Action::AdminCancel`]. See [`BondResolution`].
     BondResolution(BondResolution),
+    /// Outbound bond payout invoice request carried by
+    /// [`Action::AddBondInvoice`] (Mostro → counterparty). The reply
+    /// direction (counterparty → Mostro) keeps using
+    /// [`Payload::PaymentRequest`] with the actual bolt11. See
+    /// [`BondPayoutRequest`].
+    BondPayoutRequest(BondPayoutRequest),
 }
 
 #[allow(dead_code)]
@@ -639,14 +672,25 @@ impl MessageKind {
     pub fn verify(&self) -> bool {
         match &self.action {
             Action::NewOrder => matches!(&self.payload, Some(Payload::Order(_))),
-            Action::PayInvoice
-            | Action::PayBondInvoice
-            | Action::AddInvoice
-            | Action::AddBondInvoice => {
+            Action::PayInvoice | Action::PayBondInvoice | Action::AddInvoice => {
                 if self.id.is_none() {
                     return false;
                 }
                 matches!(&self.payload, Some(Payload::PaymentRequest(_, _, _)))
+            }
+            Action::AddBondInvoice => {
+                if self.id.is_none() {
+                    return false;
+                }
+                // Two valid shapes:
+                //   - `BondPayoutRequest` for the outbound direction
+                //     (Mostro → counterparty, "send me a bolt11").
+                //   - `PaymentRequest` for the inbound reply
+                //     (counterparty → Mostro, "here is the bolt11").
+                matches!(
+                    &self.payload,
+                    Some(Payload::BondPayoutRequest(_)) | Some(Payload::PaymentRequest(_, _, _))
+                )
             }
             Action::AdminSettle | Action::AdminCancel => {
                 if self.id.is_none() {
@@ -689,7 +733,10 @@ impl MessageKind {
                 if self.id.is_none() {
                     return false;
                 }
-                !matches!(&self.payload, Some(Payload::BondResolution(_)))
+                !matches!(
+                    &self.payload,
+                    Some(Payload::BondResolution(_)) | Some(Payload::BondPayoutRequest(_))
+                )
             }
             Action::LastTradeIndex | Action::RestoreSession => self.payload.is_none(),
             Action::PaymentFailed => {
@@ -787,7 +834,8 @@ impl MessageKind {
 
 #[cfg(test)]
 mod test {
-    use crate::message::{Action, Message, MessageKind, Payload, Peer};
+    use crate::message::{Action, BondPayoutRequest, Message, MessageKind, Payload, Peer};
+    use crate::order::SmallOrder;
     use crate::user::UserInfo;
     use nostr_sdk::Keys;
     use uuid::uuid;
@@ -897,6 +945,81 @@ mod test {
         let message_json = message_without_reputation.as_json().unwrap();
         let deserialized_message = Message::from_json(&message_json).unwrap();
         assert!(deserialized_message.verify());
+    }
+
+    #[test]
+    fn test_bond_payout_request_payload_verifies_on_add_bond_invoice() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let order = SmallOrder {
+            id: Some(order_id),
+            kind: None,
+            status: None,
+            amount: 500,
+            fiat_code: "USD".to_string(),
+            min_amount: None,
+            max_amount: None,
+            fiat_amount: 0,
+            payment_method: "lightning".to_string(),
+            premium: 0,
+            buyer_trade_pubkey: None,
+            seller_trade_pubkey: None,
+            buyer_invoice: None,
+            created_at: None,
+            expires_at: None,
+        };
+        let payload = Payload::BondPayoutRequest(BondPayoutRequest {
+            order,
+            slashed_at: 1_734_000_000,
+        });
+        let kind = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::AddBondInvoice,
+            Some(payload),
+        );
+        assert!(
+            kind.verify(),
+            "BondPayoutRequest must verify on AddBondInvoice"
+        );
+
+        // Round-trip through JSON to catch a serde-rename mismatch on the
+        // new snake_case discriminator.
+        let m = Message::Order(kind);
+        let json = m.as_json().unwrap();
+        assert!(json.contains("bond_payout_request"));
+        let back = Message::from_json(&json).unwrap();
+        assert!(back.verify());
+    }
+
+    #[test]
+    fn test_bond_payout_request_payload_rejected_on_wrong_action() {
+        // BondPayoutRequest on any action other than AddBondInvoice must
+        // fail verification — the new variant is opt-in per action.
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let order = SmallOrder {
+            id: Some(order_id),
+            kind: None,
+            status: None,
+            amount: 500,
+            fiat_code: "USD".to_string(),
+            min_amount: None,
+            max_amount: None,
+            fiat_amount: 0,
+            payment_method: "lightning".to_string(),
+            premium: 0,
+            buyer_trade_pubkey: None,
+            seller_trade_pubkey: None,
+            buyer_invoice: None,
+            created_at: None,
+            expires_at: None,
+        };
+        let payload = Payload::BondPayoutRequest(BondPayoutRequest {
+            order,
+            slashed_at: 0,
+        });
+        let kind = MessageKind::new(Some(order_id), None, None, Action::FiatSent, Some(payload));
+        assert!(!kind.verify());
     }
 
     #[test]
