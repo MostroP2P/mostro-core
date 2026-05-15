@@ -1119,13 +1119,7 @@ mod test {
                 order: order.clone(),
                 slashed_at: 0,
             });
-            let kind = MessageKind::new(
-                Some(order_id),
-                None,
-                None,
-                action.clone(),
-                Some(payload),
-            );
+            let kind = MessageKind::new(Some(order_id), None, None, action.clone(), Some(payload));
             assert!(
                 !kind.verify(),
                 "BondPayoutRequest must be rejected on {action:?}"
