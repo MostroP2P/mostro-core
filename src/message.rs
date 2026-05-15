@@ -1014,12 +1014,123 @@ mod test {
             created_at: None,
             expires_at: None,
         };
-        let payload = Payload::BondPayoutRequest(BondPayoutRequest {
-            order,
-            slashed_at: 0,
-        });
-        let kind = MessageKind::new(Some(order_id), None, None, Action::FiatSent, Some(payload));
-        assert!(!kind.verify());
+
+        // Compile-time exhaustiveness guard: adding a new Action variant
+        // forces this match to be updated, which in turn forces a
+        // decision about whether the new variant belongs in
+        // `other_actions` below.
+        let _exhaustive: fn(Action) = |a| match a {
+            Action::AddBondInvoice => {}
+            Action::NewOrder
+            | Action::TakeSell
+            | Action::TakeBuy
+            | Action::PayInvoice
+            | Action::PayBondInvoice
+            | Action::FiatSent
+            | Action::FiatSentOk
+            | Action::Release
+            | Action::Released
+            | Action::Cancel
+            | Action::Canceled
+            | Action::CooperativeCancelInitiatedByYou
+            | Action::CooperativeCancelInitiatedByPeer
+            | Action::DisputeInitiatedByYou
+            | Action::DisputeInitiatedByPeer
+            | Action::CooperativeCancelAccepted
+            | Action::BuyerInvoiceAccepted
+            | Action::PurchaseCompleted
+            | Action::HoldInvoicePaymentAccepted
+            | Action::HoldInvoicePaymentSettled
+            | Action::HoldInvoicePaymentCanceled
+            | Action::WaitingSellerToPay
+            | Action::WaitingBuyerInvoice
+            | Action::AddInvoice
+            | Action::BuyerTookOrder
+            | Action::Rate
+            | Action::RateUser
+            | Action::RateReceived
+            | Action::CantDo
+            | Action::Dispute
+            | Action::AdminCancel
+            | Action::AdminCanceled
+            | Action::AdminSettle
+            | Action::AdminSettled
+            | Action::AdminAddSolver
+            | Action::AdminTakeDispute
+            | Action::AdminTookDispute
+            | Action::PaymentFailed
+            | Action::InvoiceUpdated
+            | Action::SendDm
+            | Action::TradePubkey
+            | Action::RestoreSession
+            | Action::LastTradeIndex
+            | Action::Orders => {}
+        };
+
+        let other_actions: &[Action] = &[
+            Action::NewOrder,
+            Action::TakeSell,
+            Action::TakeBuy,
+            Action::PayInvoice,
+            Action::PayBondInvoice,
+            Action::FiatSent,
+            Action::FiatSentOk,
+            Action::Release,
+            Action::Released,
+            Action::Cancel,
+            Action::Canceled,
+            Action::CooperativeCancelInitiatedByYou,
+            Action::CooperativeCancelInitiatedByPeer,
+            Action::DisputeInitiatedByYou,
+            Action::DisputeInitiatedByPeer,
+            Action::CooperativeCancelAccepted,
+            Action::BuyerInvoiceAccepted,
+            Action::PurchaseCompleted,
+            Action::HoldInvoicePaymentAccepted,
+            Action::HoldInvoicePaymentSettled,
+            Action::HoldInvoicePaymentCanceled,
+            Action::WaitingSellerToPay,
+            Action::WaitingBuyerInvoice,
+            Action::AddInvoice,
+            Action::BuyerTookOrder,
+            Action::Rate,
+            Action::RateUser,
+            Action::RateReceived,
+            Action::CantDo,
+            Action::Dispute,
+            Action::AdminCancel,
+            Action::AdminCanceled,
+            Action::AdminSettle,
+            Action::AdminSettled,
+            Action::AdminAddSolver,
+            Action::AdminTakeDispute,
+            Action::AdminTookDispute,
+            Action::PaymentFailed,
+            Action::InvoiceUpdated,
+            Action::SendDm,
+            Action::TradePubkey,
+            Action::RestoreSession,
+            Action::LastTradeIndex,
+            Action::Orders,
+        ];
+
+        for action in other_actions {
+            let payload = Payload::BondPayoutRequest(BondPayoutRequest {
+                order: order.clone(),
+                slashed_at: 0,
+            });
+            let kind = MessageKind::new(
+                Some(order_id),
+                None,
+                None,
+                action.clone(),
+                Some(payload),
+            );
+            assert!(
+                !kind.verify(),
+                "BondPayoutRequest must be rejected on {action:?}"
+            );
+        }
     }
 
     #[test]
