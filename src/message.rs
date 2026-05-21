@@ -105,8 +105,20 @@ pub enum Action {
     CooperativeCancelAccepted,
     /// Mostro accepted the buyer's payout invoice.
     BuyerInvoiceAccepted,
+    /// Mostro accepted the winning counterparty's bond-payout invoice.
+    /// Bond dual of [`Action::BuyerInvoiceAccepted`] (Mostro → winner):
+    /// the payout bolt11 was received and the payment is now pending, so
+    /// the client can stop prompting the user for an invoice.
+    /// Payload: [`Payload::Order`] (amount = counterparty share).
+    BondInvoiceAccepted,
     /// Trade completed successfully.
     PurchaseCompleted,
+    /// Mostro paid out a slashed bond's counterparty share successfully.
+    /// Bond dual of [`Action::PurchaseCompleted`] (Mostro → winner): the
+    /// `send_payment` to the winner's bolt11 succeeded and the bond is
+    /// now settled, so the client can close the claim.
+    /// Payload: [`Payload::Order`] (amount = counterparty share).
+    BondPayoutCompleted,
     /// Mostro saw the hold-invoice payment accepted by the node.
     HoldInvoicePaymentAccepted,
     /// Mostro saw the hold-invoice payment settled.
@@ -715,12 +727,14 @@ impl MessageKind {
             | Action::DisputeInitiatedByPeer
             | Action::WaitingBuyerInvoice
             | Action::PurchaseCompleted
+            | Action::BondPayoutCompleted
             | Action::HoldInvoicePaymentAccepted
             | Action::HoldInvoicePaymentSettled
             | Action::HoldInvoicePaymentCanceled
             | Action::WaitingSellerToPay
             | Action::BuyerTookOrder
             | Action::BuyerInvoiceAccepted
+            | Action::BondInvoiceAccepted
             | Action::CooperativeCancelInitiatedByYou
             | Action::CooperativeCancelInitiatedByPeer
             | Action::CooperativeCancelAccepted
@@ -1038,7 +1052,9 @@ mod test {
             | Action::DisputeInitiatedByPeer
             | Action::CooperativeCancelAccepted
             | Action::BuyerInvoiceAccepted
+            | Action::BondInvoiceAccepted
             | Action::PurchaseCompleted
+            | Action::BondPayoutCompleted
             | Action::HoldInvoicePaymentAccepted
             | Action::HoldInvoicePaymentSettled
             | Action::HoldInvoicePaymentCanceled
@@ -1085,7 +1101,9 @@ mod test {
             Action::DisputeInitiatedByPeer,
             Action::CooperativeCancelAccepted,
             Action::BuyerInvoiceAccepted,
+            Action::BondInvoiceAccepted,
             Action::PurchaseCompleted,
+            Action::BondPayoutCompleted,
             Action::HoldInvoicePaymentAccepted,
             Action::HoldInvoicePaymentSettled,
             Action::HoldInvoicePaymentCanceled,
@@ -1124,6 +1142,103 @@ mod test {
                 !kind.verify(),
                 "BondPayoutRequest must be rejected on {action:?}"
             );
+        }
+    }
+
+    #[test]
+    fn test_bond_payout_ack_actions_verify_and_wire_format() {
+        use crate::message::BondResolution;
+
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+
+        // SmallOrder whose `amount` is the counterparty share carried by
+        // these Mostro → winner bond-payout acknowledgements.
+        let order = || SmallOrder {
+            id: Some(order_id),
+            kind: None,
+            status: None,
+            amount: 500,
+            fiat_code: "USD".to_string(),
+            min_amount: None,
+            max_amount: None,
+            fiat_amount: 0,
+            payment_method: "lightning".to_string(),
+            premium: 0,
+            buyer_trade_pubkey: None,
+            seller_trade_pubkey: None,
+            buyer_invoice: None,
+            created_at: None,
+            expires_at: None,
+        };
+
+        // Both variants are the bond duals of BuyerInvoiceAccepted /
+        // PurchaseCompleted: id required, Payload::Order accepted, and the
+        // bond request/resolution payloads rejected.
+        for (action, discriminator) in [
+            (Action::BondInvoiceAccepted, "bond-invoice-accepted"),
+            (Action::BondPayoutCompleted, "bond-payout-completed"),
+        ] {
+            // id set + Payload::Order verifies.
+            let ok = Message::Order(MessageKind::new(
+                Some(order_id),
+                Some(1),
+                Some(2),
+                action.clone(),
+                Some(Payload::Order(order())),
+            ));
+            assert!(ok.verify(), "{action:?} + Order should verify");
+
+            // Missing id is invalid.
+            let no_id = Message::Order(MessageKind::new(
+                None,
+                Some(1),
+                Some(2),
+                action.clone(),
+                Some(Payload::Order(order())),
+            ));
+            assert!(!no_id.verify(), "{action:?} without id must be rejected");
+
+            // BondResolution payload is rejected on these outbound acks.
+            let with_resolution = Message::Order(MessageKind::new(
+                Some(order_id),
+                Some(1),
+                Some(2),
+                action.clone(),
+                Some(Payload::BondResolution(BondResolution {
+                    slash_seller: true,
+                    slash_buyer: false,
+                })),
+            ));
+            assert!(
+                !with_resolution.verify(),
+                "{action:?} + BondResolution must be rejected"
+            );
+
+            // BondPayoutRequest payload is rejected too.
+            let with_request = Message::Order(MessageKind::new(
+                Some(order_id),
+                Some(1),
+                Some(2),
+                action.clone(),
+                Some(Payload::BondPayoutRequest(BondPayoutRequest {
+                    order: order(),
+                    slashed_at: 0,
+                })),
+            ));
+            assert!(
+                !with_request.verify(),
+                "{action:?} + BondPayoutRequest must be rejected"
+            );
+
+            // Wire format uses the kebab-case discriminator and round-trips.
+            let json = ok.as_json().unwrap();
+            assert!(
+                json.contains(&format!("\"action\":\"{discriminator}\"")),
+                "expected kebab-case discriminator {discriminator}, got: {json}"
+            );
+            let decoded = Message::from_json(&json).unwrap();
+            assert!(decoded.verify());
+            assert_eq!(decoded.inner_action(), Some(action));
         }
     }
 
@@ -1526,7 +1641,9 @@ mod test {
             Action::DisputeInitiatedByPeer,
             Action::CooperativeCancelAccepted,
             Action::BuyerInvoiceAccepted,
+            Action::BondInvoiceAccepted,
             Action::PurchaseCompleted,
+            Action::BondPayoutCompleted,
             Action::HoldInvoicePaymentAccepted,
             Action::HoldInvoicePaymentSettled,
             Action::HoldInvoicePaymentCanceled,
