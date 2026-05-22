@@ -330,6 +330,7 @@ fn action_accepts_missing_request_id(action: &Action) -> bool {
             | Action::Rate
             | Action::RateReceived
             | Action::SendDm
+            | Action::BondSlashed
     )
 }
 

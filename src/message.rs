@@ -119,6 +119,14 @@ pub enum Action {
     /// now settled, so the client can close the claim.
     /// Payload: [`Payload::Order`] (amount = counterparty share).
     BondPayoutCompleted,
+    /// Mostro notifies a user that their anti-abuse bond was slashed for
+    /// letting a waiting-state timeout elapse (Mostro → slashed user). The
+    /// bond's hold invoice has been settled and the row moved to
+    /// `pending-payout`; the user keeps no claim over the forfeited sats.
+    /// Informational only — the slashed user receives this alongside the
+    /// `Action::Canceled` for the order itself.
+    /// Payload: [`Payload::Order`] (amount = slashed bond amount).
+    BondSlashed,
     /// Mostro saw the hold-invoice payment accepted by the node.
     HoldInvoicePaymentAccepted,
     /// Mostro saw the hold-invoice payment settled.
@@ -728,6 +736,7 @@ impl MessageKind {
             | Action::WaitingBuyerInvoice
             | Action::PurchaseCompleted
             | Action::BondPayoutCompleted
+            | Action::BondSlashed
             | Action::HoldInvoicePaymentAccepted
             | Action::HoldInvoicePaymentSettled
             | Action::HoldInvoicePaymentCanceled
@@ -1055,6 +1064,7 @@ mod test {
             | Action::BondInvoiceAccepted
             | Action::PurchaseCompleted
             | Action::BondPayoutCompleted
+            | Action::BondSlashed
             | Action::HoldInvoicePaymentAccepted
             | Action::HoldInvoicePaymentSettled
             | Action::HoldInvoicePaymentCanceled
@@ -1104,6 +1114,7 @@ mod test {
             Action::BondInvoiceAccepted,
             Action::PurchaseCompleted,
             Action::BondPayoutCompleted,
+            Action::BondSlashed,
             Action::HoldInvoicePaymentAccepted,
             Action::HoldInvoicePaymentSettled,
             Action::HoldInvoicePaymentCanceled,
@@ -1171,12 +1182,15 @@ mod test {
             expires_at: None,
         };
 
-        // Both variants are the bond duals of BuyerInvoiceAccepted /
-        // PurchaseCompleted: id required, Payload::Order accepted, and the
-        // bond request/resolution payloads rejected.
+        // These bond notifications carry Payload::Order (BondInvoiceAccepted
+        // / BondPayoutCompleted are the duals of BuyerInvoiceAccepted /
+        // PurchaseCompleted; BondSlashed informs the slashed user): id
+        // required, Payload::Order accepted, and the bond request/resolution
+        // payloads rejected.
         for (action, discriminator) in [
             (Action::BondInvoiceAccepted, "bond-invoice-accepted"),
             (Action::BondPayoutCompleted, "bond-payout-completed"),
+            (Action::BondSlashed, "bond-slashed"),
         ] {
             // id set + Payload::Order verifies.
             let ok = Message::Order(MessageKind::new(
@@ -1644,6 +1658,7 @@ mod test {
             Action::BondInvoiceAccepted,
             Action::PurchaseCompleted,
             Action::BondPayoutCompleted,
+            Action::BondSlashed,
             Action::HoldInvoicePaymentAccepted,
             Action::HoldInvoicePaymentSettled,
             Action::HoldInvoicePaymentCanceled,
