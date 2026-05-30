@@ -331,6 +331,8 @@ fn action_accepts_missing_request_id(action: &Action) -> bool {
             | Action::RateReceived
             | Action::SendDm
             | Action::BondSlashed
+            | Action::CashuEscrowLocked
+            | Action::CashuPmSignature
     )
 }
 
@@ -661,5 +663,21 @@ mod tests {
     fn validate_response_with_no_expected_id_is_ok() {
         let msg = sample_order_message(None);
         validate_response(&msg, None).unwrap();
+    }
+
+    #[test]
+    fn validate_response_allows_cashu_server_events_without_request_id() {
+        // Both Cashu notifications are server-originated and may arrive while
+        // the client is still waiting on an earlier request_id.
+        for action in [Action::CashuEscrowLocked, Action::CashuPmSignature] {
+            let msg = Message::Order(MessageKind::new(
+                Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+                None,
+                None,
+                action,
+                None,
+            ));
+            validate_response(&msg, Some(1)).unwrap();
+        }
     }
 }

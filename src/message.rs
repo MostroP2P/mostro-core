@@ -200,11 +200,11 @@ pub enum Action {
     /// mint) and the trade can proceed. Informational; the daemon never
     /// takes custody. Direction: Mostro → buyer/seller.
     CashuEscrowLocked,
-    /// Mostro hands its `P_M` signature to the dispute winner so they can
-    /// assemble a valid 2-of-3 swap at the mint. Emitted only during
-    /// dispute resolution, as the Cashu counterpart of
+    /// Mostro hands its `P_M` signatures (one per escrowed proof) to the
+    /// dispute winner so they can assemble a valid 2-of-3 swap at the mint.
+    /// Emitted only during dispute resolution, as the Cashu counterpart of
     /// [`Action::AdminSettled`] / [`Action::AdminCanceled`].
-    /// Direction: Mostro → winner. Payload: [`Payload::CashuSignature`].
+    /// Direction: Mostro → winner. Payload: [`Payload::CashuSignatures`].
     CashuPmSignature,
 }
 
@@ -633,6 +633,32 @@ impl CashuLockProof {
     }
 }
 
+/// Mostro's `P_M` signature for a single escrowed proof.
+///
+/// Under NUT-11 SIG_INPUTS each input proof carries its own witness with a
+/// signature over that proof's own secret, so a Cashu token split across
+/// several denominations needs one signature per proof. The dispute winner
+/// matches each signature to its proof by `secret` when populating the
+/// per-proof witnesses and assembling the mint swap. See
+/// [`Payload::CashuSignatures`].
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub struct CashuProofSignature {
+    /// NUT-11 secret of the proof this signature applies to, exactly as it
+    /// appears in the escrowed token. Used to match the signature to its
+    /// proof.
+    pub secret: String,
+    /// Mostro's `P_M` signature (hex) over `secret`, to be inserted into that
+    /// proof's NUT-11 witness.
+    pub signature: String,
+}
+
+impl CashuProofSignature {
+    /// Create a new [`CashuProofSignature`].
+    pub fn new(secret: String, signature: String) -> Self {
+        Self { secret, signature }
+    }
+}
+
 /// Typed payload attached to a [`MessageKind`].
 ///
 /// Each variant corresponds to a set of [`Action`] values that can legally
@@ -687,10 +713,12 @@ pub enum Payload {
     /// Cashu 2-of-3 multisig escrow lock submitted on
     /// [`Action::AddCashuEscrow`] (seller → Mostro). See [`CashuLockProof`].
     CashuLockProof(CashuLockProof),
-    /// A NUT-11 P2PK signature (hex) over the escrowed proofs. Carried by
-    /// [`Action::CashuPmSignature`] when Mostro delivers its `P_M` signature
-    /// to a dispute winner.
-    CashuSignature(String),
+    /// Mostro's NUT-11 P2PK signatures over the escrowed proofs, one entry
+    /// per proof. Carried by [`Action::CashuPmSignature`] when Mostro delivers
+    /// its `P_M` signatures to a dispute winner. A token split across several
+    /// denominations contains multiple proofs, and SIG_INPUTS requires each to
+    /// be signed independently. See [`CashuProofSignature`].
+    CashuSignatures(Vec<CashuProofSignature>),
 }
 
 #[allow(dead_code)]
@@ -804,7 +832,7 @@ impl MessageKind {
                 if self.id.is_none() {
                     return false;
                 }
-                matches!(&self.payload, Some(Payload::CashuSignature(_)))
+                matches!(&self.payload, Some(Payload::CashuSignatures(sigs)) if !sigs.is_empty())
             }
             Action::TakeSell
             | Action::TakeBuy
@@ -947,7 +975,8 @@ impl MessageKind {
 #[cfg(test)]
 mod test {
     use crate::message::{
-        Action, BondPayoutRequest, CashuLockProof, Message, MessageKind, Payload, Peer,
+        Action, BondPayoutRequest, CashuLockProof, CashuProofSignature, Message, MessageKind,
+        Payload, Peer,
     };
     use crate::order::SmallOrder;
     use crate::user::UserInfo;
@@ -2124,22 +2153,25 @@ mod test {
     }
 
     #[test]
-    fn test_cashu_pm_signature_verifies_with_signature() {
+    fn test_cashu_pm_signature_verifies_with_signatures() {
         let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
         let kind = MessageKind::new(
             Some(order_id),
             None,
             None,
             Action::CashuPmSignature,
-            Some(Payload::CashuSignature("deadbeef".to_string())),
+            Some(Payload::CashuSignatures(vec![
+                CashuProofSignature::new("secret-0".to_string(), "deadbeef".to_string()),
+                CashuProofSignature::new("secret-1".to_string(), "c0ffee".to_string()),
+            ])),
         );
         assert!(
             kind.verify(),
-            "CashuSignature must verify on CashuPmSignature"
+            "CashuSignatures must verify on CashuPmSignature"
         );
 
         let json = Message::Order(kind).as_json().unwrap();
-        assert!(json.contains("cashu_signature"));
+        assert!(json.contains("cashu_signatures"));
         assert!(Message::from_json(&json).unwrap().verify());
 
         // Wrong payload ⇒ invalid.
@@ -2147,6 +2179,20 @@ mod test {
         assert!(
             !wrong.verify(),
             "CashuPmSignature without a signature payload must be rejected"
+        );
+
+        // Empty signature set ⇒ invalid: a multi-proof escrow needs one
+        // signature per proof, so an empty collection cannot assemble a swap.
+        let empty = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::CashuPmSignature,
+            Some(Payload::CashuSignatures(vec![])),
+        );
+        assert!(
+            !empty.verify(),
+            "CashuPmSignature with an empty signature set must be rejected"
         );
     }
 
