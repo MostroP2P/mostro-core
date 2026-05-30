@@ -190,6 +190,22 @@ pub enum Action {
     /// Listing of orders in response to a query.
     /// Payload: [`Payload::Ids`] or [`Payload::Orders`].
     Orders,
+    /// Seller submits a Cashu 2-of-3 multisig locked token as the trade
+    /// escrow, in place of paying a Lightning hold invoice (Cashu escrow
+    /// mode). Direction: seller → Mostro.
+    /// Payload: [`Payload::CashuLockProof`].
+    AddCashuEscrow,
+    /// Mostro confirms it validated the seller's Cashu escrow token (the
+    /// 2-of-3 condition is well-formed and the proofs are unspent at the
+    /// mint) and the trade can proceed. Informational; the daemon never
+    /// takes custody. Direction: Mostro → buyer/seller.
+    CashuEscrowLocked,
+    /// Mostro hands its `P_M` signatures (one per escrowed proof) to the
+    /// dispute winner so they can assemble a valid 2-of-3 swap at the mint.
+    /// Emitted only during dispute resolution, as the Cashu counterpart of
+    /// [`Action::AdminSettled`] / [`Action::AdminCanceled`].
+    /// Direction: Mostro → winner. Payload: [`Payload::CashuSignatures`].
+    CashuPmSignature,
 }
 
 impl fmt::Display for Action {
@@ -564,6 +580,85 @@ pub struct BondPayoutRequest {
     pub slashed_at: i64,
 }
 
+/// Cashu 2-of-3 multisig escrow lock submitted by the seller.
+///
+/// Carried inside [`Payload::CashuLockProof`] on [`Action::AddCashuEscrow`]
+/// (seller → Mostro). It describes a NUT-11 P2PK token locked to a 2-of-3
+/// spending condition over the buyer (`P_B`), seller (`P_S`) and Mostro
+/// (`P_M`) pubkeys. Mostro validates the condition and confirms the proofs
+/// are unspent at the mint (NUT-07 `checkstate`) without ever taking
+/// custody — it only ever holds one of the three keys.
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub struct CashuLockProof {
+    /// Serialized Cashu token (the locked ecash) as submitted by the seller.
+    pub token: String,
+    /// URL of the mint hosting the escrowed proofs. Must match the node's
+    /// configured mint.
+    pub mint_url: String,
+    /// Buyer pubkey embedded in the 2-of-3 condition (`P_B`), hex.
+    pub buyer_pubkey: String,
+    /// Seller pubkey embedded in the 2-of-3 condition (`P_S`), hex.
+    pub seller_pubkey: String,
+    /// Mostro/arbitrator pubkey embedded in the 2-of-3 condition (`P_M`),
+    /// hex.
+    pub mostro_pubkey: String,
+}
+
+impl CashuLockProof {
+    /// Create a new [`CashuLockProof`].
+    pub fn new(
+        token: String,
+        mint_url: String,
+        buyer_pubkey: String,
+        seller_pubkey: String,
+        mostro_pubkey: String,
+    ) -> Self {
+        Self {
+            token,
+            mint_url,
+            buyer_pubkey,
+            seller_pubkey,
+            mostro_pubkey,
+        }
+    }
+
+    /// Parse a [`CashuLockProof`] from its JSON representation.
+    pub fn from_json(json: &str) -> Result<Self, ServiceError> {
+        serde_json::from_str(json).map_err(|_| ServiceError::MessageSerializationError)
+    }
+
+    /// Serialize the lock proof to a JSON string.
+    pub fn as_json(&self) -> Result<String, ServiceError> {
+        serde_json::to_string(&self).map_err(|_| ServiceError::MessageSerializationError)
+    }
+}
+
+/// Mostro's `P_M` signature for a single escrowed proof.
+///
+/// Under NUT-11 SIG_INPUTS each input proof carries its own witness with a
+/// signature over that proof's own secret, so a Cashu token split across
+/// several denominations needs one signature per proof. The dispute winner
+/// matches each signature to its proof by `secret` when populating the
+/// per-proof witnesses and assembling the mint swap. See
+/// [`Payload::CashuSignatures`].
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub struct CashuProofSignature {
+    /// NUT-11 secret of the proof this signature applies to, exactly as it
+    /// appears in the escrowed token. Used to match the signature to its
+    /// proof.
+    pub secret: String,
+    /// Mostro's `P_M` signature (hex) over `secret`, to be inserted into that
+    /// proof's NUT-11 witness.
+    pub signature: String,
+}
+
+impl CashuProofSignature {
+    /// Create a new [`CashuProofSignature`].
+    pub fn new(secret: String, signature: String) -> Self {
+        Self { secret, signature }
+    }
+}
+
 /// Typed payload attached to a [`MessageKind`].
 ///
 /// Each variant corresponds to a set of [`Action`] values that can legally
@@ -615,6 +710,15 @@ pub enum Payload {
     /// [`Payload::PaymentRequest`] with the actual bolt11. See
     /// [`BondPayoutRequest`].
     BondPayoutRequest(BondPayoutRequest),
+    /// Cashu 2-of-3 multisig escrow lock submitted on
+    /// [`Action::AddCashuEscrow`] (seller → Mostro). See [`CashuLockProof`].
+    CashuLockProof(CashuLockProof),
+    /// Mostro's NUT-11 P2PK signatures over the escrowed proofs, one entry
+    /// per proof. Carried by [`Action::CashuPmSignature`] when Mostro delivers
+    /// its `P_M` signatures to a dispute winner. A token split across several
+    /// denominations contains multiple proofs, and SIG_INPUTS requires each to
+    /// be signed independently. See [`CashuProofSignature`].
+    CashuSignatures(Vec<CashuProofSignature>),
 }
 
 #[allow(dead_code)]
@@ -718,6 +822,18 @@ impl MessageKind {
                 }
                 matches!(&self.payload, None | Some(Payload::BondResolution(_)))
             }
+            Action::AddCashuEscrow => {
+                if self.id.is_none() {
+                    return false;
+                }
+                matches!(&self.payload, Some(Payload::CashuLockProof(_)))
+            }
+            Action::CashuPmSignature => {
+                if self.id.is_none() {
+                    return false;
+                }
+                matches!(&self.payload, Some(Payload::CashuSignatures(sigs)) if !sigs.is_empty())
+            }
             Action::TakeSell
             | Action::TakeBuy
             | Action::FiatSent
@@ -752,6 +868,7 @@ impl MessageKind {
             | Action::AdminAddSolver
             | Action::SendDm
             | Action::TradePubkey
+            | Action::CashuEscrowLocked
             | Action::Canceled => {
                 if self.id.is_none() {
                     return false;
@@ -857,7 +974,10 @@ impl MessageKind {
 
 #[cfg(test)]
 mod test {
-    use crate::message::{Action, BondPayoutRequest, Message, MessageKind, Payload, Peer};
+    use crate::message::{
+        Action, BondPayoutRequest, CashuLockProof, CashuProofSignature, Message, MessageKind,
+        Payload, Peer,
+    };
     use crate::order::SmallOrder;
     use crate::user::UserInfo;
     use nostr_sdk::Keys;
@@ -1090,6 +1210,9 @@ mod test {
             | Action::TradePubkey
             | Action::RestoreSession
             | Action::LastTradeIndex
+            | Action::AddCashuEscrow
+            | Action::CashuEscrowLocked
+            | Action::CashuPmSignature
             | Action::Orders => {}
         };
 
@@ -1141,6 +1264,9 @@ mod test {
             Action::RestoreSession,
             Action::LastTradeIndex,
             Action::Orders,
+            Action::AddCashuEscrow,
+            Action::CashuEscrowLocked,
+            Action::CashuPmSignature,
         ];
 
         for action in other_actions {
@@ -1951,6 +2077,138 @@ mod test {
         assert_eq!(
             deserialized_seller.solver_pubkey,
             helper_seller_dispute.solver_pubkey
+        );
+    }
+
+    fn sample_lock_proof() -> CashuLockProof {
+        CashuLockProof::new(
+            "cashuAeyJ0b2tlbiI6dGVzdA".to_string(),
+            "https://mint.example".to_string(),
+            "02b_buyer".to_string(),
+            "02s_seller".to_string(),
+            "02m_mostro".to_string(),
+        )
+    }
+
+    #[test]
+    fn test_cashu_lock_proof_json_round_trip() {
+        let proof = sample_lock_proof();
+        let json = proof.as_json().unwrap();
+        let back = CashuLockProof::from_json(&json).unwrap();
+        assert_eq!(back, proof);
+    }
+
+    #[test]
+    fn test_add_cashu_escrow_verifies_with_lock_proof() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let payload = Payload::CashuLockProof(sample_lock_proof());
+        let kind = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::AddCashuEscrow,
+            Some(payload),
+        );
+        assert!(
+            kind.verify(),
+            "CashuLockProof must verify on AddCashuEscrow"
+        );
+
+        // Round-trip through JSON to catch a serde-rename mismatch on the
+        // new snake_case discriminator.
+        let json = Message::Order(kind).as_json().unwrap();
+        assert!(json.contains("cashu_lock_proof"));
+        assert!(Message::from_json(&json).unwrap().verify());
+    }
+
+    #[test]
+    fn test_add_cashu_escrow_requires_id_and_right_payload() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+
+        // Missing id ⇒ invalid.
+        let no_id = MessageKind::new(
+            None,
+            None,
+            None,
+            Action::AddCashuEscrow,
+            Some(Payload::CashuLockProof(sample_lock_proof())),
+        );
+        assert!(
+            !no_id.verify(),
+            "AddCashuEscrow without id must be rejected"
+        );
+
+        // Wrong payload ⇒ invalid.
+        let wrong_payload = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::AddCashuEscrow,
+            Some(Payload::TextMessage("not a lock proof".to_string())),
+        );
+        assert!(
+            !wrong_payload.verify(),
+            "AddCashuEscrow with non-lock-proof payload must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_cashu_pm_signature_verifies_with_signatures() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let kind = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::CashuPmSignature,
+            Some(Payload::CashuSignatures(vec![
+                CashuProofSignature::new("secret-0".to_string(), "deadbeef".to_string()),
+                CashuProofSignature::new("secret-1".to_string(), "c0ffee".to_string()),
+            ])),
+        );
+        assert!(
+            kind.verify(),
+            "CashuSignatures must verify on CashuPmSignature"
+        );
+
+        let json = Message::Order(kind).as_json().unwrap();
+        assert!(json.contains("cashu_signatures"));
+        assert!(Message::from_json(&json).unwrap().verify());
+
+        // Wrong payload ⇒ invalid.
+        let wrong = MessageKind::new(Some(order_id), None, None, Action::CashuPmSignature, None);
+        assert!(
+            !wrong.verify(),
+            "CashuPmSignature without a signature payload must be rejected"
+        );
+
+        // Empty signature set ⇒ invalid: a multi-proof escrow needs one
+        // signature per proof, so an empty collection cannot assemble a swap.
+        let empty = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::CashuPmSignature,
+            Some(Payload::CashuSignatures(vec![])),
+        );
+        assert!(
+            !empty.verify(),
+            "CashuPmSignature with an empty signature set must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_cashu_escrow_locked_is_informational() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+
+        // Informational ack with an id and no payload verifies.
+        let ok = MessageKind::new(Some(order_id), None, None, Action::CashuEscrowLocked, None);
+        assert!(ok.verify(), "CashuEscrowLocked with id must verify");
+
+        // Missing id ⇒ invalid.
+        let no_id = MessageKind::new(None, None, None, Action::CashuEscrowLocked, None);
+        assert!(
+            !no_id.verify(),
+            "CashuEscrowLocked without id must be rejected"
         );
     }
 }

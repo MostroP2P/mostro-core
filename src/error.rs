@@ -85,6 +85,21 @@ pub enum CantDoReason {
     InvalidFiatCurrency,
     /// The caller is being rate-limited.
     TooManyRequests,
+    /// The submitted Cashu token is malformed, cannot be parsed, or its
+    /// 2-of-3 spending condition does not match the expected
+    /// buyer/seller/Mostro pubkeys.
+    InvalidCashuToken,
+    /// The configured Cashu mint could not be reached or did not answer the
+    /// state check.
+    CashuMintUnavailable,
+    /// The provided mint URL is malformed or does not match the node's
+    /// configured mint.
+    InvalidMintUrl,
+    /// The requested action needs a locked Cashu escrow, but none has been
+    /// recorded for this order.
+    CashuEscrowNotLocked,
+    /// A required Cashu signature is missing from the request.
+    CashuSignatureMissing,
 }
 
 /// Internal errors raised by services behind the Mostro API.

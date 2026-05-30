@@ -248,6 +248,15 @@ pub struct Order {
     pub next_trade_pubkey: Option<String>,
     /// Trade index announced by a range-order maker for the next trade.
     pub next_trade_index: Option<i64>,
+    /// URL of the Cashu mint hosting the escrow (Cashu escrow mode only).
+    /// `None` for Lightning orders.
+    pub cashu_mint_url: Option<String>,
+    /// Serialized Cashu 2-of-3 multisig token held as escrow (Cashu escrow
+    /// mode only). `None` for Lightning orders.
+    pub cashu_escrow_token: Option<String>,
+    /// Unix timestamp (seconds) when the Cashu escrow token was validated
+    /// and locked in. `None` until the escrow is locked.
+    pub cashu_escrow_locked_at: Option<i64>,
 }
 
 impl From<SmallOrder> for Order {
