@@ -96,6 +96,16 @@ pub enum Status {
     CooperativelyCanceled,
     /// Order has been taken and the trade is in progress.
     InProgress,
+    /// Order has been created by the maker but Mostro is awaiting the
+    /// maker's anti-abuse bond hold-invoice payment before publishing the
+    /// order to Nostr. Distinct from [`Status::Pending`] (already published
+    /// and advertised): an order in this status has **no** NIP-33 event yet
+    /// and is invisible in the order book until the bond locks.
+    ///
+    /// Appended at the end of the enum on purpose: `Status` is exported via
+    /// `#[wasm_bindgen]` as a C-like enum, so variant order is the Wasm ABI.
+    /// Inserting earlier would renumber later variants for JS consumers.
+    WaitingMakerBond,
 }
 
 impl Display for Status {
@@ -115,6 +125,7 @@ impl Display for Status {
             Status::WaitingBuyerInvoice => write!(f, "waiting-buyer-invoice"),
             Status::WaitingPayment => write!(f, "waiting-payment"),
             Status::WaitingTakerBond => write!(f, "waiting-taker-bond"),
+            Status::WaitingMakerBond => write!(f, "waiting-maker-bond"),
             Status::CooperativelyCanceled => write!(f, "cooperatively-canceled"),
             Status::InProgress => write!(f, "in-progress"),
         }
@@ -140,6 +151,7 @@ impl FromStr for Status {
             "waiting-buyer-invoice" => std::result::Result::Ok(Self::WaitingBuyerInvoice),
             "waiting-payment" => std::result::Result::Ok(Self::WaitingPayment),
             "waiting-taker-bond" => std::result::Result::Ok(Self::WaitingTakerBond),
+            "waiting-maker-bond" => std::result::Result::Ok(Self::WaitingMakerBond),
             "cooperatively-canceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
             "in-progress" => std::result::Result::Ok(Self::InProgress),
             _ => Err(()),
@@ -788,6 +800,20 @@ mod tests {
         assert_eq!(json, "\"waiting-taker-bond\"");
         let back: Status = serde_json::from_str(&json).unwrap();
         assert_eq!(back, Status::WaitingTakerBond);
+    }
+
+    #[test]
+    fn test_status_waiting_maker_bond_roundtrip() {
+        assert_eq!(Status::WaitingMakerBond.to_string(), "waiting-maker-bond");
+        assert_eq!(
+            Status::from_str("waiting-maker-bond").unwrap(),
+            Status::WaitingMakerBond
+        );
+        // serde representation must match the string form.
+        let json = serde_json::to_string(&Status::WaitingMakerBond).unwrap();
+        assert_eq!(json, "\"waiting-maker-bond\"");
+        let back: Status = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, Status::WaitingMakerBond);
     }
 
     #[test]
