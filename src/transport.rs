@@ -28,9 +28,11 @@
 //! it signed because the author is an ephemeral, single-trade key, so the
 //! association the NIP-17 rule protects against is intentional and bounded.
 //!
-//! Both transports unwrap into the same [`UnwrappedMessage`], so consumers
-//! never need to know which envelope a message arrived in:
-//! [`unwrap_incoming`] dispatches on the event kind.
+//! A node speaks exactly one transport, chosen by the operator: v1 *or*
+//! v2, never both at once. Both transports still unwrap into the same
+//! [`UnwrappedMessage`], so consumers never need to know which envelope a
+//! message arrived in — [`unwrap_incoming`] dispatches on the event kind,
+//! which also lets one client implementation talk to v1 and v2 nodes.
 
 use std::str::FromStr;
 
@@ -45,10 +47,14 @@ use serde::{Deserialize, Serialize};
 /// `[Message, trade_sig, [identity_pubkey, identity_sig]]`.
 type DirectTuple = (Message, Option<String>, Option<(String, String)>);
 
-/// A concrete wire transport for Mostro protocol messages.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// The wire transport a node speaks. A node runs exactly one: the
+/// operator picks protocol v1 *or* v2 via the `transport` setting
+/// (`"gift-wrap"` or `"nip44"`), and every message — inbound subscription
+/// and outbound replies — uses that transport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Transport {
     /// Protocol v1 — NIP-59 GiftWrap (`kind: 1059`).
+    #[default]
     #[serde(rename = "gift-wrap")]
     GiftWrap,
     /// Protocol v2 — NIP-44 direct message (`kind: 14`).
@@ -57,107 +63,45 @@ pub enum Transport {
 }
 
 impl Transport {
-    /// The Nostr event kind this transport publishes.
+    /// The Nostr event kind this transport publishes and subscribes to.
     pub fn event_kind(&self) -> Kind {
         match self {
             Transport::GiftWrap => Kind::GiftWrap,
             Transport::Nip44Direct => Kind::PrivateDirectMessage,
         }
     }
-}
 
-/// The transport a received event arrived on, if it is a Mostro transport
-/// kind at all. Lets a daemon record the inbound transport per message so
-/// replies can mirror it.
-pub fn transport_for_kind(kind: Kind) -> Option<Transport> {
-    match kind {
-        Kind::GiftWrap => Some(Transport::GiftWrap),
-        Kind::PrivateDirectMessage => Some(Transport::Nip44Direct),
-        _ => None,
-    }
-}
-
-/// Operator-facing transport policy: which transports a node speaks.
-///
-/// Serializes to the `transport` settings values `"gift-wrap"`, `"nip44"`
-/// and `"dual"`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-pub enum TransportMode {
-    /// Accept and send v1 gift wraps only (legacy behavior).
-    #[default]
-    #[serde(rename = "gift-wrap")]
-    GiftWrap,
-    /// Accept and send v2 NIP-44 direct messages only.
-    #[serde(rename = "nip44")]
-    Nip44Direct,
-    /// Accept both; replies mirror the transport each message arrived on.
-    #[serde(rename = "dual")]
-    Dual,
-}
-
-impl TransportMode {
-    /// Event kinds a node running this mode must subscribe to.
-    pub fn subscription_kinds(&self) -> Vec<Kind> {
-        match self {
-            TransportMode::GiftWrap => vec![Kind::GiftWrap],
-            TransportMode::Nip44Direct => vec![Kind::PrivateDirectMessage],
-            TransportMode::Dual => vec![Kind::GiftWrap, Kind::PrivateDirectMessage],
-        }
-    }
-
-    /// Whether events of `kind` are accepted under this mode.
-    pub fn accepts(&self, kind: Kind) -> bool {
-        self.subscription_kinds().contains(&kind)
-    }
-
-    /// The transport to reply on for a message that arrived via `inbound`.
-    ///
-    /// Single-transport modes always answer on their own transport; `Dual`
-    /// mirrors the inbound one, which is mandatory for backwards
-    /// compatibility — a v1 client that sent a gift wrap can only see
-    /// gift-wrapped replies.
-    pub fn reply_transport(&self, inbound: Transport) -> Transport {
-        match self {
-            TransportMode::GiftWrap => Transport::GiftWrap,
-            TransportMode::Nip44Direct => Transport::Nip44Direct,
-            TransportMode::Dual => inbound,
-        }
-    }
-
-    /// Protocol versions accepted under this mode, for capability
+    /// The Mostro protocol version this transport carries, for capability
     /// advertisement (the `protocol_versions` tag of the node info event).
-    pub fn protocol_versions(&self) -> &'static str {
+    pub fn protocol_version(&self) -> u8 {
         match self {
-            TransportMode::GiftWrap => "1",
-            TransportMode::Nip44Direct => "2",
-            TransportMode::Dual => "1,2",
+            Transport::GiftWrap => 1,
+            Transport::Nip44Direct => 2,
         }
     }
 }
 
-impl FromStr for TransportMode {
+impl FromStr for Transport {
     type Err = MostroError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "gift-wrap" => Ok(TransportMode::GiftWrap),
-            "nip44" => Ok(TransportMode::Nip44Direct),
-            "dual" => Ok(TransportMode::Dual),
+            "gift-wrap" => Ok(Transport::GiftWrap),
+            "nip44" => Ok(Transport::Nip44Direct),
             other => Err(MostroError::MostroInternalErr(
                 ServiceError::UnexpectedError(format!(
-                    "unknown transport mode {other:?}; expected \"gift-wrap\", \"nip44\" or \"dual\""
+                    "unknown transport {other:?}; expected \"gift-wrap\" or \"nip44\""
                 )),
             )),
         }
     }
 }
 
-impl std::fmt::Display for TransportMode {
+impl std::fmt::Display for Transport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            TransportMode::GiftWrap => "gift-wrap",
-            TransportMode::Nip44Direct => "nip44",
-            TransportMode::Dual => "dual",
+            Transport::GiftWrap => "gift-wrap",
+            Transport::Nip44Direct => "nip44",
         };
         write!(f, "{s}")
     }
@@ -691,77 +635,29 @@ mod tests {
     }
 
     #[test]
-    fn transport_mode_subscription_kinds() {
-        assert_eq!(
-            TransportMode::GiftWrap.subscription_kinds(),
-            vec![Kind::GiftWrap]
-        );
-        assert_eq!(
-            TransportMode::Nip44Direct.subscription_kinds(),
-            vec![Kind::PrivateDirectMessage]
-        );
-        assert_eq!(
-            TransportMode::Dual.subscription_kinds(),
-            vec![Kind::GiftWrap, Kind::PrivateDirectMessage]
-        );
-        assert!(TransportMode::Dual.accepts(Kind::GiftWrap));
-        assert!(!TransportMode::GiftWrap.accepts(Kind::PrivateDirectMessage));
-    }
-
-    #[test]
-    fn transport_mode_reply_mirroring() {
-        assert_eq!(
-            TransportMode::Dual.reply_transport(Transport::GiftWrap),
-            Transport::GiftWrap
-        );
-        assert_eq!(
-            TransportMode::Dual.reply_transport(Transport::Nip44Direct),
-            Transport::Nip44Direct
-        );
-        // Single-transport modes never mirror.
-        assert_eq!(
-            TransportMode::GiftWrap.reply_transport(Transport::Nip44Direct),
-            Transport::GiftWrap
-        );
-        assert_eq!(
-            TransportMode::Nip44Direct.reply_transport(Transport::GiftWrap),
-            Transport::Nip44Direct
-        );
-    }
-
-    #[test]
-    fn transport_mode_config_parsing() {
+    fn transport_config_parsing() {
         for (s, expected) in [
-            ("gift-wrap", TransportMode::GiftWrap),
-            ("nip44", TransportMode::Nip44Direct),
-            ("dual", TransportMode::Dual),
+            ("gift-wrap", Transport::GiftWrap),
+            ("nip44", Transport::Nip44Direct),
         ] {
-            assert_eq!(s.parse::<TransportMode>().unwrap(), expected);
-            let from_serde: TransportMode = serde_json::from_str(&format!("{s:?}")).unwrap();
+            assert_eq!(s.parse::<Transport>().unwrap(), expected);
+            let from_serde: Transport = serde_json::from_str(&format!("{s:?}")).unwrap();
             assert_eq!(from_serde, expected);
             assert_eq!(expected.to_string(), s);
         }
-        assert!("bogus".parse::<TransportMode>().is_err());
-        assert_eq!(TransportMode::default(), TransportMode::GiftWrap);
+        assert!("dual".parse::<Transport>().is_err());
+        assert!("bogus".parse::<Transport>().is_err());
+        assert_eq!(Transport::default(), Transport::GiftWrap);
     }
 
     #[test]
-    fn transport_for_kind_mapping() {
+    fn transport_kind_and_version() {
+        assert_eq!(Transport::GiftWrap.event_kind(), Kind::GiftWrap);
         assert_eq!(
-            transport_for_kind(Kind::GiftWrap),
-            Some(Transport::GiftWrap)
+            Transport::Nip44Direct.event_kind(),
+            Kind::PrivateDirectMessage
         );
-        assert_eq!(
-            transport_for_kind(Kind::PrivateDirectMessage),
-            Some(Transport::Nip44Direct)
-        );
-        assert_eq!(transport_for_kind(Kind::TextNote), None);
-    }
-
-    #[test]
-    fn transport_mode_protocol_versions() {
-        assert_eq!(TransportMode::GiftWrap.protocol_versions(), "1");
-        assert_eq!(TransportMode::Nip44Direct.protocol_versions(), "2");
-        assert_eq!(TransportMode::Dual.protocol_versions(), "1,2");
+        assert_eq!(Transport::GiftWrap.protocol_version(), 1);
+        assert_eq!(Transport::Nip44Direct.protocol_version(), 2);
     }
 }

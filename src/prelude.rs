@@ -27,8 +27,7 @@ pub use crate::nip59::{
 pub use crate::order::{Kind, Order, SmallOrder, Status};
 pub use crate::rating::Rating;
 pub use crate::transport::{
-    transport_for_kind, unwrap_incoming, unwrap_message_nip44, wrap_message_nip44,
-    wrap_message_with, Transport, TransportMode,
+    unwrap_incoming, unwrap_message_nip44, wrap_message_nip44, wrap_message_with, Transport,
 };
 pub use crate::user::{User, UserInfo};
 pub(crate) use serde::{Deserialize, Serialize};
