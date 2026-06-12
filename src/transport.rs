@@ -17,11 +17,13 @@
 //!   The visible sender lets relays and the daemon rate-limit and
 //!   pre-filter cheaply, while the identity key — and its proof of
 //!   possession — stays inside the ciphertext, exactly as private as the
-//!   seal makes it in v1. Both signatures are produced with
-//!   [`Message::sign`] over the JSON of the first tuple element; the
-//!   co-signature is what binds the identity key to the trade key for that
-//!   message. A `null` third element is full-privacy mode: the identity is
-//!   the trade key itself.
+//!   seal makes it in v1. `trade_sig` is [`Message::sign`] over the JSON
+//!   of the first tuple element; `identity_sig` signs a domain-tagged
+//!   payload that includes the trade pubkey
+//!   (`mostro-transport-v2-identity:<trade_pubkey>:<message_json>`), so
+//!   the proof binds the identity to the specific trade key authoring the
+//!   event and cannot be grafted onto another sender. A `null` third
+//!   element is full-privacy mode: the identity is the trade key itself.
 //!
 //! Note the deliberate deviation from NIP-17: there, `kind: 14` is an
 //! *unsigned* rumor that only travels inside a gift wrap. Mostro publishes
@@ -46,6 +48,22 @@ use serde::{Deserialize, Serialize};
 /// Inner content of a v2 event, before NIP-44 encryption:
 /// `[Message, trade_sig, [identity_pubkey, identity_sig]]`.
 type DirectTuple = (Message, Option<String>, Option<(String, String)>);
+
+/// Payload the identity key signs for the v2 identity proof.
+///
+/// It is domain-tagged and includes the trade pubkey, so the proof binds
+/// the identity to *both* the message and the trade key that authored the
+/// event — the binding v1 gets from the seal signature covering the
+/// encrypted rumor (which carries `rumor.pubkey`). Signing the message
+/// JSON alone would let any party that sees the plaintext tuple graft the
+/// proof onto an event authored by a different trade key.
+fn identity_proof_payload(trade_pubkey: &PublicKey, message_json: &str) -> String {
+    format!(
+        "mostro-transport-v2-identity:{}:{}",
+        trade_pubkey.to_hex(),
+        message_json
+    )
+}
 
 /// The wire transport a node speaks. A node runs exactly one: the
 /// operator picks protocol v1 *or* v2 via the `transport` setting
@@ -113,9 +131,10 @@ impl std::fmt::Display for Transport {
 /// * `identity_keys` — long-lived identity keys. When they differ from
 ///   `trade_keys` (reputation mode) the encrypted tuple carries an identity
 ///   proof: the identity pubkey plus its [`Message::sign`] signature over
-///   the message JSON. Pass the same value as `trade_keys` for full-privacy
-///   mode — the proof is then omitted and the receiver treats the trade key
-///   as the identity.
+///   the domain-tagged payload binding the trade pubkey to the message
+///   JSON (see [`identity_proof_payload`]). Pass the same value as
+///   `trade_keys` for full-privacy mode — the proof is then omitted and
+///   the receiver treats the trade key as the identity.
 /// * `trade_keys` — per-trade keys. They author and sign the event (the
 ///   visible, rate-limitable sender) and produce the inner tuple signature
 ///   when `opts.signed` is `true`.
@@ -139,9 +158,10 @@ pub fn wrap_message_nip44(
         .then(|| Message::sign(message_json.clone(), trade_keys).to_string());
 
     let identity_proof = (identity_keys.public_key() != trade_keys.public_key()).then(|| {
+        let payload = identity_proof_payload(&trade_keys.public_key(), &message_json);
         (
             identity_keys.public_key().to_hex(),
-            Message::sign(message_json.clone(), identity_keys).to_string(),
+            Message::sign(payload, identity_keys).to_string(),
         )
     });
 
@@ -245,7 +265,8 @@ pub fn unwrap_message_nip44(
                     "malformed identity signature: {e}"
                 )))
             })?;
-            if !Message::verify_signature(message_json, identity_pubkey, identity_sig) {
+            let payload = identity_proof_payload(&event.pubkey, &message_json);
+            if !Message::verify_signature(payload, identity_pubkey, identity_sig) {
                 return Err(MostroError::MostroInternalErr(
                     ServiceError::UnexpectedError(
                         "identity signature does not verify against identity pubkey".to_string(),
@@ -469,6 +490,46 @@ mod tests {
             matches!(result, Err(MostroError::MostroInternalErr(_))),
             "forged identity proof must surface as Err, got {result:?}",
         );
+    }
+
+    #[test]
+    fn nip44_identity_proof_grafted_onto_other_trade_key_errors() {
+        // A valid identity proof produced for trade key T must not verify
+        // when replayed inside an event authored by another trade key T',
+        // even with the identical Message — the proof payload includes the
+        // trade pubkey precisely to prevent this grafting.
+        let identity_keys = Keys::generate();
+        let trade_keys = Keys::generate();
+        let attacker_trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+        let message = sample_order_message(Some(1));
+        let message_json = message.as_json().unwrap();
+
+        // Legitimate proof, bound to the victim's trade key.
+        let payload = identity_proof_payload(&trade_keys.public_key(), &message_json);
+        let legit_sig = Message::sign(payload, &identity_keys);
+
+        // Attacker replays it under their own trade key.
+        let tuple: (&Message, Option<String>, Option<(String, String)>) = (
+            &message,
+            None,
+            Some((identity_keys.public_key().to_hex(), legit_sig.to_string())),
+        );
+        let plaintext = serde_json::to_string(&tuple).unwrap();
+        let event = wrap_raw_nip44(&attacker_trade_keys, receiver_keys.public_key(), &plaintext);
+
+        let result = unwrap_message_nip44(&event, &receiver_keys);
+        assert!(
+            matches!(result, Err(MostroError::MostroInternalErr(_))),
+            "grafted identity proof must surface as Err, got {result:?}",
+        );
+
+        // Sanity check: the same proof under the right trade key verifies.
+        let event = wrap_raw_nip44(&trade_keys, receiver_keys.public_key(), &plaintext);
+        let unwrapped = unwrap_message_nip44(&event, &receiver_keys)
+            .expect("unwrap")
+            .expect("some");
+        assert_eq!(unwrapped.identity, identity_keys.public_key());
     }
 
     #[test]
