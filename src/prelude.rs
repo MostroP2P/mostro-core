@@ -26,6 +26,10 @@ pub use crate::nip59::{
 };
 pub use crate::order::{Kind, Order, SmallOrder, Status};
 pub use crate::rating::Rating;
+pub use crate::transport::{
+    transport_for_kind, unwrap_incoming, unwrap_message_nip44, wrap_message_nip44,
+    wrap_message_with, Transport, TransportMode,
+};
 pub use crate::user::{User, UserInfo};
 pub(crate) use serde::{Deserialize, Serialize};
 pub use MostroError::*;
@@ -46,4 +50,9 @@ pub const NOSTR_INFO_EVENT_KIND: u16 = 38385;
 pub const NOSTR_DISPUTE_EVENT_KIND: u16 = 38386;
 /// Current Mostro protocol version. Embedded in every outgoing
 /// [`MessageKind`](crate::message::MessageKind).
-pub(crate) const PROTOCOL_VER: u8 = 1;
+///
+/// Version 2 introduces the NIP-44 direct transport (`kind: 14`) and its
+/// 3-element content tuple carrying an in-ciphertext identity proof — see
+/// [`crate::transport`]. Version 1 (the GiftWrap 2-tuple format) is frozen
+/// and still parses; daemons decide how long to keep accepting it.
+pub(crate) const PROTOCOL_VER: u8 = 2;

@@ -64,7 +64,9 @@
 //! * [`rating`] — Nostr-tag-encoded reputation helper.
 //! * [`error`] — unified error taxonomy ([`MostroError`], [`ServiceError`],
 //!   [`CantDoReason`]).
-//! * [`nip59`] — GiftWrap wrap/unwrap transport for protocol messages.
+//! * [`nip59`] — GiftWrap wrap/unwrap transport for protocol messages (v1).
+//! * [`transport`] — transport selection: v1 GiftWrap, v2 NIP-44 direct
+//!   (`kind: 14`), and the kind-based dispatch between them.
 //! * [`chat`] — P2P buyer/seller and admin/party chat envelope.
 //! * [`prelude`] — convenience re-exports.
 //!
@@ -83,4 +85,5 @@ pub mod nip59;
 pub mod order;
 pub mod prelude;
 pub mod rating;
+pub mod transport;
 pub mod user;
