@@ -65,6 +65,11 @@ pub enum CantDoReason {
     OutOfRangeFiatAmount,
     /// The sats amount is outside the allowed range for this order.
     OutOfRangeSatsAmount,
+    /// No fresh exchange rate is available for the order's fiat currency:
+    /// the last-known-good price is older than the node's staleness window,
+    /// so a market-priced order cannot be created or taken right now. The
+    /// caller should retry once pricing recovers, or use a fixed rate.
+    PriceTooStale,
     /// The caller tried to operate on a dispute that does not belong to them.
     IsNotYourDispute,
     /// A solver is being notified that an admin has taken over their dispute.
@@ -129,6 +134,10 @@ pub enum ServiceError {
     NoAPIResponse,
     /// The requested currency is not listed by the exchange API.
     NoCurrency,
+    /// A price exists but is older than the configured staleness window, so
+    /// it must not be used to price an order (the multi-source price
+    /// manager serves last-known-good only up to that TTL).
+    PriceTooStale,
     /// The exchange API returned a response that could not be parsed.
     MalformedAPIRes,
     /// Amount value is negative where only positives are allowed.
@@ -219,6 +228,7 @@ impl std::fmt::Display for ServiceError {
             ServiceError::WrongAmountError => write!(f, "The amount on this invoice is wrong"),
             ServiceError::NoAPIResponse => write!(f, "Price API not answered - retry"),
             ServiceError::NoCurrency => write!(f, "Currency requested is not present in the exchange list, please specify a fixed rate"),
+            ServiceError::PriceTooStale => write!(f, "Exchange rate is too stale to price an order - retry or use a fixed rate"),
             ServiceError::MalformedAPIRes => write!(f, "Malformed answer from exchange quoting request"),
             ServiceError::NegativeAmount => write!(f, "Negative amount is not valid"),
             ServiceError::LnAddressWrongAmount => write!(f, "Ln address need amount of 0 sats - please check your order"),
@@ -260,5 +270,13 @@ mod tests {
         assert_eq!(json, "\"invalid_payload\"");
         let round: CantDoReason = serde_json::from_str(&json).unwrap();
         assert_eq!(round, CantDoReason::InvalidPayload);
+    }
+
+    #[test]
+    fn price_too_stale_serializes_to_snake_case() {
+        let json = serde_json::to_string(&CantDoReason::PriceTooStale).unwrap();
+        assert_eq!(json, "\"price_too_stale\"");
+        let round: CantDoReason = serde_json::from_str(&json).unwrap();
+        assert_eq!(round, CantDoReason::PriceTooStale);
     }
 }
