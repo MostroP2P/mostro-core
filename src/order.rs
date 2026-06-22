@@ -12,8 +12,6 @@ use nostr_sdk::{PublicKey, Timestamp};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
-#[cfg(feature = "sqlx")]
-use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 use wasm_bindgen::prelude::*;
@@ -166,7 +164,7 @@ impl FromStr for Status {
 ///
 /// Timestamps are Unix seconds; `hash` / `preimage` refer to the hold
 /// invoice used to lock the seller's funds.
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone)]
 pub struct Order {
     /// Unique order identifier.

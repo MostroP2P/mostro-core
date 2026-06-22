@@ -51,9 +51,6 @@ sqlx = { version = "0.6.2", features = [
   "chrono",
   "uuid",
 ], optional = true }
-sqlx-crud = { version = "0.4.0", features = [
-  "runtime-tokio-rustls",
-], optional = true }
 wasm-bindgen = { version = "0.2.92", optional = true }
 nostr-sdk = { version = "0.44.1", features = ["nip44", "nip59"] }
 bitcoin = "0.32.7"
@@ -61,7 +58,7 @@ bitcoin = "0.32.7"
 [features]
 default = ["wasm"]
 wasm = ["dep:wasm-bindgen"]
-sqlx = ["dep:wasm-bindgen", "dep:sqlx", "dep:sqlx-crud"]
+sqlx = ["dep:wasm-bindgen", "dep:sqlx"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

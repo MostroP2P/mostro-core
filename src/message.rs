@@ -18,8 +18,6 @@ use bitcoin::secp256k1::Message as BitcoinMessage;
 use nostr_sdk::prelude::*;
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
-#[cfg(feature = "sqlx")]
-use sqlx_crud::SqlxCrud;
 
 use std::fmt;
 use uuid::Uuid;
@@ -429,7 +427,7 @@ pub struct PaymentFailedInfo {
 ///
 /// Not intended as a general-purpose order representation — field names are
 /// chosen to match the SQL `SELECT` aliases used by the server query.
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredOrderHelper {
     /// Order id.
@@ -450,7 +448,7 @@ pub struct RestoredOrderHelper {
 ///
 /// Field names are chosen to match the SQL `SELECT` aliases in the restore
 /// query (in particular `status` is aliased as `dispute_status`).
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredDisputeHelper {
     /// Dispute id.
@@ -481,7 +479,7 @@ pub struct RestoredDisputeHelper {
 }
 
 /// Minimal per-order information returned to a client on session restore.
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredOrdersInfo {
     /// Id of the order.
@@ -505,7 +503,7 @@ pub enum DisputeInitiator {
 }
 
 /// Minimal per-dispute information returned to a client on session restore.
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud))]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct RestoredDisputesInfo {
     /// Id of the dispute.
