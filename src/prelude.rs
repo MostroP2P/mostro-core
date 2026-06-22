@@ -10,6 +10,8 @@
 //! It also defines the Nostr event kinds used by the protocol and the minimum
 //! and maximum rating bounds.
 
+#[cfg(feature = "sqlx")]
+pub use crate::db::Crud;
 pub use crate::chat::{
     chat_filter, unwrap_chat_message, wrap_chat_message, ChatMessage, SharedKey,
     CHAT_DEFAULT_LOOKBACK_SECS,

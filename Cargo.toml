@@ -64,4 +64,4 @@ wasm = ["dep:wasm-bindgen"]
 sqlx = ["dep:wasm-bindgen", "dep:sqlx", "dep:sqlx-crud"]
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
