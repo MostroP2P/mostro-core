@@ -231,3 +231,57 @@ impl Crud for Order {
         }
     }
 }
+
+#[cfg(all(test, feature = "sqlx"))]
+mod tests {
+    use super::*;
+    use crate::db::test_support::{sample_order, setup_pool};
+    use crate::order::{Kind, Status};
+    use uuid::Uuid;
+
+    #[tokio::test]
+    async fn create_by_id_roundtrip() {
+        let pool = setup_pool().await;
+        let id = Uuid::new_v4();
+        let order = sample_order(id);
+
+        let created = order.create(&pool).await.expect("create");
+        assert_eq!(created.id, id);
+        assert_eq!(created.kind, Kind::Sell.to_string());
+        assert_eq!(created.dev_fee, 42);
+        assert_eq!(
+            created.cashu_mint_url.as_deref(),
+            Some("https://mint.example")
+        );
+
+        let fetched = Order::by_id(&pool, id).await.expect("by_id").expect("row");
+        assert_eq!(fetched.id, created.id);
+        assert_eq!(fetched.amount, created.amount);
+    }
+
+    #[tokio::test]
+    async fn by_id_returns_none_for_missing_row() {
+        let pool = setup_pool().await;
+        let missing = Order::by_id(&pool, Uuid::new_v4()).await.expect("by_id");
+        assert!(missing.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_persists_changes() {
+        let pool = setup_pool().await;
+        let id = Uuid::new_v4();
+        let order = sample_order(id);
+        let mut created = order.create(&pool).await.expect("create");
+        assert_eq!(created.status, Status::Pending.to_string());
+
+        created.status = Status::Active.to_string();
+        created.amount = 99_999;
+        let updated = created.update(&pool).await.expect("update");
+        assert_eq!(updated.status, Status::Active.to_string());
+        assert_eq!(updated.amount, 99_999);
+
+        let fetched = Order::by_id(&pool, id).await.expect("by_id").expect("row");
+        assert_eq!(fetched.status, Status::Active.to_string());
+        assert_eq!(fetched.amount, 99_999);
+    }
+}

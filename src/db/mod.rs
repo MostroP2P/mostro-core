@@ -14,7 +14,7 @@ mod dispute;
 mod order;
 
 #[cfg(all(test, feature = "sqlx"))]
-mod tests;
+mod test_support;
 
 /// Create, read-by-id, and update operations for a single SQLite table row.
 ///

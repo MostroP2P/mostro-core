@@ -87,3 +87,80 @@ impl Crud for Dispute {
         }
     }
 }
+
+#[cfg(all(test, feature = "sqlx"))]
+mod tests {
+    use super::*;
+    use crate::db::test_support::{sample_order, setup_pool};
+    use crate::order::Status;
+    use uuid::Uuid;
+
+    fn sample_dispute(id: Uuid, order_id: Uuid) -> Dispute {
+        Dispute {
+            id,
+            order_id,
+            status: "initiated".to_string(),
+            order_previous_status: Status::FiatSent.to_string(),
+            solver_pubkey: None,
+            created_at: 1_700_000_100,
+            taken_at: 0,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_by_id_roundtrip() {
+        let pool = setup_pool().await;
+        let order_id = Uuid::new_v4();
+        sample_order(order_id)
+            .create(&pool)
+            .await
+            .expect("seed order");
+
+        let dispute_id = Uuid::new_v4();
+        let dispute = sample_dispute(dispute_id, order_id);
+        let created = dispute.create(&pool).await.expect("create");
+        assert_eq!(created.id, dispute_id);
+        assert_eq!(created.order_id, order_id);
+
+        let fetched = Dispute::by_id(&pool, dispute_id)
+            .await
+            .expect("by_id")
+            .expect("row");
+        assert_eq!(fetched.order_previous_status, Status::FiatSent.to_string());
+    }
+
+    #[tokio::test]
+    async fn by_id_returns_none_for_missing_row() {
+        let pool = setup_pool().await;
+        let missing = Dispute::by_id(&pool, Uuid::new_v4()).await.expect("by_id");
+        assert!(missing.is_none());
+    }
+
+    #[tokio::test]
+    async fn update_persists_changes() {
+        let pool = setup_pool().await;
+        let order_id = Uuid::new_v4();
+        sample_order(order_id)
+            .create(&pool)
+            .await
+            .expect("seed order");
+
+        let dispute_id = Uuid::new_v4();
+        let mut created = sample_dispute(dispute_id, order_id)
+            .create(&pool)
+            .await
+            .expect("create");
+        assert_eq!(created.status, "initiated");
+
+        created.status = "in-progress".to_string();
+        created.solver_pubkey = Some("c".repeat(64));
+        created.taken_at = 1_700_000_200;
+        let updated = created.update(&pool).await.expect("update");
+        assert_eq!(updated.status, "in-progress");
+        assert_eq!(
+            updated.solver_pubkey.as_deref(),
+            Some("c".repeat(64).as_str())
+        );
+        assert_eq!(updated.taken_at, 1_700_000_200);
+    }
+}
