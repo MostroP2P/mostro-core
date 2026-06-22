@@ -14,6 +14,8 @@ pub use crate::chat::{
     chat_filter, unwrap_chat_message, wrap_chat_message, ChatMessage, SharedKey,
     CHAT_DEFAULT_LOOKBACK_SECS,
 };
+#[cfg(feature = "sqlx")]
+pub use crate::db::Crud;
 pub use crate::dispute::{Dispute, SolverDisputeInfo, Status as DisputeStatus};
 pub use crate::error::{CantDoReason, MostroError, ServiceError};
 pub use crate::message::{

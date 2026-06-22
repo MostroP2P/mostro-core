@@ -16,9 +16,9 @@
 //! optionally, the sender's signature.
 //!
 //! Persistent state (orders, disputes, users) is modelled by the [`order`],
-//! [`dispute`] and [`user`] modules. They can optionally derive the
-//! [`sqlx::FromRow`] and `sqlx_crud::SqlxCrud` traits by enabling the
-//! `sqlx` feature.
+//! [`dispute`] and [`user`] modules. With the `sqlx` feature enabled they
+//! derive [`sqlx::FromRow`]; [`order::Order`] and [`dispute::Dispute`]
+//! also implement [`db::Crud`] for SQLite persistence.
 //!
 //! ## Quick start
 //!
@@ -52,14 +52,15 @@
 //!
 //! * `wasm` *(default)* — enables `wasm-bindgen` annotations on selected types
 //!   so the crate can be used from JavaScript/WebAssembly contexts.
-//! * `sqlx` — derives `FromRow` and `SqlxCrud` for the persistent structs
-//!   (`Order`, `User`, `Dispute`, `RestoredOrderHelper`, …). Implies `wasm`.
+//! * `sqlx` — derives `FromRow` for persistent structs and exposes
+//!   [`db::Crud`] for `Order` and `Dispute`. Implies `wasm`.
 //!
 //! ## Module map
 //!
 //! * [`message`] — protocol message envelope, actions and payloads.
 //! * [`order`] — order types, states and helpers.
 //! * [`dispute`] — dispute types and states.
+//! * [`db`] — SQLite [`Crud`] trait (`sqlx` feature).
 //! * [`user`] — persistent user representation and rating updates.
 //! * [`rating`] — Nostr-tag-encoded reputation helper.
 //! * [`error`] — unified error taxonomy ([`MostroError`], [`ServiceError`],
@@ -78,6 +79,8 @@
 #![warn(missing_docs)]
 
 pub mod chat;
+#[cfg(feature = "sqlx")]
+pub mod db;
 pub mod dispute;
 pub mod error;
 pub mod message;
