@@ -143,9 +143,7 @@ async fn order_create_by_id_roundtrip() {
 #[tokio::test]
 async fn order_by_id_returns_none_for_missing_row() {
     let pool = setup_pool().await;
-    let missing = Order::by_id(&pool, Uuid::new_v4())
-        .await
-        .expect("by_id");
+    let missing = Order::by_id(&pool, Uuid::new_v4()).await.expect("by_id");
     assert!(missing.is_none());
 }
 
@@ -193,9 +191,7 @@ async fn dispute_create_by_id_roundtrip() {
 #[tokio::test]
 async fn dispute_by_id_returns_none_for_missing_row() {
     let pool = setup_pool().await;
-    let missing = Dispute::by_id(&pool, Uuid::new_v4())
-        .await
-        .expect("by_id");
+    let missing = Dispute::by_id(&pool, Uuid::new_v4()).await.expect("by_id");
     assert!(missing.is_none());
 }
 
@@ -220,6 +216,9 @@ async fn dispute_update_persists_changes() {
     created.taken_at = 1_700_000_200;
     let updated = created.update(&pool).await.expect("update");
     assert_eq!(updated.status, "in-progress");
-    assert_eq!(updated.solver_pubkey.as_deref(), Some("c".repeat(64).as_str()));
+    assert_eq!(
+        updated.solver_pubkey.as_deref(),
+        Some("c".repeat(64).as_str())
+    );
     assert_eq!(updated.taken_at, 1_700_000_200);
 }

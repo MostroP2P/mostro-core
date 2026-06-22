@@ -24,8 +24,7 @@ fn push_dispute_update_set<'a>(
 ) {
     set.push("order_id = ")
         .push_bind_unseparated(dispute.order_id);
-    set.push("status = ")
-        .push_bind_unseparated(&dispute.status);
+    set.push("status = ").push_bind_unseparated(&dispute.status);
     set.push("order_previous_status = ")
         .push_bind_unseparated(&dispute.order_previous_status);
     set.push("solver_pubkey = ")
@@ -37,10 +36,7 @@ fn push_dispute_update_set<'a>(
 }
 
 impl Crud for Dispute {
-    fn create(
-        self,
-        pool: &Pool<Sqlite>,
-    ) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
+    fn create(self, pool: &Pool<Sqlite>) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
         let pool = pool.clone();
         async move {
             let mut qb = QueryBuilder::new("INSERT INTO disputes (");
@@ -63,10 +59,7 @@ impl Crud for Dispute {
         }
     }
 
-    fn update(
-        self,
-        pool: &Pool<Sqlite>,
-    ) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
+    fn update(self, pool: &Pool<Sqlite>) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
         let pool = pool.clone();
         async move {
             let mut qb = QueryBuilder::new("UPDATE disputes SET ");

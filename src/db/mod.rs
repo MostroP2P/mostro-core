@@ -36,17 +36,11 @@ mod tests;
 /// ```
 pub trait Crud: Sized + for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> {
     /// Insert `self` into the backing table and return the persisted row.
-    fn create(
-        self,
-        pool: &Pool<Sqlite>,
-    ) -> impl Future<Output = Result<Self, sqlx::Error>> + Send;
+    fn create(self, pool: &Pool<Sqlite>) -> impl Future<Output = Result<Self, sqlx::Error>> + Send;
 
     /// Update the row identified by `self`'s primary key and return the new
     /// row as stored in the database.
-    fn update(
-        self,
-        pool: &Pool<Sqlite>,
-    ) -> impl Future<Output = Result<Self, sqlx::Error>> + Send;
+    fn update(self, pool: &Pool<Sqlite>) -> impl Future<Output = Result<Self, sqlx::Error>> + Send;
 
     /// Load a row by primary key. Returns `None` when no matching row exists.
     fn by_id(

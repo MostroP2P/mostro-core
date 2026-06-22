@@ -5,10 +5,7 @@ use sqlx::{query_builder::Separated, Pool, QueryBuilder, Sqlite};
 use crate::db::Crud;
 use crate::order::Order;
 
-fn push_order_insert_binds<'a>(
-    b: &mut Separated<'_, 'a, Sqlite, &'static str>,
-    order: &'a Order,
-) {
+fn push_order_insert_binds<'a>(b: &mut Separated<'_, 'a, Sqlite, &'static str>, order: &'a Order) {
     b.push_bind(order.id)
         .push_bind(&order.kind)
         .push_bind(&order.event_id)
@@ -57,12 +54,8 @@ fn push_order_insert_binds<'a>(
         .push_bind(order.cashu_escrow_locked_at);
 }
 
-fn push_order_update_set<'a>(
-    set: &mut Separated<'_, 'a, Sqlite, &'static str>,
-    order: &'a Order,
-) {
-    set.push("kind = ")
-        .push_bind_unseparated(&order.kind);
+fn push_order_update_set<'a>(set: &mut Separated<'_, 'a, Sqlite, &'static str>, order: &'a Order) {
+    set.push("kind = ").push_bind_unseparated(&order.kind);
     set.push("event_id = ")
         .push_bind_unseparated(&order.event_id);
     set.push("hash = ").push_bind_unseparated(&order.hash);
@@ -80,16 +73,13 @@ fn push_order_update_set<'a>(
         .push_bind_unseparated(&order.seller_pubkey);
     set.push("master_seller_pubkey = ")
         .push_bind_unseparated(&order.master_seller_pubkey);
-    set.push("status = ")
-        .push_bind_unseparated(&order.status);
+    set.push("status = ").push_bind_unseparated(&order.status);
     set.push("price_from_api = ")
         .push_bind_unseparated(order.price_from_api);
-    set.push("premium = ")
-        .push_bind_unseparated(order.premium);
+    set.push("premium = ").push_bind_unseparated(order.premium);
     set.push("payment_method = ")
         .push_bind_unseparated(&order.payment_method);
-    set.push("amount = ")
-        .push_bind_unseparated(order.amount);
+    set.push("amount = ").push_bind_unseparated(order.amount);
     set.push("min_amount = ")
         .push_bind_unseparated(order.min_amount);
     set.push("max_amount = ")
@@ -105,8 +95,7 @@ fn push_order_update_set<'a>(
     set.push("fee = ").push_bind_unseparated(order.fee);
     set.push("routing_fee = ")
         .push_bind_unseparated(order.routing_fee);
-    set.push("dev_fee = ")
-        .push_bind_unseparated(order.dev_fee);
+    set.push("dev_fee = ").push_bind_unseparated(order.dev_fee);
     set.push("dev_fee_paid = ")
         .push_bind_unseparated(order.dev_fee_paid);
     set.push("dev_fee_payment_hash = ")
@@ -152,10 +141,7 @@ fn push_order_update_set<'a>(
 }
 
 impl Crud for Order {
-    fn create(
-        self,
-        pool: &Pool<Sqlite>,
-    ) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
+    fn create(self, pool: &Pool<Sqlite>) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
         let pool = pool.clone();
         async move {
             let mut qb = QueryBuilder::new("INSERT INTO orders (");
@@ -217,10 +203,7 @@ impl Crud for Order {
         }
     }
 
-    fn update(
-        self,
-        pool: &Pool<Sqlite>,
-    ) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
+    fn update(self, pool: &Pool<Sqlite>) -> impl Future<Output = Result<Self, sqlx::Error>> + Send {
         let pool = pool.clone();
         async move {
             let mut qb = QueryBuilder::new("UPDATE orders SET ");
