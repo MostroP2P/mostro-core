@@ -5,8 +5,9 @@ use sqlx::{query_builder::Separated, Pool, QueryBuilder, Sqlite};
 use crate::db::Crud;
 use crate::order::Order;
 
-/// Persisted `orders` columns, in [`Order`] field order. Keep in sync with
-/// `mostrod` migrations and [`Order`]'s `FromRow` mapping.
+/// Persisted `orders` INSERT column names, in bind order. Keep in sync with
+/// [`push_order_insert_binds`], `mostrod` migrations, and [`Order`]'s
+/// `FromRow` mapping. Drift is caught by the roundtrip integration tests.
 const ORDER_INSERT_COLUMNS: &[&str] = &[
     "id",
     "kind",
@@ -56,105 +57,139 @@ const ORDER_INSERT_COLUMNS: &[&str] = &[
     "cashu_escrow_locked_at",
 ];
 
-fn order_update_columns() -> &'static [&'static str] {
-    &ORDER_INSERT_COLUMNS[1..]
-}
-
-#[derive(Copy, Clone)]
-enum BindStyle {
-    Insert,
-    Update,
-}
-
-fn bind_order_column<'a>(
-    sep: &mut Separated<'_, 'a, Sqlite, &'static str>,
-    column: &str,
-    order: &'a Order,
-    style: BindStyle,
-) {
-    if matches!(style, BindStyle::Update) {
-        sep.push(column);
-        sep.push_unseparated(" = ");
-    }
-
-    match column {
-        "id" => bind_column_value(sep, order.id, style),
-        "kind" => bind_column_value(sep, &order.kind, style),
-        "event_id" => bind_column_value(sep, &order.event_id, style),
-        "hash" => bind_column_value(sep, &order.hash, style),
-        "preimage" => bind_column_value(sep, &order.preimage, style),
-        "creator_pubkey" => bind_column_value(sep, &order.creator_pubkey, style),
-        "cancel_initiator_pubkey" => bind_column_value(sep, &order.cancel_initiator_pubkey, style),
-        "buyer_pubkey" => bind_column_value(sep, &order.buyer_pubkey, style),
-        "master_buyer_pubkey" => bind_column_value(sep, &order.master_buyer_pubkey, style),
-        "seller_pubkey" => bind_column_value(sep, &order.seller_pubkey, style),
-        "master_seller_pubkey" => bind_column_value(sep, &order.master_seller_pubkey, style),
-        "status" => bind_column_value(sep, &order.status, style),
-        "price_from_api" => bind_column_value(sep, order.price_from_api, style),
-        "premium" => bind_column_value(sep, order.premium, style),
-        "payment_method" => bind_column_value(sep, &order.payment_method, style),
-        "amount" => bind_column_value(sep, order.amount, style),
-        "min_amount" => bind_column_value(sep, order.min_amount, style),
-        "max_amount" => bind_column_value(sep, order.max_amount, style),
-        "buyer_dispute" => bind_column_value(sep, order.buyer_dispute, style),
-        "seller_dispute" => bind_column_value(sep, order.seller_dispute, style),
-        "buyer_cooperativecancel" => bind_column_value(sep, order.buyer_cooperativecancel, style),
-        "seller_cooperativecancel" => bind_column_value(sep, order.seller_cooperativecancel, style),
-        "fee" => bind_column_value(sep, order.fee, style),
-        "routing_fee" => bind_column_value(sep, order.routing_fee, style),
-        "dev_fee" => bind_column_value(sep, order.dev_fee, style),
-        "dev_fee_paid" => bind_column_value(sep, order.dev_fee_paid, style),
-        "dev_fee_payment_hash" => bind_column_value(sep, &order.dev_fee_payment_hash, style),
-        "fiat_code" => bind_column_value(sep, &order.fiat_code, style),
-        "fiat_amount" => bind_column_value(sep, order.fiat_amount, style),
-        "buyer_invoice" => bind_column_value(sep, &order.buyer_invoice, style),
-        "range_parent_id" => bind_column_value(sep, order.range_parent_id, style),
-        "invoice_held_at" => bind_column_value(sep, order.invoice_held_at, style),
-        "taken_at" => bind_column_value(sep, order.taken_at, style),
-        "created_at" => bind_column_value(sep, order.created_at, style),
-        "buyer_sent_rate" => bind_column_value(sep, order.buyer_sent_rate, style),
-        "seller_sent_rate" => bind_column_value(sep, order.seller_sent_rate, style),
-        "failed_payment" => bind_column_value(sep, order.failed_payment, style),
-        "payment_attempts" => bind_column_value(sep, order.payment_attempts, style),
-        "expires_at" => bind_column_value(sep, order.expires_at, style),
-        "trade_index_seller" => bind_column_value(sep, order.trade_index_seller, style),
-        "trade_index_buyer" => bind_column_value(sep, order.trade_index_buyer, style),
-        "next_trade_pubkey" => bind_column_value(sep, &order.next_trade_pubkey, style),
-        "next_trade_index" => bind_column_value(sep, order.next_trade_index, style),
-        "cashu_mint_url" => bind_column_value(sep, &order.cashu_mint_url, style),
-        "cashu_escrow_token" => bind_column_value(sep, &order.cashu_escrow_token, style),
-        "cashu_escrow_locked_at" => bind_column_value(sep, order.cashu_escrow_locked_at, style),
-        other => panic!("unmapped order column: {other}"),
-    }
-}
-
-fn bind_column_value<'a, T>(
-    sep: &mut Separated<'_, 'a, Sqlite, &'static str>,
-    value: T,
-    style: BindStyle,
-) where
-    T: 'a + sqlx::Encode<'a, Sqlite> + sqlx::Type<Sqlite> + Send,
-{
-    match style {
-        BindStyle::Insert => {
-            sep.push_bind(value);
-        }
-        BindStyle::Update => {
-            sep.push_bind_unseparated(value);
-        }
-    }
-}
-
 fn push_order_insert_binds<'a>(b: &mut Separated<'_, 'a, Sqlite, &'static str>, order: &'a Order) {
-    for &column in ORDER_INSERT_COLUMNS {
-        bind_order_column(b, column, order, BindStyle::Insert);
-    }
+    b.push_bind(order.id)
+        .push_bind(&order.kind)
+        .push_bind(&order.event_id)
+        .push_bind(&order.hash)
+        .push_bind(&order.preimage)
+        .push_bind(&order.creator_pubkey)
+        .push_bind(&order.cancel_initiator_pubkey)
+        .push_bind(&order.buyer_pubkey)
+        .push_bind(&order.master_buyer_pubkey)
+        .push_bind(&order.seller_pubkey)
+        .push_bind(&order.master_seller_pubkey)
+        .push_bind(&order.status)
+        .push_bind(order.price_from_api)
+        .push_bind(order.premium)
+        .push_bind(&order.payment_method)
+        .push_bind(order.amount)
+        .push_bind(order.min_amount)
+        .push_bind(order.max_amount)
+        .push_bind(order.buyer_dispute)
+        .push_bind(order.seller_dispute)
+        .push_bind(order.buyer_cooperativecancel)
+        .push_bind(order.seller_cooperativecancel)
+        .push_bind(order.fee)
+        .push_bind(order.routing_fee)
+        .push_bind(order.dev_fee)
+        .push_bind(order.dev_fee_paid)
+        .push_bind(&order.dev_fee_payment_hash)
+        .push_bind(&order.fiat_code)
+        .push_bind(order.fiat_amount)
+        .push_bind(&order.buyer_invoice)
+        .push_bind(order.range_parent_id)
+        .push_bind(order.invoice_held_at)
+        .push_bind(order.taken_at)
+        .push_bind(order.created_at)
+        .push_bind(order.buyer_sent_rate)
+        .push_bind(order.seller_sent_rate)
+        .push_bind(order.failed_payment)
+        .push_bind(order.payment_attempts)
+        .push_bind(order.expires_at)
+        .push_bind(order.trade_index_seller)
+        .push_bind(order.trade_index_buyer)
+        .push_bind(&order.next_trade_pubkey)
+        .push_bind(order.next_trade_index)
+        .push_bind(&order.cashu_mint_url)
+        .push_bind(&order.cashu_escrow_token)
+        .push_bind(order.cashu_escrow_locked_at);
 }
 
 fn push_order_update_set<'a>(set: &mut Separated<'_, 'a, Sqlite, &'static str>, order: &'a Order) {
-    for &column in order_update_columns() {
-        bind_order_column(set, column, order, BindStyle::Update);
-    }
+    set.push("kind = ").push_bind_unseparated(&order.kind);
+    set.push("event_id = ")
+        .push_bind_unseparated(&order.event_id);
+    set.push("hash = ").push_bind_unseparated(&order.hash);
+    set.push("preimage = ")
+        .push_bind_unseparated(&order.preimage);
+    set.push("creator_pubkey = ")
+        .push_bind_unseparated(&order.creator_pubkey);
+    set.push("cancel_initiator_pubkey = ")
+        .push_bind_unseparated(&order.cancel_initiator_pubkey);
+    set.push("buyer_pubkey = ")
+        .push_bind_unseparated(&order.buyer_pubkey);
+    set.push("master_buyer_pubkey = ")
+        .push_bind_unseparated(&order.master_buyer_pubkey);
+    set.push("seller_pubkey = ")
+        .push_bind_unseparated(&order.seller_pubkey);
+    set.push("master_seller_pubkey = ")
+        .push_bind_unseparated(&order.master_seller_pubkey);
+    set.push("status = ").push_bind_unseparated(&order.status);
+    set.push("price_from_api = ")
+        .push_bind_unseparated(order.price_from_api);
+    set.push("premium = ").push_bind_unseparated(order.premium);
+    set.push("payment_method = ")
+        .push_bind_unseparated(&order.payment_method);
+    set.push("amount = ").push_bind_unseparated(order.amount);
+    set.push("min_amount = ")
+        .push_bind_unseparated(order.min_amount);
+    set.push("max_amount = ")
+        .push_bind_unseparated(order.max_amount);
+    set.push("buyer_dispute = ")
+        .push_bind_unseparated(order.buyer_dispute);
+    set.push("seller_dispute = ")
+        .push_bind_unseparated(order.seller_dispute);
+    set.push("buyer_cooperativecancel = ")
+        .push_bind_unseparated(order.buyer_cooperativecancel);
+    set.push("seller_cooperativecancel = ")
+        .push_bind_unseparated(order.seller_cooperativecancel);
+    set.push("fee = ").push_bind_unseparated(order.fee);
+    set.push("routing_fee = ")
+        .push_bind_unseparated(order.routing_fee);
+    set.push("dev_fee = ").push_bind_unseparated(order.dev_fee);
+    set.push("dev_fee_paid = ")
+        .push_bind_unseparated(order.dev_fee_paid);
+    set.push("dev_fee_payment_hash = ")
+        .push_bind_unseparated(&order.dev_fee_payment_hash);
+    set.push("fiat_code = ")
+        .push_bind_unseparated(&order.fiat_code);
+    set.push("fiat_amount = ")
+        .push_bind_unseparated(order.fiat_amount);
+    set.push("buyer_invoice = ")
+        .push_bind_unseparated(&order.buyer_invoice);
+    set.push("range_parent_id = ")
+        .push_bind_unseparated(order.range_parent_id);
+    set.push("invoice_held_at = ")
+        .push_bind_unseparated(order.invoice_held_at);
+    set.push("taken_at = ")
+        .push_bind_unseparated(order.taken_at);
+    set.push("created_at = ")
+        .push_bind_unseparated(order.created_at);
+    set.push("buyer_sent_rate = ")
+        .push_bind_unseparated(order.buyer_sent_rate);
+    set.push("seller_sent_rate = ")
+        .push_bind_unseparated(order.seller_sent_rate);
+    set.push("failed_payment = ")
+        .push_bind_unseparated(order.failed_payment);
+    set.push("payment_attempts = ")
+        .push_bind_unseparated(order.payment_attempts);
+    set.push("expires_at = ")
+        .push_bind_unseparated(order.expires_at);
+    set.push("trade_index_seller = ")
+        .push_bind_unseparated(order.trade_index_seller);
+    set.push("trade_index_buyer = ")
+        .push_bind_unseparated(order.trade_index_buyer);
+    set.push("next_trade_pubkey = ")
+        .push_bind_unseparated(&order.next_trade_pubkey);
+    set.push("next_trade_index = ")
+        .push_bind_unseparated(order.next_trade_index);
+    set.push("cashu_mint_url = ")
+        .push_bind_unseparated(&order.cashu_mint_url);
+    set.push("cashu_escrow_token = ")
+        .push_bind_unseparated(&order.cashu_escrow_token);
+    set.push("cashu_escrow_locked_at = ")
+        .push_bind_unseparated(order.cashu_escrow_locked_at);
 }
 
 impl Crud for Order {
@@ -212,18 +247,6 @@ mod tests {
     use crate::db::test_support::{sample_order, setup_pool};
     use crate::order::{Kind, Status};
     use uuid::Uuid;
-
-    /// Mirrors the INSERT bind loop in [`push_order_insert_binds`].
-    fn order_insert_bind_count() -> usize {
-        ORDER_INSERT_COLUMNS.len()
-    }
-
-    #[test]
-    fn insert_column_list_matches_bind_count() {
-        assert_eq!(ORDER_INSERT_COLUMNS.len(), order_insert_bind_count());
-        assert_eq!(ORDER_INSERT_COLUMNS.first(), Some(&"id"));
-        assert_eq!(order_update_columns().len(), ORDER_INSERT_COLUMNS.len() - 1);
-    }
 
     #[tokio::test]
     async fn create_by_id_roundtrip() {
