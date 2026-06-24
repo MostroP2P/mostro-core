@@ -5,6 +5,58 @@ use sqlx::{query_builder::Separated, Pool, QueryBuilder, Sqlite};
 use crate::db::Crud;
 use crate::order::Order;
 
+/// Persisted `orders` INSERT column names, in bind order. Keep in sync with
+/// [`push_order_insert_binds`], `mostrod` migrations, and [`Order`]'s
+/// `FromRow` mapping. Drift is caught by the roundtrip integration tests.
+const ORDER_INSERT_COLUMNS: &[&str] = &[
+    "id",
+    "kind",
+    "event_id",
+    "hash",
+    "preimage",
+    "creator_pubkey",
+    "cancel_initiator_pubkey",
+    "buyer_pubkey",
+    "master_buyer_pubkey",
+    "seller_pubkey",
+    "master_seller_pubkey",
+    "status",
+    "price_from_api",
+    "premium",
+    "payment_method",
+    "amount",
+    "min_amount",
+    "max_amount",
+    "buyer_dispute",
+    "seller_dispute",
+    "buyer_cooperativecancel",
+    "seller_cooperativecancel",
+    "fee",
+    "routing_fee",
+    "dev_fee",
+    "dev_fee_paid",
+    "dev_fee_payment_hash",
+    "fiat_code",
+    "fiat_amount",
+    "buyer_invoice",
+    "range_parent_id",
+    "invoice_held_at",
+    "taken_at",
+    "created_at",
+    "buyer_sent_rate",
+    "seller_sent_rate",
+    "failed_payment",
+    "payment_attempts",
+    "expires_at",
+    "trade_index_seller",
+    "trade_index_buyer",
+    "next_trade_pubkey",
+    "next_trade_index",
+    "cashu_mint_url",
+    "cashu_escrow_token",
+    "cashu_escrow_locked_at",
+];
+
 fn push_order_insert_binds<'a>(b: &mut Separated<'_, 'a, Sqlite, &'static str>, order: &'a Order) {
     b.push_bind(order.id)
         .push_bind(&order.kind)
@@ -147,52 +199,9 @@ impl Crud for Order {
             let mut qb = QueryBuilder::new("INSERT INTO orders (");
             {
                 let mut cols = qb.separated(", ");
-                cols.push("id");
-                cols.push("kind");
-                cols.push("event_id");
-                cols.push("hash");
-                cols.push("preimage");
-                cols.push("creator_pubkey");
-                cols.push("cancel_initiator_pubkey");
-                cols.push("buyer_pubkey");
-                cols.push("master_buyer_pubkey");
-                cols.push("seller_pubkey");
-                cols.push("master_seller_pubkey");
-                cols.push("status");
-                cols.push("price_from_api");
-                cols.push("premium");
-                cols.push("payment_method");
-                cols.push("amount");
-                cols.push("min_amount");
-                cols.push("max_amount");
-                cols.push("buyer_dispute");
-                cols.push("seller_dispute");
-                cols.push("buyer_cooperativecancel");
-                cols.push("seller_cooperativecancel");
-                cols.push("fee");
-                cols.push("routing_fee");
-                cols.push("dev_fee");
-                cols.push("dev_fee_paid");
-                cols.push("dev_fee_payment_hash");
-                cols.push("fiat_code");
-                cols.push("fiat_amount");
-                cols.push("buyer_invoice");
-                cols.push("range_parent_id");
-                cols.push("invoice_held_at");
-                cols.push("taken_at");
-                cols.push("created_at");
-                cols.push("buyer_sent_rate");
-                cols.push("seller_sent_rate");
-                cols.push("failed_payment");
-                cols.push("payment_attempts");
-                cols.push("expires_at");
-                cols.push("trade_index_seller");
-                cols.push("trade_index_buyer");
-                cols.push("next_trade_pubkey");
-                cols.push("next_trade_index");
-                cols.push("cashu_mint_url");
-                cols.push("cashu_escrow_token");
-                cols.push("cashu_escrow_locked_at");
+                for &column in ORDER_INSERT_COLUMNS {
+                    cols.push(column);
+                }
             }
             qb.push(") ");
             qb.push_values(std::iter::once(&self), |mut binds, order| {

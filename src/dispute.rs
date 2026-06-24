@@ -15,8 +15,6 @@ use nostr_sdk::Timestamp;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::{FromRow, Type};
-#[cfg(feature = "sqlx")]
-use sqlx_crud::SqlxCrud;
 use std::{fmt::Display, str::FromStr};
 use uuid::Uuid;
 
@@ -74,7 +72,7 @@ impl FromStr for Status {
 /// Disputes are always bound to a parent [`Order`]; `order_previous_status`
 /// preserves the status the order had before the dispute was filed so that
 /// it can be restored if the dispute is dismissed.
-#[cfg_attr(feature = "sqlx", derive(FromRow, SqlxCrud), external_id)]
+#[cfg_attr(feature = "sqlx", derive(FromRow))]
 #[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct Dispute {
     /// Unique identifier for the dispute.
