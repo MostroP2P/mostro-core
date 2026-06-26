@@ -44,8 +44,9 @@ uuid = { version = "1.18.0", features = [
   "serde",
   "js",
 ] }
-sqlx = { version = "0.6.2", features = [
-  "runtime-tokio-rustls",
+sqlx = { version = "0.9.0", features = [
+  "runtime-tokio",
+  "tls-rustls-ring",
   "sqlite",
   "macros",
   "chrono",

@@ -57,7 +57,7 @@ const ORDER_INSERT_COLUMNS: &[&str] = &[
     "cashu_escrow_locked_at",
 ];
 
-fn push_order_insert_binds<'a>(b: &mut Separated<'_, 'a, Sqlite, &'static str>, order: &'a Order) {
+fn push_order_insert_binds(b: &mut Separated<'_, Sqlite, &'static str>, order: &Order) {
     b.push_bind(order.id)
         .push_bind(&order.kind)
         .push_bind(&order.event_id)
@@ -106,7 +106,7 @@ fn push_order_insert_binds<'a>(b: &mut Separated<'_, 'a, Sqlite, &'static str>, 
         .push_bind(order.cashu_escrow_locked_at);
 }
 
-fn push_order_update_set<'a>(set: &mut Separated<'_, 'a, Sqlite, &'static str>, order: &'a Order) {
+fn push_order_update_set(set: &mut Separated<'_, Sqlite, &'static str>, order: &Order) {
     set.push("kind = ").push_bind_unseparated(&order.kind);
     set.push("event_id = ")
         .push_bind_unseparated(&order.event_id);
