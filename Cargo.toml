@@ -1,6 +1,6 @@
 [package]
 name = "mostro-core"
-version = "0.13.2"
+version = "0.13.3"
 edition = "2021"
 license = "MIT"
 authors = ["Francisco Calderón <negrunch@grunch.dev>"]
@@ -44,8 +44,9 @@ uuid = { version = "1.18.0", features = [
   "serde",
   "js",
 ] }
-sqlx = { version = "0.6.2", features = [
-  "runtime-tokio-rustls",
+sqlx = { version = "0.9.0", features = [
+  "runtime-tokio",
+  "tls-rustls-ring",
   "sqlite",
   "macros",
   "chrono",

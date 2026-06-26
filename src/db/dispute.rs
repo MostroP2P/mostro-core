@@ -5,10 +5,7 @@ use sqlx::{query_builder::Separated, Pool, QueryBuilder, Sqlite};
 use crate::db::Crud;
 use crate::dispute::Dispute;
 
-fn push_dispute_insert_binds<'a>(
-    b: &mut Separated<'_, 'a, Sqlite, &'static str>,
-    dispute: &'a Dispute,
-) {
+fn push_dispute_insert_binds(b: &mut Separated<'_, Sqlite, &'static str>, dispute: &Dispute) {
     b.push_bind(dispute.id)
         .push_bind(dispute.order_id)
         .push_bind(&dispute.status)
@@ -18,10 +15,7 @@ fn push_dispute_insert_binds<'a>(
         .push_bind(dispute.taken_at);
 }
 
-fn push_dispute_update_set<'a>(
-    set: &mut Separated<'_, 'a, Sqlite, &'static str>,
-    dispute: &'a Dispute,
-) {
+fn push_dispute_update_set(set: &mut Separated<'_, Sqlite, &'static str>, dispute: &Dispute) {
     set.push("order_id = ")
         .push_bind_unseparated(dispute.order_id);
     set.push("status = ").push_bind_unseparated(&dispute.status);
