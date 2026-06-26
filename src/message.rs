@@ -600,6 +600,12 @@ pub struct CashuLockProof {
     /// Mostro/arbitrator pubkey embedded in the 2-of-3 condition (`P_M`),
     /// hex.
     pub mostro_pubkey: String,
+    /// Serialized Cashu token locked 1-of-1 to `P_M`, carrying the Mostro fee
+    /// the seller funds alongside the escrow. `None` when the node charges no
+    /// fee. Omitted from the wire form when absent, so proofs without a fee
+    /// serialize exactly as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fee_token: Option<String>,
 }
 
 impl CashuLockProof {
@@ -617,7 +623,15 @@ impl CashuLockProof {
             buyer_pubkey,
             seller_pubkey,
             mostro_pubkey,
+            fee_token: None,
         }
+    }
+
+    /// Attach the seller-funded fee token (a Cashu token locked to `P_M`),
+    /// returning the updated proof.
+    pub fn with_fee_token(mut self, fee_token: String) -> Self {
+        self.fee_token = Some(fee_token);
+        self
     }
 
     /// Parse a [`CashuLockProof`] from its JSON representation.
@@ -2094,6 +2108,28 @@ mod test {
         let json = proof.as_json().unwrap();
         let back = CashuLockProof::from_json(&json).unwrap();
         assert_eq!(back, proof);
+    }
+
+    #[test]
+    fn test_cashu_lock_proof_fee_token_round_trip() {
+        let proof = sample_lock_proof().with_fee_token("cashuAfee".to_string());
+        let json = proof.as_json().unwrap();
+        assert!(json.contains("fee_token"));
+        let back = CashuLockProof::from_json(&json).unwrap();
+        assert_eq!(back, proof);
+        assert_eq!(back.fee_token.as_deref(), Some("cashuAfee"));
+    }
+
+    #[test]
+    fn test_cashu_lock_proof_without_fee_token_is_omitted_and_defaults_to_none() {
+        // A proof with no fee serializes without the key (wire-compatible with
+        // clients that predate the field) and parses back to `None`.
+        let proof = sample_lock_proof();
+        assert_eq!(proof.fee_token, None);
+        let json = proof.as_json().unwrap();
+        assert!(!json.contains("fee_token"));
+        let back = CashuLockProof::from_json(&json).unwrap();
+        assert_eq!(back.fee_token, None);
     }
 
     #[test]
