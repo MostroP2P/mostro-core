@@ -5,7 +5,10 @@
 //!
 //! * **Protocol v1 — NIP-59 GiftWrap** (`kind: 1059`, see [`crate::nip59`]):
 //!   fully opaque envelopes. Strong metadata privacy, but relays cannot
-//!   rate-limit by sender, which makes the node spam-prone.
+//!   rate-limit by sender, which makes the node spam-prone. **DEPRECATED**
+//!   (see [`Transport::GiftWrap`]): mostrod v0.19.0 drops it and runs
+//!   protocol v2 only —
+//!   <https://github.com/MostroP2P/mostro/issues/786>.
 //! * **Protocol v2 — NIP-44 direct** (`kind: 14`): a *signed* event authored
 //!   by the per-trade key, whose `content` is the NIP-44 encryption of a
 //!   3-element JSON tuple:
@@ -69,10 +72,18 @@ fn identity_proof_payload(trade_pubkey: &PublicKey, message_json: &str) -> Strin
 /// operator picks protocol v1 *or* v2 via the `transport` setting
 /// (`"gift-wrap"` or `"nip44"`), and every message — inbound subscription
 /// and outbound replies — uses that transport.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Transport {
     /// Protocol v1 — NIP-59 GiftWrap (`kind: 1059`).
-    #[default]
+    ///
+    /// DEPRECATED(mostro#786): protocol v1 is being phased out. mostrod
+    /// v0.19.0 removes its `transport` setting and runs protocol v2
+    /// (`nip44`) only; this variant will be removed from mostro-core in a
+    /// following release, once the ecosystem completes the v2 migration.
+    /// Clients may still need it meanwhile to talk to pre-v2 nodes.
+    #[deprecated(
+        note = "protocol v1 (gift-wrap) is being phased out — mostrod v0.19.0 runs protocol v2 (nip44) only; see https://github.com/MostroP2P/mostro/issues/786"
+    )]
     #[serde(rename = "gift-wrap")]
     GiftWrap,
     /// Protocol v2 — NIP-44 direct message (`kind: 14`).
@@ -80,6 +91,20 @@ pub enum Transport {
     Nip44Direct,
 }
 
+/// Manual impl (not `#[derive(Default)]` + `#[default]`) because the default
+/// variant is the deprecated one and the derive would trip the deprecation
+/// lint at the definition site. The default stays `GiftWrap` for backward
+/// compatibility until mostrod v0.19.0 flips the ecosystem to v2 only.
+impl Default for Transport {
+    #[allow(deprecated)]
+    fn default() -> Self {
+        Transport::GiftWrap
+    }
+}
+
+// The variant stays fully functional until removal, so the enum's own
+// impls keep matching on it without tripping the deprecation lint.
+#[allow(deprecated)]
 impl Transport {
     /// The Nostr event kind this transport publishes and subscribes to.
     pub fn event_kind(&self) -> Kind {
@@ -99,6 +124,7 @@ impl Transport {
     }
 }
 
+#[allow(deprecated)]
 impl FromStr for Transport {
     type Err = MostroError;
 
@@ -115,6 +141,7 @@ impl FromStr for Transport {
     }
 }
 
+#[allow(deprecated)]
 impl std::fmt::Display for Transport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
@@ -298,6 +325,9 @@ pub async fn wrap_message_with(
     receiver: PublicKey,
     opts: WrapOptions,
 ) -> Result<Event, MostroError> {
+    // Dispatching over the deprecated v1 variant stays supported until the
+    // variant is removed.
+    #[allow(deprecated)]
     match transport {
         Transport::GiftWrap => {
             nip59::wrap_message(message, identity_keys, trade_keys, receiver, opts).await
@@ -665,6 +695,9 @@ mod tests {
     }
 
     #[tokio::test]
+    // Exercises the deprecated v1 variant on purpose — coverage must hold
+    // until the variant is removed.
+    #[allow(deprecated)]
     async fn wrap_message_with_dispatches_by_transport() {
         let trade_keys = Keys::generate();
         let receiver_keys = Keys::generate();
@@ -696,6 +729,9 @@ mod tests {
     }
 
     #[test]
+    // Exercises the deprecated v1 variant on purpose — coverage must hold
+    // until the variant is removed.
+    #[allow(deprecated)]
     fn transport_config_parsing() {
         for (s, expected) in [
             ("gift-wrap", Transport::GiftWrap),
@@ -712,6 +748,9 @@ mod tests {
     }
 
     #[test]
+    // Exercises the deprecated v1 variant on purpose — coverage must hold
+    // until the variant is removed.
+    #[allow(deprecated)]
     fn transport_kind_and_version() {
         assert_eq!(Transport::GiftWrap.event_kind(), Kind::GiftWrap);
         assert_eq!(
