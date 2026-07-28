@@ -212,6 +212,12 @@ pub fn wrap_message_nip44(
 
     EventBuilder::new(Kind::PrivateDirectMessage, encrypted)
         .tags(tags)
+        // `EventBuilder::build` drops `p` tags matching the event author
+        // unless self-tagging is allowed. Admin flows may legitimately run
+        // with the node's own key on both ends (sender == receiver), and the
+        // `p` tag is what mostrod filters its subscription on — without this,
+        // such a message is published untagged and never delivered.
+        .allow_self_tagging()
         .pow(opts.pow)
         .sign_with_keys(trade_keys)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
@@ -457,6 +463,35 @@ mod tests {
         assert_eq!(unwrapped.sender, trade_keys.public_key());
         assert_eq!(unwrapped.identity, trade_keys.public_key());
         assert!(unwrapped.signature.is_none());
+    }
+
+    // Admin flows may use the node's own key on both ends. The `p` tag is the
+    // only thing mostrod filters its subscription on, so it must survive even
+    // when it points at the event author.
+    #[test]
+    fn nip44_keeps_p_tag_when_receiver_is_the_author() {
+        let keys = Keys::generate();
+
+        let event = wrap_message_nip44(
+            &sample_order_message(Some(1)),
+            &keys,
+            &keys,
+            keys.public_key(),
+            WrapOptions::default(),
+        )
+        .expect("wrap");
+
+        assert!(event
+            .tags
+            .iter()
+            .any(|t| t.as_slice().first().map(|s| s.as_str()) == Some("p")
+                && t.as_slice().get(1).map(|s| s.as_str()) == Some(&keys.public_key().to_hex())));
+
+        let unwrapped = unwrap_message_nip44(&event, &keys)
+            .expect("unwrap")
+            .expect("some");
+
+        assert_eq!(unwrapped.sender, keys.public_key());
     }
 
     #[test]
