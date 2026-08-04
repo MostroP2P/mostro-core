@@ -55,6 +55,9 @@ sqlx = { version = "0.9.0", features = [
 wasm-bindgen = { version = "0.2.92", optional = true }
 nostr-sdk = { version = "0.44.1", features = ["nip44", "nip59"] }
 bitcoin = "0.32.7"
+# Leading `::hkdf` in chat code avoids ambiguity with `nostr_sdk::prelude::hkdf`.
+hkdf = "0.12"
+sha2 = "0.10"
 
 [features]
 default = ["wasm"]

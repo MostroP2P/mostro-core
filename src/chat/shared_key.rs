@@ -1,30 +1,31 @@
-//! ECDH-derived shared key used as the addressable identity of a Mostro
-//! P2P chat channel.
+//! ECDH shared secret used as IKM for Mostro P2P chat key derivation.
 //!
 //! The two parties of a chat (buyer/seller during a trade or admin/party
-//! during a dispute) each compute the same `SharedKey` from their own trade
-//! secret key and the counterparty's trade public key, so both can encrypt
-//! and decrypt the conversation, and so relays can route gift wraps through
-//! a `p` tag bound to the shared public key — without leaking either real
-//! pubkey on the wire.
+//! during a dispute) each compute the same 32-byte ECDH output from their
+//! own secret key and the counterparty's public key. That output is the
+//! input keying material for [`crate::chat::derive_chat_keys_from_shared`],
+//! which produces `K_conv` and `K_sign`.
+//!
+//! Clients MAY persist the ECDH secret (via [`SharedKey::to_hex`]) and
+//! re-derive chat keys on load. The ECDH secret itself is **not** the wire
+//! address: `pub(K_conv)` is the `p` tag and `pub(K_sign)` is the author.
 
 use nostr_sdk::prelude::*;
 
+use crate::chat::keys::derive_chat_keys_from_shared;
 use crate::error::{MostroError, ServiceError};
 
-/// Shared key derived via ECDH between two parties' trade keys.
+/// Shared ECDH secret between two parties' trade (or admin) keys.
 ///
 /// Internally a `Keys` instance whose secret is the 32-byte ECDH output of
-/// `(local_secret, counterparty_pubkey)`. Both sides of the conversation
-/// derive an identical value and therefore an identical public key, which
-/// is what gift wraps are addressed to.
+/// `(local_secret, counterparty_pubkey)`. Prefer [`SharedKey::chat_keys`] for
+/// the on-the-wire `K_conv` / `K_sign` pair.
 #[derive(Debug, Clone)]
 pub struct SharedKey(Keys);
 
 impl SharedKey {
-    /// Derive a shared key from a local secret key and the counterparty's
-    /// public key using the secp256k1 ECDH primitive exposed by
-    /// [`nostr_sdk::util::generate_shared_key`].
+    /// Derive the ECDH shared secret from a local secret key and the
+    /// counterparty's public key.
     ///
     /// Both peers obtain the same `SharedKey` by swapping arguments
     /// (`A.derive(a_sk, b_pk) == B.derive(b_sk, a_pk)`).
@@ -43,37 +44,41 @@ impl SharedKey {
     }
 
     /// Build a `SharedKey` from an already-derived `Keys` value.
-    ///
-    /// Useful when a client persists a freshly-generated `Keys` instead of
-    /// re-deriving it on every load.
     pub fn from_keys(keys: Keys) -> Self {
         Self(keys)
     }
 
-    /// Borrow the underlying `Keys`.
+    /// Borrow the underlying ECDH `Keys` (IKM as a keypair).
+    ///
+    /// For gift-wrap dual-read decrypt only. New envelopes use [`Self::chat_keys`].
     pub fn keys(&self) -> &Keys {
         &self.0
     }
 
-    /// Public key of this shared key — the value used as the `p` tag on
-    /// every gift wrap belonging to the channel.
+    /// Public key of the raw ECDH secret interpreted as a keypair.
+    ///
+    /// This was the GiftWrap `p` tag under the superseded envelope. The new
+    /// envelope uses `pub(K_conv)` from [`Self::chat_keys`] instead.
     pub fn public_key(&self) -> PublicKey {
         self.0.public_key()
     }
 
-    /// Borrow the underlying secret key.
+    /// Borrow the underlying ECDH secret key.
     pub fn secret_key(&self) -> &SecretKey {
         self.0.secret_key()
     }
 
-    /// Serialize the secret as a lower-case hex string suitable for client
-    /// persistence. Pair with [`SharedKey::from_hex`] to round-trip.
+    /// Derive `(K_conv, K_sign)` from this ECDH secret.
+    pub fn chat_keys(&self) -> Result<(Keys, Keys), MostroError> {
+        derive_chat_keys_from_shared(self.secret_key().as_secret_bytes())
+    }
+
+    /// Serialize the ECDH secret as lower-case hex for client persistence.
     pub fn to_hex(&self) -> String {
         self.0.secret_key().to_secret_hex()
     }
 
-    /// Rebuild a `SharedKey` from a hex-encoded secret previously produced
-    /// by [`SharedKey::to_hex`].
+    /// Rebuild from hex previously produced by [`SharedKey::to_hex`].
     pub fn from_hex(hex: &str) -> Result<Self, MostroError> {
         let secret = SecretKey::from_hex(hex).map_err(|e| {
             MostroError::MostroInternalErr(ServiceError::EncryptionError(format!(
@@ -98,6 +103,11 @@ mod tests {
 
         assert_eq!(from_alice.public_key(), from_bob.public_key());
         assert_eq!(from_alice.to_hex(), from_bob.to_hex());
+
+        let (ac, as_) = from_alice.chat_keys().unwrap();
+        let (bc, bs) = from_bob.chat_keys().unwrap();
+        assert_eq!(ac.public_key(), bc.public_key());
+        assert_eq!(as_.public_key(), bs.public_key());
     }
 
     #[test]
