@@ -11,8 +11,10 @@
 //! and maximum rating bounds.
 
 pub use crate::chat::{
-    chat_filter, unwrap_chat_message, wrap_chat_message, ChatMessage, SharedKey,
-    CHAT_DEFAULT_LOOKBACK_SECS,
+    chat_filter, derive_chat_keys, derive_chat_keys_from_shared, giftwrap_chat_filter,
+    unwrap_chat_message, unwrap_giftwrap_chat_message, wrap_chat_message,
+    wrap_giftwrap_chat_message, ChatMessage, SharedKey, CHAT_DEFAULT_LOOKBACK_SECS,
+    CHAT_MAX_CLOCK_SKEW_SECS, CHAT_MAX_CONTENT_BYTES,
 };
 #[cfg(feature = "sqlx")]
 pub use crate::db::Crud;
