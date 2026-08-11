@@ -17,7 +17,7 @@ use nostr_sdk::prelude::*;
 
 use crate::error::{MostroError, ServiceError};
 
-/// NIP-59-compatible random timestamp tweak range (0..=2 days), mirrored locally
+/// NIP-59-compatible random timestamp tweak range (0..2 days), mirrored locally
 /// because `nostr::nips::nip59::RANGE_RANDOM_TIMESTAMP_TWEAK` is private in 0.45.
 const RANGE_RANDOM_TIMESTAMP_TWEAK_SECS: u64 = 172_800;
 

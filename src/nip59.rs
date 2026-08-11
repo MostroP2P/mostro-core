@@ -30,7 +30,7 @@ use nostr::nips::nip44;
 use nostr::nips::nip59::GiftWrapSealBuilder;
 use nostr_sdk::prelude::*;
 
-/// NIP-59-compatible random timestamp tweak range (0..=2 days).
+/// NIP-59-compatible random timestamp tweak range (0..2 days).
 /// Mirrored locally: `RANGE_RANDOM_TIMESTAMP_TWEAK` is private in nostr 0.45.
 const RANGE_RANDOM_TIMESTAMP_TWEAK_SECS: u64 = 172_800;
 
