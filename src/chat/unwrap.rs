@@ -5,7 +5,7 @@
 //! except the caller-owned steps: rate-limit budget, outer-id LRU, and durable
 //! inner-id deduplication.
 
-use nostr_sdk::nips::nip44;
+use nostr::nips::nip44;
 use nostr_sdk::prelude::*;
 
 use crate::error::{MostroError, ServiceError};

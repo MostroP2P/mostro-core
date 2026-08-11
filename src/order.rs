@@ -8,7 +8,8 @@
 //! broadcasting via Nostr or surfacing minimal information to clients.
 
 use crate::prelude::*;
-use nostr_sdk::{PublicKey, Timestamp};
+use nostr::key::PublicKey;
+use nostr::types::Timestamp;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;

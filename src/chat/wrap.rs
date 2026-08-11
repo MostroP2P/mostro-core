@@ -12,7 +12,7 @@
 //! Legacy gift-wrap producers remain available as
 //! [`wrap_giftwrap_chat_message`] for dual-read migration windows.
 
-use nostr_sdk::nips::{nip44, nip59};
+use nostr::nips::{nip44, nip59};
 use nostr_sdk::prelude::*;
 
 use crate::error::{MostroError, ServiceError};
@@ -54,10 +54,10 @@ pub async fn wrap_chat_message_with_tags(
     // One timestamp for both events: recipients reject a mismatch (replay defense).
     let now = Timestamp::now();
 
-    let inner = EventBuilder::text_note(message)
+    let inner = EventBuilder::new(Kind::TextNote,message)
         .custom_created_at(now)
-        .build(sender_trade_keys.public_key())
-        .sign(sender_trade_keys)
+        .finalize_unsigned(sender_trade_keys.public_key())
+        .finalize_async(sender_trade_keys)
         .await
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?;
 
@@ -89,9 +89,9 @@ pub async fn wrap_giftwrap_chat_message(
     shared_pubkey: &PublicKey,
     message: &str,
 ) -> Result<Event, MostroError> {
-    let inner = EventBuilder::text_note(message)
-        .build(sender_trade_keys.public_key())
-        .sign(sender_trade_keys)
+    let inner = EventBuilder::new(Kind::TextNote,message)
+        .finalize_unsigned(sender_trade_keys.public_key())
+        .finalize_async(sender_trade_keys)
         .await
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?;
 

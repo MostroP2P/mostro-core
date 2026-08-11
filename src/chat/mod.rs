@@ -68,7 +68,7 @@ pub use wrap::{wrap_chat_message, wrap_chat_message_with_tags, wrap_giftwrap_cha
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr_sdk::nips::nip44;
+    use nostr::nips::nip44;
     use nostr_sdk::prelude::*;
 
     fn chat_pair() -> (Keys, Keys, Keys, Keys) {

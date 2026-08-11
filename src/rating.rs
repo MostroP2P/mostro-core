@@ -64,37 +64,17 @@ impl Rating {
     ///
     /// The returned [`Tags`] value contains one entry per numeric field plus
     /// a `z` marker tag identifying the payload as a rating.
-    pub fn to_tags(&self) -> Result<Tags> {
+    pub fn to_tags(&self) -> Tags {
         let tags = vec![
-            Tag::custom(
-                TagKind::Custom(std::borrow::Cow::Borrowed("total_reviews")),
-                vec![self.total_reviews.to_string()],
-            ),
-            Tag::custom(
-                TagKind::Custom(std::borrow::Cow::Borrowed("total_rating")),
-                vec![self.total_rating.to_string()],
-            ),
-            Tag::custom(
-                TagKind::Custom(std::borrow::Cow::Borrowed("last_rating")),
-                vec![self.last_rating.to_string()],
-            ),
-            Tag::custom(
-                TagKind::Custom(std::borrow::Cow::Borrowed("max_rate")),
-                vec![self.max_rate.to_string()],
-            ),
-            Tag::custom(
-                TagKind::Custom(std::borrow::Cow::Borrowed("min_rate")),
-                vec![self.min_rate.to_string()],
-            ),
-            Tag::custom(
-                TagKind::Custom(std::borrow::Cow::Borrowed("z")),
-                vec!["rating".to_string()],
-            ),
+            Tag::custom("total_reviews", vec![self.total_reviews.to_string()]),
+            Tag::custom("total_rating", vec![self.total_rating.to_string()]),
+            Tag::custom("last_rating", vec![self.last_rating.to_string()]),
+            Tag::custom("max_rate", vec![self.max_rate.to_string()]),
+            Tag::custom("min_rate", vec![self.min_rate.to_string()]),
+            Tag::custom("z", vec!["rating".to_string()]),
         ];
 
-        let tags = Tags::from_list(tags);
-
-        Ok(tags)
+        Tags::from_list(tags)
     }
 
     /// Rebuild a [`Rating`] from a set of Nostr tags previously produced by

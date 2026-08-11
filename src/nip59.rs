@@ -24,7 +24,7 @@ use std::str::FromStr;
 
 use crate::message::{Action, Message, Payload};
 use crate::prelude::{CantDoReason, MostroError, ServiceError};
-use nostr_sdk::nips::{nip44, nip59};
+use nostr::nips::{nip44, nip59};
 use nostr_sdk::prelude::*;
 
 /// Options controlling how a Mostro message is wrapped.

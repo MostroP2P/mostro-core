@@ -44,7 +44,7 @@ use std::str::FromStr;
 use crate::message::Message;
 use crate::nip59::{self, UnwrappedMessage, WrapOptions};
 use crate::prelude::{MostroError, ServiceError};
-use nostr_sdk::nips::nip44;
+use nostr::nips::nip44;
 use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -210,10 +210,19 @@ pub fn wrap_message_nip44(
         tags.push(Tag::expiration(exp));
     }
 
-    EventBuilder::new(Kind::PrivateDirectMessage, encrypted)
+    let unsigned = EventBuilder::new(Kind::PrivateDirectMessage, encrypted)
         .tags(tags)
-        .pow(opts.pow)
-        .sign_with_keys(trade_keys)
+        .finalize_unsigned(trade_keys.public_key());
+
+    let unsigned = match core::num::NonZeroU8::new(opts.pow) {
+        Some(pow) => unsigned
+            .mine(&SingleThreadPow, pow)
+            .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?,
+        None => unsigned,
+    };
+
+    unsigned
+        .finalize(trade_keys)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
 }
 
