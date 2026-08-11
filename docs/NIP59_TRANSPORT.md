@@ -68,11 +68,12 @@ GiftWrap (kind 1059, signed by fresh ephemeral keys,
           optional PoW, randomized created_at)
 ```
 
-`nostr-sdk` 0.44's `nip59::extract_rumor` enforces
+`nostr` 0.45's `nip59::extract_rumor` enforces
 `seal.pubkey == rumor.pubkey` and rejects the split above with
 `SenderMismatch`. `unwrap_message` therefore performs its own NIP-44
 decryption and seal-signature verification instead of calling
-`extract_rumor`.
+`extract_rumor`. Seals are built with `GiftWrapSealBuilder` (the 0.45
+replacement for `EventBuilder::seal`).
 
 ## Public API
 
@@ -125,20 +126,22 @@ Builds a publishable GiftWrap event. Steps:
 1. Serialize `message` to JSON.
 2. If `opts.signed`, sign the JSON with `trade_keys` and include the
    signature in the inner tuple; else include `None`.
-3. Build the rumor as `EventBuilder::text_note(inner_json)` authored
-   by `trade_keys.public_key()`. **No PoW is mined on the rumor** —
-   it is encrypted inside the seal and never published alone.
-4. Seal via `EventBuilder::seal(identity_keys, &receiver, rumor)`
-   (NIP-44 encrypts the rumor JSON under `identity_keys ↔ receiver`)
-   and sign the resulting event with `identity_keys`. Encryption and
-   signing must use the same key so the receiver can derive the
-   shared secret from `seal.pubkey` alone.
+3. Build the rumor as
+   `EventBuilder::new(Kind::TextNote, inner_json).finalize_unsigned(trade_keys.public_key())`.
+   **No PoW is mined on the rumor** — it is encrypted inside the seal
+   and never published alone.
+4. Seal via `GiftWrapSealBuilder::new(rumor, receiver).finalize(identity_keys)`
+   (NIP-44 encrypts the rumor JSON under `identity_keys ↔ receiver`
+   and signs the seal). Encryption and signing must use the same key
+   so the receiver can derive the shared secret from `seal.pubkey`
+   alone.
 5. Encrypt the seal JSON with NIP-44 under a fresh ephemeral key for
    `receiver`, attach `["p", receiver]` (mandatory) and optionally
-   `["expiration", ts]`, stamp `created_at =
-   Timestamp::tweaked(nip59::RANGE_RANDOM_TIMESTAMP_TWEAK)` (OsRng,
-   0..172_800 s in the past), mine PoW at `opts.pow`, sign with the
-   ephemeral key.
+   `["expiration", ts]`, stamp `created_at` with the local
+   `tweaked_timestamp()` helper (0..172_800 s in the past; mirrors
+   nostr 0.45's private NIP-59 tweak), optionally
+   `UnsignedEvent::mine(&SingleThreadPow, pow)` when `opts.pow > 0`,
+   then `finalize` with the ephemeral key.
 
 For full-privacy mode, pass the same `Keys` as both `identity_keys`
 and `trade_keys`.
@@ -259,20 +262,20 @@ trust" must never look the same to the caller.
 ### Timestamp blur
 
 Per NIP-59, GiftWrap `created_at` should be randomized to obscure the
-real send time. The module calls
-`Timestamp::tweaked(nip59::RANGE_RANDOM_TIMESTAMP_TWEAK)`, which draws
-a uniformly random `u64` in `0..172_800` (two days) from `OsRng` and
-subtracts it from the current Unix second. The `Timestamp::tweaked`
-helper is also what `nostr-sdk`'s own `make_seal` uses, so wrap and
-seal metadata share the same distribution.
+real send time. nostr 0.45 made `Timestamp::tweaked` and
+`RANGE_RANDOM_TIMESTAMP_TWEAK` private, so the module uses a local
+`tweaked_timestamp()` that draws a uniformly random `u64` in
+`0..172_800` (two days) and subtracts it from the current Unix second
+— the same distribution as nostr's internal NIP-59 helper.
 
 ### PoW scope
 
 `WrapOptions.pow` applies only to the outer GiftWrap event. The
 rumor is encrypted inside the seal and never published on its own,
 so mining its event id is pure CPU waste. The seal itself is not
-mined; `nostr-sdk` does not expose a PoW hook on `EventBuilder::seal`
-and the seal's id is not observable on relays in any meaningful way.
+mined; `GiftWrapSealBuilder` has no PoW hook and the seal's id is
+not observable on relays in any meaningful way. Outer PoW uses
+`UnsignedEvent::mine(&SingleThreadPow, …)` before `finalize`.
 
 ### Ephemeral outer signer
 
@@ -350,10 +353,10 @@ if let Some(sig) = unwrapped.signature {
 
 ## Dependency surface
 
-- `nostr-sdk = "0.44.1"` with features `nip44`, `nip59`.
+- `nostr-sdk = "0.45.1"` and `nostr = "0.45.1"` (`nip44`, `nip59`).
 - `serde_json` for the inner tuple.
-- No new direct RNG dependency; randomness flows through
-  `nostr-sdk`'s `Timestamp::tweaked` (OsRng).
+- No new direct RNG dependency; timestamp blur reuses
+  `Keys::generate()` entropy for the local tweak helper.
 
 ## Testing
 

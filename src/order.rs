@@ -776,7 +776,7 @@ impl From<Order> for SmallOrder {
 mod tests {
     use super::*;
     use crate::error::CantDoReason;
-    use nostr_sdk::Keys;
+    use nostr_sdk::prelude::Keys;
     use uuid::uuid;
 
     #[test]

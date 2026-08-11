@@ -12,7 +12,7 @@
 
 use nostr_sdk::prelude::*;
 
-use crate::chat::keys::derive_chat_keys_from_shared;
+use crate::chat::keys::{derive_chat_keys_from_shared, generate_shared_key};
 use crate::error::{MostroError, ServiceError};
 
 /// Shared ECDH secret between two parties' trade (or admin) keys.
@@ -30,11 +30,7 @@ impl SharedKey {
     /// Both peers obtain the same `SharedKey` by swapping arguments
     /// (`A.derive(a_sk, b_pk) == B.derive(b_sk, a_pk)`).
     pub fn derive(secret: &SecretKey, counterparty: &PublicKey) -> Result<Self, MostroError> {
-        let bytes = nostr_sdk::util::generate_shared_key(secret, counterparty).map_err(|e| {
-            MostroError::MostroInternalErr(ServiceError::EncryptionError(format!(
-                "shared key derivation failed: {e}"
-            )))
-        })?;
+        let bytes = generate_shared_key(secret, counterparty)?;
         let secret = SecretKey::from_slice(&bytes).map_err(|e| {
             MostroError::MostroInternalErr(ServiceError::EncryptionError(format!(
                 "invalid shared secret: {e}"

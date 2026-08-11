@@ -12,10 +12,14 @@
 //! Legacy gift-wrap producers remain available as
 //! [`wrap_giftwrap_chat_message`] for dual-read migration windows.
 
-use nostr::nips::{nip44, nip59};
+use nostr::nips::nip44;
 use nostr_sdk::prelude::*;
 
 use crate::error::{MostroError, ServiceError};
+
+/// NIP-59-compatible random timestamp tweak range (0..=2 days), mirrored locally
+/// because `nostr::nips::nip59::RANGE_RANDOM_TIMESTAMP_TWEAK` is private in 0.45.
+const RANGE_RANDOM_TIMESTAMP_TWEAK_SECS: u64 = 172_800;
 
 /// Wrap a plain-text chat message into a kind 14 event signed by `K_sign`.
 ///
@@ -45,7 +49,7 @@ pub async fn wrap_chat_message_with_tags(
     message: &str,
     extra_tags: Vec<Tag>,
 ) -> Result<Event, MostroError> {
-    if extra_tags.iter().any(|t| t.kind() == TagKind::p()) {
+    if extra_tags.iter().any(|t| t.kind() == "p") {
         return Err(MostroError::MostroInternalErr(
             ServiceError::UnexpectedError("extra_tags must not contain a p tag".to_string()),
         ));
@@ -54,7 +58,7 @@ pub async fn wrap_chat_message_with_tags(
     // One timestamp for both events: recipients reject a mismatch (replay defense).
     let now = Timestamp::now();
 
-    let inner = EventBuilder::new(Kind::TextNote,message)
+    let inner = EventBuilder::new(Kind::TextNote, message)
         .custom_created_at(now)
         .finalize_unsigned(sender_trade_keys.public_key())
         .finalize_async(sender_trade_keys)
@@ -76,7 +80,7 @@ pub async fn wrap_chat_message_with_tags(
     EventBuilder::new(Kind::PrivateDirectMessage, content)
         .tags(tags)
         .custom_created_at(now)
-        .sign_with_keys(sign)
+        .finalize(sign)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
 }
 
@@ -84,12 +88,15 @@ pub async fn wrap_chat_message_with_tags(
 ///
 /// Prefer [`wrap_chat_message`]. Kept for dual-read transition tests and any
 /// client that still needs to emit the superseded envelope during migration.
+///
+/// Outer `created_at` is blurred with [`tweaked_timestamp`] (NIP-59-compatible
+/// 0..=2 day offset); signing uses `EventBuilder::finalize` (nostr 0.45).
 pub async fn wrap_giftwrap_chat_message(
     sender_trade_keys: &Keys,
     shared_pubkey: &PublicKey,
     message: &str,
 ) -> Result<Event, MostroError> {
-    let inner = EventBuilder::new(Kind::TextNote,message)
+    let inner = EventBuilder::new(Kind::TextNote, message)
         .finalize_unsigned(sender_trade_keys.public_key())
         .finalize_async(sender_trade_keys)
         .await
@@ -106,7 +113,19 @@ pub async fn wrap_giftwrap_chat_message(
 
     EventBuilder::new(Kind::GiftWrap, encrypted)
         .tag(Tag::public_key(*shared_pubkey))
-        .custom_created_at(Timestamp::tweaked(nip59::RANGE_RANDOM_TIMESTAMP_TWEAK))
-        .sign_with_keys(&ephemeral)
+        .custom_created_at(tweaked_timestamp())
+        .finalize(&ephemeral)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
+}
+
+/// Subtract a random offset in `0..RANGE_RANDOM_TIMESTAMP_TWEAK_SECS` from now
+/// (same behaviour as nostr 0.45's private `tweaked_timestamp`).
+fn tweaked_timestamp() -> Timestamp {
+    let now = Timestamp::now().as_secs();
+    // Re-use key material as CSPRNG bytes without pulling `rand` into the crate.
+    let entropy = Keys::generate();
+    let bytes = entropy.secret_key().to_secret_bytes();
+    let tweak = u64::from_le_bytes(bytes[0..8].try_into().expect("8 bytes"))
+        % RANGE_RANDOM_TIMESTAMP_TWEAK_SECS;
+    Timestamp::from_secs(now.saturating_sub(tweak))
 }

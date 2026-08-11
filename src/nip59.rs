@@ -11,9 +11,11 @@
 //! signs the seal (and encrypts it to the receiver), while a per-trade
 //! **trade key** authors the rumor and produces the inner tuple signature.
 //! This deliberately breaks NIP-59's "rumor author == seal signer"
-//! convention that `nostr-sdk` 0.44 enforces via `SenderMismatch`, so the
-//! unwrap path does its own NIP-44 + signature verification instead of
-//! calling `nip59::extract_rumor`.
+//! convention that `nostr` 0.45 enforces via `SenderMismatch` in
+//! `nip59::extract_rumor`, so the unwrap path does its own NIP-44 +
+//! signature verification instead of calling that helper. Seals are built
+//! with `GiftWrapSealBuilder` (the 0.45 replacement for
+//! `EventBuilder::seal`).
 //!
 //! The module centralizes wrap/unwrap so clients do not need to reimplement
 //! NIP-59 glue themselves. It does not manage relays, subscriptions,
@@ -24,8 +26,13 @@ use std::str::FromStr;
 
 use crate::message::{Action, Message, Payload};
 use crate::prelude::{CantDoReason, MostroError, ServiceError};
-use nostr::nips::{nip44, nip59};
+use nostr::nips::nip44;
+use nostr::nips::nip59::GiftWrapSealBuilder;
 use nostr_sdk::prelude::*;
+
+/// NIP-59-compatible random timestamp tweak range (0..=2 days).
+/// Mirrored locally: `RANGE_RANDOM_TIMESTAMP_TWEAK` is private in nostr 0.45.
+const RANGE_RANDOM_TIMESTAMP_TWEAK_SECS: u64 = 172_800;
 
 /// Options controlling how a Mostro message is wrapped.
 #[derive(Debug, Clone)]
@@ -74,13 +81,15 @@ pub struct UnwrappedMessage {
 ///
 /// * `message` — the Mostro message to send.
 /// * `identity_keys` — long-lived identity keys. Sign the seal (kind 13)
-///   and encrypt it to `receiver` via NIP-44. Callers that want the
-///   "full privacy" mode (no stable identity, no reputation) should pass
-///   the same value as `trade_keys`.
+///   and encrypt it to `receiver` via NIP-44 (`GiftWrapSealBuilder` in
+///   nostr 0.45). Callers that want the "full privacy" mode (no stable
+///   identity, no reputation) should pass the same value as `trade_keys`.
 /// * `trade_keys` — per-trade keys. Author of the rumor (kind 1) and
 ///   signer of the inner tuple signature when `opts.signed == true`.
 /// * `receiver` — the Mostro node public key.
-/// * `opts` — wrap options (PoW, expiration, signed).
+/// * `opts` — wrap options (PoW, expiration, signed). Outer PoW uses
+///   `UnsignedEvent::mine` when `pow > 0`; gift-wrap `created_at` is
+///   blurred with the local NIP-59-compatible tweak helper.
 pub async fn wrap_message(
     message: &Message,
     identity_keys: &Keys,
@@ -102,17 +111,15 @@ pub async fn wrap_message(
     // PoW only applies to the outer GiftWrap (per WrapOptions docs); the
     // rumor is encrypted inside the seal and never published on its own,
     // so mining its event id would burn CPU for nothing.
-    let rumor = EventBuilder::text_note(content).build(trade_keys.public_key());
+    let rumor =
+        EventBuilder::new(Kind::TextNote, content).finalize_unsigned(trade_keys.public_key());
 
     // Seal is encrypted and signed with identity_keys so the receiver can
     // decrypt it via (receiver_secret, seal.pubkey) — this keeps seal.pubkey
     // consistent with the encryption key, while leaving rumor.pubkey free to
     // carry the per-trade key (the mismatch standard NIP-59 rejects).
-    let seal: Event = EventBuilder::seal(identity_keys, &receiver, rumor)
-        .await
-        .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?
-        .sign(identity_keys)
-        .await
+    let seal: Event = GiftWrapSealBuilder::new(rumor, receiver)
+        .finalize(identity_keys)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?;
 
     gift_wrap_from_seal_with_pow(&seal, receiver, opts.pow, opts.expiration)
@@ -121,6 +128,10 @@ pub async fn wrap_message(
 /// Wrap an already built Seal into a NIP-59 GiftWrap with optional PoW and
 /// expiration. The outer event is signed with a freshly generated ephemeral
 /// key and carries a mandatory `p` tag pointing at `receiver`.
+///
+/// PoW (`pow > 0`) is applied with `UnsignedEvent::mine(&SingleThreadPow, …)`
+/// before `finalize`; `created_at` uses the local [`tweaked_timestamp`] helper
+/// (nostr 0.45 made `Timestamp::tweaked` / the NIP-59 range private).
 fn gift_wrap_from_seal_with_pow(
     seal: &Event,
     receiver: PublicKey,
@@ -148,12 +159,31 @@ fn gift_wrap_from_seal_with_pow(
     }
     tags.push(Tag::public_key(receiver));
 
-    EventBuilder::new(Kind::GiftWrap, encrypted)
+    let unsigned = EventBuilder::new(Kind::GiftWrap, encrypted)
         .tags(tags)
-        .custom_created_at(Timestamp::tweaked(nip59::RANGE_RANDOM_TIMESTAMP_TWEAK))
-        .pow(pow)
-        .sign_with_keys(&ephemeral)
+        .custom_created_at(tweaked_timestamp())
+        .finalize_unsigned(ephemeral.public_key());
+
+    let unsigned = match core::num::NonZeroU8::new(pow) {
+        Some(pow) => unsigned
+            .mine(&SingleThreadPow, pow)
+            .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?,
+        None => unsigned,
+    };
+
+    unsigned
+        .finalize(&ephemeral)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
+}
+
+/// Subtract a random offset in `0..RANGE_RANDOM_TIMESTAMP_TWEAK_SECS` from now.
+fn tweaked_timestamp() -> Timestamp {
+    let now = Timestamp::now().as_secs();
+    let entropy = Keys::generate();
+    let bytes = entropy.secret_key().to_secret_bytes();
+    let tweak = u64::from_le_bytes(bytes[0..8].try_into().expect("8 bytes"))
+        % RANGE_RANDOM_TIMESTAMP_TWEAK_SECS;
+    Timestamp::from_secs(now.saturating_sub(tweak))
 }
 
 /// Try to open an incoming GiftWrap with the given `receiver_keys`.
@@ -437,7 +467,7 @@ mod tests {
 
         let corrupted = EventBuilder::new(Kind::GiftWrap, encrypted)
             .tags([Tag::public_key(receiver_keys.public_key())])
-            .sign_with_keys(&ephemeral)
+            .finalize(&ephemeral)
             .expect("sign");
 
         let result = unwrap_message(&corrupted, &receiver_keys).await;
@@ -457,12 +487,10 @@ mod tests {
         inner: (&Message, Option<String>),
     ) -> Event {
         let content = serde_json::to_string(&inner).unwrap();
-        let rumor = EventBuilder::text_note(content).build(trade_keys.public_key());
-        let seal = EventBuilder::seal(identity_keys, &receiver, rumor)
-            .await
-            .unwrap()
-            .sign(identity_keys)
-            .await
+        let rumor =
+            EventBuilder::new(Kind::TextNote, content).finalize_unsigned(trade_keys.public_key());
+        let seal = GiftWrapSealBuilder::new(rumor, receiver)
+            .finalize(identity_keys)
             .unwrap();
         gift_wrap_from_seal_with_pow(&seal, receiver, 0, None).unwrap()
     }

@@ -1,7 +1,9 @@
 //! Domain-separated chat key derivation (`K_conv` / `K_sign`).
 //!
 //! The ECDH shared secret between two trade keys (or admin ↔ party trade key)
-//! is **not** used on the wire. HKDF-SHA256 splits it into:
+//! is **not** used on the wire. ECDH itself is computed by the local
+//! [`generate_shared_key`] helper (`nostr::util::generate_shared_key` is
+//! crate-private in 0.45). HKDF-SHA256 then splits that secret into:
 //!
 //! * [`K_conv`](derive_chat_keys) — NIP-44 encryption and the outer `p` tag
 //! * [`K_sign`](derive_chat_keys) — signs the outer kind 14 event (author filter)
@@ -23,7 +25,9 @@ pub const CHAT_CONV_INFO: &[u8] = b"mostro:chat:conv:v1";
 pub const CHAT_SIGN_INFO: &[u8] = b"mostro:chat:sign:v1";
 
 /// Raw x25519-style ECDH shared secret (even-parity assumption, per NIP-04/44).
-fn generate_shared_key(
+///
+/// Replaces `nostr::util::generate_shared_key`, which is crate-private in 0.45.
+pub(crate) fn generate_shared_key(
     secret_key: &SecretKey,
     public_key: &PublicKey,
 ) -> Result<[u8; 32], MostroError> {
@@ -57,11 +61,7 @@ pub fn derive_chat_keys(
     own_trade: &Keys,
     peer_trade: &PublicKey,
 ) -> Result<(Keys, Keys), MostroError> {
-    let shared = generate_shared_key(own_trade.secret_key(), peer_trade).map_err(|e| {
-        MostroError::MostroInternalErr(ServiceError::EncryptionError(format!(
-            "chat ECDH failed: {e}"
-        )))
-    })?;
+    let shared = generate_shared_key(own_trade.secret_key(), peer_trade)?;
     derive_chat_keys_from_shared(&shared)
 }
 
