@@ -90,7 +90,7 @@ pub async fn wrap_chat_message_with_tags(
 /// client that still needs to emit the superseded envelope during migration.
 ///
 /// Outer `created_at` is blurred with [`tweaked_timestamp`] (NIP-59-compatible
-/// 0..=2 day offset); signing uses `EventBuilder::finalize` (nostr 0.45).
+/// 0..2 day offset); signing uses `EventBuilder::finalize` (nostr 0.45).
 pub async fn wrap_giftwrap_chat_message(
     sender_trade_keys: &Keys,
     shared_pubkey: &PublicKey,
