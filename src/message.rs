@@ -13,9 +13,9 @@
 use crate::prelude::*;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
 use bitcoin::hashes::Hash;
-use bitcoin::key::Secp256k1;
-use bitcoin::secp256k1::Message as BitcoinMessage;
 use nostr_sdk::prelude::*;
+use secp256k1::schnorr;
+use secp256k1::Secp256k1;
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
 
@@ -350,12 +350,12 @@ impl Message {
     /// [`WrapOptions::signed`](crate::nip59::WrapOptions::signed) set to
     /// `true`. It binds a message to the sender's trade keys without
     /// relying on the outer Nostr event signature.
+    ///
+    /// Implementation note (nostr 0.45): `Keys::sign_schnorr` takes the
+    /// digest as raw bytes (`AsRef<[u8]>`), not `bitcoin::secp256k1::Message`.
     pub fn sign(message: String, keys: &Keys) -> Signature {
         let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
-        let hash = hash.to_byte_array();
-        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
-
-        keys.sign_schnorr(&message)
+        keys.sign_schnorr(hash.to_byte_array())
     }
 
     /// Verify a signature previously produced by [`Message::sign`].
@@ -363,17 +363,18 @@ impl Message {
     /// Returns `true` when `sig` is a valid Schnorr signature of the
     /// SHA-256 digest of `message` under `pubkey`, `false` otherwise
     /// (including when `pubkey` has no x-only representation).
+    ///
+    /// Uses the same `secp256k1` 0.30 types as `nostr` (via the crate's
+    /// direct `secp256k1` dependency) so verification stays aligned with
+    /// [`Message::sign`].
     pub fn verify_signature(message: String, pubkey: PublicKey, sig: Signature) -> bool {
-        // Create payload hash
         let hash: Sha256Hash = Sha256Hash::hash(message.as_bytes());
         let hash = hash.to_byte_array();
-        let message: BitcoinMessage = BitcoinMessage::from_digest(hash);
 
-        // Create a verification-only context for better performance
         let secp = Secp256k1::verification_only();
-        // Verify signature
         if let Ok(xonlykey) = pubkey.xonly() {
-            xonlykey.verify(&secp, &message, &sig).is_ok()
+            let sig = schnorr::Signature::from_byte_array(*sig.as_bytes());
+            xonlykey.verify(&secp, &hash, &sig).is_ok()
         } else {
             false
         }
@@ -992,7 +993,7 @@ mod test {
     };
     use crate::order::SmallOrder;
     use crate::user::UserInfo;
-    use nostr_sdk::Keys;
+    use nostr_sdk::prelude::Keys;
     use uuid::uuid;
 
     #[test]

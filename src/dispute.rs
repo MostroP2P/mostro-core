@@ -11,7 +11,7 @@
 
 use crate::{order::Order, user::User, user::UserInfo};
 use chrono::Utc;
-use nostr_sdk::Timestamp;
+use nostr::types::Timestamp;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::{FromRow, Type};

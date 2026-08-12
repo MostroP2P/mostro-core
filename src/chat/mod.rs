@@ -68,7 +68,7 @@ pub use wrap::{wrap_chat_message, wrap_chat_message_with_tags, wrap_giftwrap_cha
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nostr_sdk::nips::nip44;
+    use nostr::nips::nip44;
     use nostr_sdk::prelude::*;
 
     fn chat_pair() -> (Keys, Keys, Keys, Keys) {
@@ -89,7 +89,7 @@ mod tests {
 
         assert_eq!(event.kind, Kind::PrivateDirectMessage);
         assert_eq!(event.pubkey, sign.public_key());
-        assert!(event.tags.public_keys().any(|pk| *pk == conv.public_key()));
+        assert!(event.tags.public_keys().any(|pk| pk == conv.public_key()));
 
         let allowed = [alice.public_key(), bob.public_key()];
         let decoded = unwrap_chat_message(
@@ -124,11 +124,10 @@ mod tests {
     async fn unwrap_rejects_wrong_p_tag() {
         let (alice, bob, conv, sign) = chat_pair();
         let now = Timestamp::now();
-        let inner = EventBuilder::text_note("hi")
+        let inner = EventBuilder::new(Kind::TextNote, "hi")
             .custom_created_at(now)
-            .build(alice.public_key())
-            .sign(&alice)
-            .await
+            .finalize_unsigned(alice.public_key())
+            .finalize(&alice)
             .unwrap();
         let content = nip44::encrypt(
             conv.secret_key(),
@@ -141,7 +140,7 @@ mod tests {
         let event = EventBuilder::new(Kind::PrivateDirectMessage, content)
             .tag(Tag::public_key(wrong_p))
             .custom_created_at(now)
-            .sign_with_keys(&sign)
+            .finalize(&sign)
             .unwrap();
 
         let allowed = [alice.public_key(), bob.public_key()];
@@ -163,11 +162,10 @@ mod tests {
     async fn unwrap_rejects_future_timestamp() {
         let (alice, bob, conv, sign) = chat_pair();
         let far_future = Timestamp::from_secs(Timestamp::now().as_secs() + 3600);
-        let inner = EventBuilder::text_note("hi")
+        let inner = EventBuilder::new(Kind::TextNote, "hi")
             .custom_created_at(far_future)
-            .build(alice.public_key())
-            .sign(&alice)
-            .await
+            .finalize_unsigned(alice.public_key())
+            .finalize(&alice)
             .unwrap();
         let content = nip44::encrypt(
             conv.secret_key(),
@@ -179,7 +177,7 @@ mod tests {
         let event = EventBuilder::new(Kind::PrivateDirectMessage, content)
             .tag(Tag::public_key(conv.public_key()))
             .custom_created_at(far_future)
-            .sign_with_keys(&sign)
+            .finalize(&sign)
             .unwrap();
 
         let allowed = [alice.public_key(), bob.public_key()];
@@ -205,7 +203,7 @@ mod tests {
         let event = EventBuilder::new(Kind::PrivateDirectMessage, huge)
             .tag(Tag::public_key(conv.public_key()))
             .custom_created_at(now)
-            .sign_with_keys(&sign)
+            .finalize(&sign)
             .unwrap();
 
         let allowed = [alice.public_key(), bob.public_key()];
@@ -230,11 +228,10 @@ mod tests {
         let (alice, bob, conv, sign) = chat_pair();
         let intruder = Keys::generate();
         let now = Timestamp::now();
-        let inner = EventBuilder::text_note("forged")
+        let inner = EventBuilder::new(Kind::TextNote, "forged")
             .custom_created_at(now)
-            .build(intruder.public_key())
-            .sign(&intruder)
-            .await
+            .finalize_unsigned(intruder.public_key())
+            .finalize(&intruder)
             .unwrap();
         let content = nip44::encrypt(
             conv.secret_key(),
@@ -246,7 +243,7 @@ mod tests {
         let event = EventBuilder::new(Kind::PrivateDirectMessage, content)
             .tag(Tag::public_key(conv.public_key()))
             .custom_created_at(now)
-            .sign_with_keys(&sign)
+            .finalize(&sign)
             .unwrap();
 
         let allowed = [alice.public_key(), bob.public_key()];

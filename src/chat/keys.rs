@@ -1,7 +1,9 @@
 //! Domain-separated chat key derivation (`K_conv` / `K_sign`).
 //!
 //! The ECDH shared secret between two trade keys (or admin ↔ party trade key)
-//! is **not** used on the wire. HKDF-SHA256 splits it into:
+//! is **not** used on the wire. ECDH itself is computed by the local
+//! [`generate_shared_key`] helper (`nostr::util::generate_shared_key` is
+//! crate-private in 0.45). HKDF-SHA256 then splits that secret into:
 //!
 //! * [`K_conv`](derive_chat_keys) — NIP-44 encryption and the outer `p` tag
 //! * [`K_sign`](derive_chat_keys) — signs the outer kind 14 event (author filter)
@@ -12,6 +14,7 @@
 // module by that name, so a plain `use hkdf::Hkdf` is ambiguous.
 use ::hkdf::Hkdf;
 use nostr_sdk::prelude::*;
+use secp256k1::{ecdh, PublicKey as Secp256k1PublicKey};
 use sha2::Sha256;
 
 use crate::error::{MostroError, ServiceError};
@@ -21,6 +24,35 @@ pub const CHAT_CONV_INFO: &[u8] = b"mostro:chat:conv:v1";
 /// HKDF `info` for `K_sign`. Changing this value changes the wire format.
 pub const CHAT_SIGN_INFO: &[u8] = b"mostro:chat:sign:v1";
 
+/// Raw x25519-style ECDH shared secret (even-parity assumption, per NIP-04/44).
+///
+/// Replaces `nostr::util::generate_shared_key`, which is crate-private in 0.45.
+pub(crate) fn generate_shared_key(
+    secret_key: &SecretKey,
+    public_key: &PublicKey,
+) -> Result<[u8; 32], MostroError> {
+    let mut compressed = [0u8; 33];
+    compressed[0] = 0x02; // assume even parity, as NIP-04/44 do
+    compressed[1..].copy_from_slice(public_key.as_bytes());
+    let normalized = Secp256k1PublicKey::from_slice(&compressed).map_err(|e| {
+        MostroError::MostroInternalErr(ServiceError::EncryptionError(format!(
+            "invalid peer pubkey: {e}"
+        )))
+    })?;
+
+    let secret_key =
+        secp256k1::SecretKey::from_byte_array(&secret_key.to_secret_bytes()).map_err(|e| {
+            MostroError::MostroInternalErr(ServiceError::EncryptionError(format!(
+                "invalid local secret key: {e}"
+            )))
+        })?;
+
+    let point = ecdh::shared_secret_point(&normalized, &secret_key);
+    let mut shared = [0u8; 32];
+    shared.copy_from_slice(&point[..32]);
+    Ok(shared)
+}
+
 /// Derive `(K_conv, K_sign)` from a party's trade keys and the peer's trade pubkey.
 ///
 /// Both peers obtain the same pair by swapping arguments
@@ -29,12 +61,7 @@ pub fn derive_chat_keys(
     own_trade: &Keys,
     peer_trade: &PublicKey,
 ) -> Result<(Keys, Keys), MostroError> {
-    let shared =
-        nostr_sdk::util::generate_shared_key(own_trade.secret_key(), peer_trade).map_err(|e| {
-            MostroError::MostroInternalErr(ServiceError::EncryptionError(format!(
-                "chat ECDH failed: {e}"
-            )))
-        })?;
+    let shared = generate_shared_key(own_trade.secret_key(), peer_trade)?;
     derive_chat_keys_from_shared(&shared)
 }
 
@@ -100,8 +127,7 @@ mod tests {
             "000009ae5cff9f6ba9b05159ec5ed58c187f5882ea77c81ed5dd19163272a5d7"
         );
 
-        let shared =
-            nostr_sdk::util::generate_shared_key(alice.secret_key(), &bob.public_key()).unwrap();
+        let shared = generate_shared_key(alice.secret_key(), &bob.public_key()).unwrap();
         let expected_shared =
             SecretKey::from_hex("def6633a53d07d1e829484c4d4bdbbeed2f4b14c21743e63871c174338e39475")
                 .unwrap()

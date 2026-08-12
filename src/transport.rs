@@ -44,7 +44,7 @@ use std::str::FromStr;
 use crate::message::Message;
 use crate::nip59::{self, UnwrappedMessage, WrapOptions};
 use crate::prelude::{MostroError, ServiceError};
-use nostr_sdk::nips::nip44;
+use nostr::nips::nip44;
 use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -170,7 +170,10 @@ impl std::fmt::Display for Transport {
 ///   from `trade_keys` and `receiver`, so only those two parties can
 ///   decrypt the content.
 /// * `opts` — PoW difficulty, NIP-40 expiration and inner-signature flag,
-///   same semantics as the gift-wrap transport.
+///   same semantics as the gift-wrap transport. When `opts.pow > 0`, PoW is
+///   mined on the unsigned event via `UnsignedEvent::mine(&SingleThreadPow, …)`
+///   before signing with `finalize` (nostr 0.45; replaces `EventBuilder::pow`
+///   / `sign_with_keys`).
 pub fn wrap_message_nip44(
     message: &Message,
     identity_keys: &Keys,
@@ -210,10 +213,19 @@ pub fn wrap_message_nip44(
         tags.push(Tag::expiration(exp));
     }
 
-    EventBuilder::new(Kind::PrivateDirectMessage, encrypted)
+    let unsigned = EventBuilder::new(Kind::PrivateDirectMessage, encrypted)
         .tags(tags)
-        .pow(opts.pow)
-        .sign_with_keys(trade_keys)
+        .finalize_unsigned(trade_keys.public_key());
+
+    let unsigned = match core::num::NonZeroU8::new(opts.pow) {
+        Some(pow) => unsigned
+            .mine(&SingleThreadPow, pow)
+            .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?,
+        None => unsigned,
+    };
+
+    unsigned
+        .finalize(trade_keys)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
 }
 
@@ -393,7 +405,7 @@ mod tests {
         .expect("encrypt");
         EventBuilder::new(Kind::PrivateDirectMessage, encrypted)
             .tags([Tag::public_key(receiver)])
-            .sign_with_keys(trade_keys)
+            .finalize(trade_keys)
             .expect("sign")
     }
 
@@ -686,8 +698,8 @@ mod tests {
     #[tokio::test]
     async fn unwrap_incoming_rejects_unknown_kind() {
         let keys = Keys::generate();
-        let event = EventBuilder::text_note("hello")
-            .sign_with_keys(&keys)
+        let event = EventBuilder::new(Kind::TextNote, "hello")
+            .finalize(&keys)
             .expect("sign");
 
         let result = unwrap_incoming(&event, &keys).await;

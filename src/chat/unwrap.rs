@@ -5,7 +5,7 @@
 //! except the caller-owned steps: rate-limit budget, outer-id LRU, and durable
 //! inner-id deduplication.
 
-use nostr_sdk::nips::nip44;
+use nostr::nips::nip44;
 use nostr_sdk::prelude::*;
 
 use crate::error::{MostroError, ServiceError};
@@ -66,7 +66,7 @@ pub fn unwrap_chat_message(
     }
 
     // 2. Exactly one `p` tag equal to pub(K_conv)
-    let mut p_tags = outer.tags.iter().filter(|t| t.kind() == TagKind::p());
+    let mut p_tags = outer.tags.iter().filter(|t| t.kind() == "p");
     match (p_tags.next().and_then(|t| t.content()), p_tags.next()) {
         (Some(pk), None) if pk == conv.public_key().to_hex() => {}
         _ => {
