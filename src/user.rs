@@ -129,7 +129,7 @@ impl User {
             self.min_rating = rating.into();
         } else {
             self.total_rating =
-                old_rating + ((self.last_rating as f64) - old_rating) / (self.total_reviews as f64);
+                old_rating + ((rating as f64) - old_rating) / (self.total_reviews as f64);
             if self.max_rating < rating.into() {
                 self.max_rating = rating.into();
             }
@@ -139,5 +139,92 @@ impl User {
         }
         // Store last rating
         self.last_rating = rating.into();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_vote_is_weighted_by_half() {
+        let mut user = User::default();
+
+        user.update_rating(5);
+
+        assert_eq!(user.total_reviews, 1);
+        assert_eq!(user.total_rating, 2.5);
+        assert_eq!(user.last_rating, 5);
+        assert_eq!(user.max_rating, 5);
+        assert_eq!(user.min_rating, 5);
+    }
+
+    #[test]
+    fn second_vote_is_folded_into_the_average() {
+        let mut user = User::default();
+        user.update_rating(5);
+
+        user.update_rating(1);
+
+        // First vote weighted 1/2 -> 2.5, then incremental average with the
+        // new vote: 2.5 + (1 - 2.5) / 2 = 1.75
+        assert_eq!(user.total_reviews, 2);
+        assert!((user.total_rating - 1.75).abs() < 1e-9);
+        assert_eq!(user.last_rating, 1);
+    }
+
+    #[test]
+    fn low_vote_lowers_a_high_average() {
+        let mut user = User::default();
+        for _ in 0..10 {
+            user.update_rating(5);
+        }
+        let farmed_average = user.total_rating;
+        assert!((farmed_average - 4.75).abs() < 1e-9);
+
+        user.update_rating(1);
+
+        // Correct running average: (2.5 + 9 * 5 + 1) / 11 = 48.5 / 11
+        let expected = 48.5 / 11.0;
+        assert!(
+            user.total_rating < farmed_average,
+            "a 1-star review must lower the average, got {} (was {})",
+            user.total_rating,
+            farmed_average
+        );
+        assert!((user.total_rating - expected).abs() < 1e-9);
+        assert_eq!(user.last_rating, 1);
+        assert_eq!(user.min_rating, 1);
+        assert_eq!(user.max_rating, 5);
+    }
+
+    #[test]
+    fn high_vote_raises_a_low_average() {
+        let mut user = User::default();
+        user.update_rating(1);
+        user.update_rating(1);
+        let low_average = user.total_rating;
+
+        user.update_rating(5);
+
+        assert!(
+            user.total_rating > low_average,
+            "a 5-star review must raise the average, got {} (was {})",
+            user.total_rating,
+            low_average
+        );
+        // (0.5 + 1 + 5) / 3
+        assert!((user.total_rating - 6.5 / 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn min_and_max_track_extremes() {
+        let mut user = User::default();
+        user.update_rating(3);
+        user.update_rating(5);
+        user.update_rating(1);
+
+        assert_eq!(user.max_rating, 5);
+        assert_eq!(user.min_rating, 1);
     }
 }
