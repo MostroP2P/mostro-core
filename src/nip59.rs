@@ -111,8 +111,14 @@ pub async fn wrap_message(
     // PoW only applies to the outer GiftWrap (per WrapOptions docs); the
     // rumor is encrypted inside the seal and never published on its own,
     // so mining its event id would burn CPU for nothing.
-    let rumor =
+    let mut rumor =
         EventBuilder::new(Kind::TextNote, content).finalize_unsigned(trade_keys.public_key());
+
+    // The rumor id must be set before sealing: `GiftWrapSealBuilder` in nostr
+    // 0.45 encrypts the rumor JSON before ensuring its id, so an unset id is
+    // silently dropped from the wrap (nostrdevkit/nostr#1443). Cheap no-op
+    // once fixed upstream — keep it as a guard, the id was already lost twice.
+    rumor.ensure_id();
 
     // Seal is encrypted and signed with identity_keys so the receiver can
     // decrypt it via (receiver_secret, seal.pubkey) — this keeps seal.pubkey
@@ -424,6 +430,40 @@ mod tests {
         assert!(unwrapped.signature.is_some());
     }
 
+    // Guards the `ensure_id()` call in `wrap_message`: our own unwrap
+    // tolerates an id-less rumor, but strict NIP-59 clients reject it,
+    // so the wire format must always carry the id.
+    #[tokio::test]
+    async fn rumor_id_serialized_inside_wrap() {
+        let identity_keys = Keys::generate();
+        let trade_keys = Keys::generate();
+        let receiver_keys = Keys::generate();
+
+        let wrapped = wrap_message(
+            &sample_order_message(Some(42)),
+            &identity_keys,
+            &trade_keys,
+            receiver_keys.public_key(),
+            WrapOptions::default(),
+        )
+        .await
+        .expect("wrap");
+
+        // Unwrap by hand to inspect the raw rumor JSON as a receiver sees it.
+        let seal_json = nip44::decrypt(
+            receiver_keys.secret_key(),
+            &wrapped.pubkey,
+            &wrapped.content,
+        )
+        .expect("decrypt wrap");
+        let seal: Event = Event::from_json(&seal_json).expect("parse seal");
+        let rumor_json = nip44::decrypt(receiver_keys.secret_key(), &seal.pubkey, &seal.content)
+            .expect("decrypt seal");
+
+        let rumor: UnsignedEvent = UnsignedEvent::from_json(&rumor_json).expect("parse rumor");
+        assert_eq!(rumor.id, Some(rumor.compute_id()));
+    }
+
     #[tokio::test]
     async fn full_privacy_mode_identity_equals_sender() {
         // Caller that opts out of reputation passes trade_keys as identity.
@@ -487,8 +527,11 @@ mod tests {
         inner: (&Message, Option<String>),
     ) -> Event {
         let content = serde_json::to_string(&inner).unwrap();
-        let rumor =
+        let mut rumor =
             EventBuilder::new(Kind::TextNote, content).finalize_unsigned(trade_keys.public_key());
+        // Mirror wrap_message so test wraps stay representative of production
+        // ones (see the rumor id note there).
+        rumor.ensure_id();
         let seal = GiftWrapSealBuilder::new(rumor, receiver)
             .finalize(identity_keys)
             .unwrap();
