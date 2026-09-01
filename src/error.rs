@@ -105,6 +105,17 @@ pub enum CantDoReason {
     CashuEscrowNotLocked,
     /// A required Cashu signature is missing from the request.
     CashuSignatureMissing,
+    /// Mostro is in maintenance mode (for example draining escrow before a
+    /// Lightning node migration) and is not accepting new orders or takes.
+    /// Actions on already existing orders keep working.
+    MaintenanceMode,
+    /// Catch-all for reasons this build of `mostro-core` does not know yet.
+    ///
+    /// Newer daemons may emit reasons added after this release; without this
+    /// variant the whole `CantDo` payload would fail to deserialize. Never
+    /// emitted by a daemon on purpose.
+    #[serde(other)]
+    Unknown,
 }
 
 /// Internal errors raised by services behind the Mostro API.
@@ -278,5 +289,34 @@ mod tests {
         assert_eq!(json, "\"price_too_stale\"");
         let round: CantDoReason = serde_json::from_str(&json).unwrap();
         assert_eq!(round, CantDoReason::PriceTooStale);
+    }
+    #[test]
+    fn maintenance_mode_serializes_to_snake_case() {
+        let json = serde_json::to_string(&CantDoReason::MaintenanceMode).unwrap();
+        assert_eq!(json, "\"maintenance_mode\"");
+        let round: CantDoReason = serde_json::from_str(&json).unwrap();
+        assert_eq!(round, CantDoReason::MaintenanceMode);
+    }
+
+    #[test]
+    fn unknown_reason_deserializes_to_unknown_catch_all() {
+        let round: CantDoReason = serde_json::from_str("\"reason_from_the_future\"").unwrap();
+        assert_eq!(round, CantDoReason::Unknown);
+    }
+
+    #[test]
+    fn unknown_reason_inside_cant_do_payload_does_not_break_the_message() {
+        let payload: crate::message::Payload =
+            serde_json::from_str(r#"{"cant_do":"reason_from_the_future"}"#).unwrap();
+        assert!(matches!(
+            payload,
+            crate::message::Payload::CantDo(Some(CantDoReason::Unknown))
+        ));
+    }
+
+    #[test]
+    fn unknown_serializes_to_snake_case() {
+        let json = serde_json::to_string(&CantDoReason::Unknown).unwrap();
+        assert_eq!(json, "\"unknown\"");
     }
 }
