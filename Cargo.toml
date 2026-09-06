@@ -2,7 +2,7 @@
 name = "mostro-core"
 version = "0.14.6"
 edition = "2021"
-license = "MIT"
+license = "GPL-3.0-only"
 authors = ["Francisco Calderón <negrunch@grunch.dev>"]
 description = "Mostro Core library"
 homepage = "https://mostro.network"
