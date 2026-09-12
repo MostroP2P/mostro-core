@@ -177,6 +177,7 @@ impl SolverDisputeInfo {
                 rating: initiator.total_rating,
                 reviews: initiator.total_reviews,
                 operating_days: initiator_operating_days,
+                since: Some(crate::user::day_truncate(initiator.created_at)),
             });
             initiator_full_privacy = false;
         }
@@ -187,6 +188,7 @@ impl SolverDisputeInfo {
                 rating: counterpart.total_rating,
                 reviews: counterpart.total_reviews,
                 operating_days: couterpart_operating_days,
+                since: Some(crate::user::day_truncate(counterpart.created_at)),
             });
             counterpart_full_privacy = false;
         }

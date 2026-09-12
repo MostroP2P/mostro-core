@@ -1003,6 +1003,7 @@ mod test {
             rating: 4.5,
             reviews: 10,
             operating_days: 30,
+            since: None,
         };
         let peer = Peer::new(
             "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
@@ -1062,6 +1063,7 @@ mod test {
             rating: 4.5,
             reviews: 10,
             operating_days: 30,
+            since: None,
         };
         let peer_with_reputation = Peer::new(
             "npub1testjsf0runcqdht5apkfcalajxkf8txdxqqk5kgm0agc38ke4vsfsgzf8".to_string(),
