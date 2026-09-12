@@ -13,6 +13,23 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
 
+/// Seconds in a day, the granularity every published first-trade date uses.
+const SECONDS_PER_DAY: u64 = 86_400;
+
+/// Truncate a Unix timestamp to the start of its UTC day.
+///
+/// Every published first-trade date goes through this. The rounding is not
+/// cosmetic: the value travels on every order and every peer message of the
+/// same user, so a second-precision timestamp would be a fingerprint that ties
+/// their otherwise unlinkable trade pubkeys together. A day carries exactly
+/// the information the old `operating_days` count carried.
+///
+/// Timestamps before the epoch clamp to `0` rather than wrap.
+pub fn day_truncate(timestamp: i64) -> u64 {
+    let seconds = timestamp.max(0) as u64;
+    seconds - seconds % SECONDS_PER_DAY
+}
+
 /// Public snapshot of a user's reputation shared with peers during a trade.
 ///
 /// Unlike [`User`], `UserInfo` contains only the values a counterpart needs
@@ -26,7 +43,19 @@ pub struct UserInfo {
     /// Total number of ratings received.
     pub reviews: i64,
     /// Number of days since the user account was created.
+    ///
+    /// Superseded by [`UserInfo::since`], which carries the same information
+    /// as a date instead of a count derived when the message was built. Kept
+    /// for one deprecation window so old and new peers interoperate.
     pub operating_days: u64,
+    /// Unix timestamp of the user's first trade, truncated to the start of its
+    /// UTC day, or `None` from a peer that does not send it yet.
+    ///
+    /// Clients compute the age at display time, so it does not go stale the
+    /// way `operating_days` does. Skipped when absent, so a `UserInfo` that
+    /// never sets it serializes exactly as it did before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<u64>,
 }
 
 /// Database representation of a Mostro user.
@@ -145,6 +174,81 @@ impl User {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 2026-01-01T00:00:00Z, and the same instant plus most of a day.
+    const DAY_START: i64 = 1_767_225_600;
+    const LATE_IN_DAY: i64 = DAY_START + 86_399;
+
+    #[test]
+    fn day_truncate_lands_on_the_start_of_the_utc_day() {
+        // Arrange / Act / Assert — anywhere inside a day maps to its start, so
+        // the value cannot change while the user is mid-session.
+        assert_eq!(day_truncate(DAY_START), DAY_START as u64);
+        assert_eq!(day_truncate(LATE_IN_DAY), DAY_START as u64);
+        assert_eq!(
+            day_truncate(DAY_START + 86_400),
+            (DAY_START + 86_400) as u64
+        );
+    }
+
+    #[test]
+    fn day_truncate_clamps_a_pre_epoch_timestamp_instead_of_wrapping() {
+        // Arrange / Act / Assert — a negative cast to u64 would produce a date
+        // far in the future, which reads as a user who has not started trading.
+        assert_eq!(day_truncate(-1), 0);
+        assert_eq!(day_truncate(0), 0);
+    }
+
+    #[test]
+    fn user_info_omits_since_when_unset() {
+        // Arrange
+        let info = UserInfo {
+            rating: 4.5,
+            reviews: 10,
+            operating_days: 30,
+            since: None,
+        };
+
+        // Act
+        let json = serde_json::to_string(&info).expect("serializes");
+
+        // Assert — a peer that has not adopted the field must see the exact
+        // payload it saw before.
+        assert!(!json.contains("since"), "{json}");
+    }
+
+    #[test]
+    fn user_info_round_trips_with_since() {
+        // Arrange
+        let info = UserInfo {
+            rating: 4.5,
+            reviews: 10,
+            operating_days: 30,
+            since: Some(DAY_START as u64),
+        };
+
+        // Act
+        let parsed: UserInfo =
+            serde_json::from_str(&serde_json::to_string(&info).expect("serializes"))
+                .expect("parses");
+
+        // Assert
+        assert_eq!(parsed.since, Some(DAY_START as u64));
+        assert_eq!(parsed.operating_days, 30);
+    }
+
+    #[test]
+    fn user_info_from_a_peer_without_since_parses() {
+        // Arrange — what every daemon sends today.
+        let json = r#"{"rating":4.5,"reviews":10,"operating_days":30}"#;
+
+        // Act
+        let parsed: UserInfo = serde_json::from_str(json).expect("parses");
+
+        // Assert
+        assert_eq!(parsed.since, None);
+        assert_eq!(parsed.operating_days, 30);
+    }
 
     #[test]
     fn first_vote_is_weighted_by_half() {
