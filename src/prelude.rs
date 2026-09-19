@@ -22,8 +22,8 @@ pub use crate::dispute::{Dispute, SolverDisputeInfo, Status as DisputeStatus};
 pub use crate::error::{CantDoReason, MostroError, ServiceError};
 pub use crate::message::{
     Action, BondPayoutRequest, BondResolution, CashuLockProof, CashuProofSignature, Message,
-    MessageKind, Payload, PaymentFailedInfo, Peer, RestoreSessionInfo, RestoredDisputeHelper,
-    RestoredDisputesInfo, RestoredOrderHelper, RestoredOrdersInfo,
+    MessageKind, OrderRole, Payload, PaymentFailedInfo, Peer, RestoreSessionInfo,
+    RestoredDisputeHelper, RestoredDisputesInfo, RestoredOrderHelper, RestoredOrdersInfo,
 };
 pub use crate::nip59::{
     unwrap_message, validate_response, wrap_message, UnwrappedMessage, WrapOptions,

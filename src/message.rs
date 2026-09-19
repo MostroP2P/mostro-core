@@ -479,9 +479,21 @@ pub struct RestoredDisputeHelper {
     pub solver_pubkey: Option<String>,
 }
 
-/// Minimal per-order information returned to a client on session restore.
+/// Identifies which side of an order the requesting user is on.
+#[cfg_attr(feature = "sqlx", derive(sqlx::Type))]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+#[cfg_attr(feature = "sqlx", sqlx(type_name = "TEXT", rename_all = "lowercase"))]
+pub enum OrderRole {
+    /// The requesting user is the buyer on this order.
+    Buyer,
+    /// The requesting user is the seller on this order.
+    Seller,
+}
+
+/// Per-order information returned to a client on session restore.
 #[cfg_attr(feature = "sqlx", derive(FromRow))]
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, Default)]
 pub struct RestoredOrdersInfo {
     /// Id of the order.
     pub order_id: Uuid,
@@ -489,6 +501,32 @@ pub struct RestoredOrdersInfo {
     pub trade_index: i64,
     /// Current status of the order, serialized as kebab-case.
     pub status: String,
+    /// Whether the requesting user is the buyer or the seller.
+    pub role: Option<OrderRole>,
+    /// Buyer's trade pubkey, `None` until the order is taken.
+    pub buyer_trade_pubkey: Option<String>,
+    /// Seller's trade pubkey, `None` until the order is taken.
+    pub seller_trade_pubkey: Option<String>,
+    /// `"buy"` or `"sell"` — the maker's direction, not [`Self::role`].
+    pub kind: Option<String>,
+    /// Fiat currency code (e.g. `"EUR"`).
+    pub fiat_code: Option<String>,
+    /// Fiat amount of the trade.
+    pub fiat_amount: Option<i64>,
+    /// Sats amount, `0` when derived from the fiat amount at settlement.
+    pub amount: Option<i64>,
+    /// Lower bound of a range order (fiat amount).
+    pub min_amount: Option<i64>,
+    /// Upper bound of a range order (fiat amount).
+    pub max_amount: Option<i64>,
+    /// Premium percentage applied on top of the spot price.
+    pub premium: Option<i64>,
+    /// Free-form payment method description.
+    pub payment_method: Option<String>,
+    /// Unix timestamp (seconds) when the order was created.
+    pub created_at: Option<i64>,
+    /// Unix timestamp (seconds) when the order expires automatically.
+    pub expires_at: Option<i64>,
 }
 
 /// Identifies which party of an order opened a dispute.
@@ -1500,11 +1538,13 @@ mod test {
                 order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
                 trade_index: 1,
                 status: "active".to_string(),
+                ..Default::default()
             },
             crate::message::RestoredOrdersInfo {
                 order_id: uuid!("408e1272-d5f4-47e6-bd97-3504baea9c24"),
                 trade_index: 2,
                 status: "success".to_string(),
+                ..Default::default()
             },
         ];
 
@@ -1665,6 +1705,135 @@ mod test {
 
         assert!(matches!(restore_data_message, Message::Restore(_)));
         assert!(!restore_data_message.verify());
+    }
+
+    /// A 0.14.6 payload must still parse against the widened struct.
+    #[test]
+    fn restored_orders_info_deserializes_without_new_fields() {
+        let legacy_json = r#"{
+            "order_id": "308e1272-d5f4-47e6-bd97-3504baea9c23",
+            "trade_index": 1,
+            "status": "active"
+        }"#;
+
+        let info: crate::message::RestoredOrdersInfo = serde_json::from_str(legacy_json).unwrap();
+
+        assert_eq!(info.order_id, uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"));
+        assert_eq!(info.trade_index, 1);
+        assert_eq!(info.status, "active");
+        assert!(info.role.is_none());
+        assert!(info.buyer_trade_pubkey.is_none());
+        assert!(info.seller_trade_pubkey.is_none());
+        assert!(info.kind.is_none());
+        assert!(info.fiat_code.is_none());
+        assert!(info.fiat_amount.is_none());
+        assert!(info.amount.is_none());
+        assert!(info.min_amount.is_none());
+        assert!(info.max_amount.is_none());
+        assert!(info.premium.is_none());
+        assert!(info.payment_method.is_none());
+        assert!(info.created_at.is_none());
+        assert!(info.expires_at.is_none());
+    }
+
+    /// The other direction: unknown fields are dropped, not rejected.
+    #[test]
+    fn restore_session_info_ignores_unknown_order_fields() {
+        let future_json = r#"{
+            "orders": [{
+                "order_id": "308e1272-d5f4-47e6-bd97-3504baea9c23",
+                "trade_index": 1,
+                "status": "active",
+                "a_field_from_the_future": {"nested": true}
+            }],
+            "disputes": []
+        }"#;
+
+        let info: crate::message::RestoreSessionInfo = serde_json::from_str(future_json).unwrap();
+
+        assert_eq!(info.restore_orders.len(), 1);
+        assert_eq!(info.restore_orders[0].status, "active");
+        assert!(info.restore_disputes.is_empty());
+    }
+
+    #[test]
+    fn restored_orders_info_roundtrips_with_role() {
+        let info = crate::message::RestoredOrdersInfo {
+            order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
+            trade_index: 4,
+            status: "fiat-sent".to_string(),
+            role: Some(crate::message::OrderRole::Seller),
+            buyer_trade_pubkey: Some(
+                "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344".to_string(),
+            ),
+            seller_trade_pubkey: Some(
+                "bbccddee22334455bbccddee22334455bbccddee22334455bbccddee22334455".to_string(),
+            ),
+            kind: Some("buy".to_string()),
+            fiat_code: Some("EUR".to_string()),
+            fiat_amount: Some(100),
+            amount: Some(0),
+            min_amount: None,
+            max_amount: None,
+            premium: Some(3),
+            payment_method: Some("SEPA".to_string()),
+            created_at: Some(1_700_000_000),
+            expires_at: Some(1_700_086_400),
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        let decoded: crate::message::RestoredOrdersInfo = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(decoded.order_id, info.order_id);
+        assert_eq!(decoded.trade_index, 4);
+        assert_eq!(decoded.status, "fiat-sent");
+        assert_eq!(decoded.role, Some(crate::message::OrderRole::Seller));
+        assert_eq!(decoded.buyer_trade_pubkey, info.buyer_trade_pubkey);
+        assert_eq!(decoded.seller_trade_pubkey, info.seller_trade_pubkey);
+        assert_eq!(decoded.kind.as_deref(), Some("buy"));
+        assert_eq!(decoded.fiat_code.as_deref(), Some("EUR"));
+        assert_eq!(decoded.fiat_amount, Some(100));
+        assert_eq!(decoded.amount, Some(0));
+        assert_eq!(decoded.min_amount, None);
+        assert_eq!(decoded.max_amount, None);
+        assert_eq!(decoded.premium, Some(3));
+        assert_eq!(decoded.payment_method.as_deref(), Some("SEPA"));
+        assert_eq!(decoded.created_at, Some(1_700_000_000));
+        assert_eq!(decoded.expires_at, Some(1_700_086_400));
+
+        // Trade keys only, never a master key.
+        assert!(!json.contains("master_"));
+    }
+
+    /// Must match the `'buyer'` / `'seller'` literals the daemon selects.
+    #[test]
+    fn order_role_serializes_lowercase() {
+        assert_eq!(
+            serde_json::to_string(&crate::message::OrderRole::Buyer).unwrap(),
+            r#""buyer""#
+        );
+        assert_eq!(
+            serde_json::to_string(&crate::message::OrderRole::Seller).unwrap(),
+            r#""seller""#
+        );
+        assert_eq!(
+            serde_json::from_str::<crate::message::OrderRole>(r#""seller""#).unwrap(),
+            crate::message::OrderRole::Seller
+        );
+    }
+
+    /// `Kind::from_str` must accept `kind` as the daemon writes it.
+    #[test]
+    fn restored_orders_info_kind_parses_into_order_kind() {
+        use std::str::FromStr;
+
+        let info = crate::message::RestoredOrdersInfo {
+            kind: Some("sell".to_string()),
+            ..Default::default()
+        };
+
+        let kind = crate::order::Kind::from_str(info.kind.as_deref().unwrap()).unwrap();
+        assert_eq!(kind, crate::order::Kind::Sell);
     }
 
     #[test]
