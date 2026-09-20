@@ -489,6 +489,21 @@ pub struct RestoredOrdersInfo {
     pub trade_index: i64,
     /// Current status of the order, serialized as kebab-case.
     pub status: String,
+    /// Trade pubkey of the **other** party on this order, when the order has
+    /// one yet (`None` on an order nobody has taken).
+    ///
+    /// Peer chat is end-to-end between the two trade keys and the daemon
+    /// never sees it, so a client that lost its local database can re-derive
+    /// the conversation keys — the HKDF split of the ECDH shared secret, see
+    /// <https://mostro.network/protocol/chat.html> — only if it learns this
+    /// pubkey again. The trade index above gives back the client's own key;
+    /// this gives back the other half, and with both the client can re-fetch
+    /// its chat history from the relays after a restore.
+    ///
+    /// `#[serde(default)]` so a client built against this version still
+    /// parses the payload of a daemon that predates the field.
+    #[serde(default)]
+    pub counterparty_trade_pubkey: Option<String>,
 }
 
 /// Identifies which party of an order opened a dispute.
@@ -1500,11 +1515,15 @@ mod test {
                 order_id: uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23"),
                 trade_index: 1,
                 status: "active".to_string(),
+                counterparty_trade_pubkey: Some(
+                    "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344".to_string(),
+                ),
             },
             crate::message::RestoredOrdersInfo {
                 order_id: uuid!("408e1272-d5f4-47e6-bd97-3504baea9c24"),
                 trade_index: 2,
                 status: "success".to_string(),
+                counterparty_trade_pubkey: None,
             },
         ];
 
@@ -1579,12 +1598,39 @@ mod test {
                     Some(crate::message::DisputeInitiator::Seller)
                 );
                 assert!(session_info.restore_disputes[2].solver_pubkey.is_none());
+                assert_eq!(
+                    session_info.restore_orders[0].counterparty_trade_pubkey,
+                    Some(
+                        "aabbccdd11223344aabbccdd11223344aabbccdd11223344aabbccdd11223344"
+                            .to_string()
+                    )
+                );
+                assert!(session_info.restore_orders[1]
+                    .counterparty_trade_pubkey
+                    .is_none());
             } else {
                 panic!("Expected RestoreData payload");
             }
         } else {
             panic!("Expected Restore message");
         }
+    }
+
+    /// A daemon that predates `counterparty_trade_pubkey` sends the payload
+    /// without it; a client built against this version must still parse it.
+    #[test]
+    fn restored_order_without_counterparty_pubkey_still_parses() {
+        let json = r#"{
+            "order_id": "308e1272-d5f4-47e6-bd97-3504baea9c23",
+            "trade_index": 1,
+            "status": "active"
+        }"#;
+
+        let order: crate::message::RestoredOrdersInfo = serde_json::from_str(json).unwrap();
+
+        assert_eq!(order.trade_index, 1);
+        assert_eq!(order.status, "active");
+        assert!(order.counterparty_trade_pubkey.is_none());
     }
 
     #[test]
