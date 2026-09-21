@@ -35,6 +35,15 @@ pub enum Status {
     Settled,
     /// The seller released the funds before the dispute was resolved.
     Released,
+    /// Both parties agreed to a cooperative cancel while the dispute was
+    /// open: the hold invoice was canceled and the seller refunded, without
+    /// a solver.
+    ///
+    /// The outcome is the same as [`Status::SellerRefunded`]; the variant
+    /// exists so a dispute the users closed themselves can be told apart
+    /// from one a solver's `admin-cancel` closed, as [`Status::Released`]
+    /// does for [`Status::Settled`].
+    CooperativelyCanceled,
 }
 
 impl Display for Status {
@@ -45,6 +54,7 @@ impl Display for Status {
             Status::SellerRefunded => write!(f, "seller-refunded"),
             Status::Settled => write!(f, "settled"),
             Status::Released => write!(f, "released"),
+            Status::CooperativelyCanceled => write!(f, "cooperatively-canceled"),
         }
     }
 }
@@ -62,6 +72,7 @@ impl FromStr for Status {
             "seller-refunded" => std::result::Result::Ok(Self::SellerRefunded),
             "settled" => std::result::Result::Ok(Self::Settled),
             "released" => std::result::Result::Ok(Self::Released),
+            "cooperatively-canceled" => std::result::Result::Ok(Self::CooperativelyCanceled),
             _ => Err(()),
         }
     }
@@ -239,5 +250,50 @@ impl Dispute {
             created_at: Utc::now().timestamp(),
             taken_at: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Status;
+    use std::str::FromStr;
+
+    const ALL: [Status; 6] = [
+        Status::Initiated,
+        Status::InProgress,
+        Status::SellerRefunded,
+        Status::Settled,
+        Status::Released,
+        Status::CooperativelyCanceled,
+    ];
+
+    /// `Display` and `FromStr` are written by hand, next to a serde derive
+    /// with `rename_all = "kebab-case"`. The daemon stores the `Display`
+    /// string and publishes it in the kind 38386 `s` tag; a client may read
+    /// it back through either path. All three must agree, for every variant.
+    #[test]
+    fn every_status_round_trips_through_display_fromstr_and_serde() {
+        for status in ALL {
+            let text = status.to_string();
+            assert_eq!(Status::from_str(&text), Ok(status.clone()), "{text}");
+            assert_eq!(
+                serde_json::to_string(&status).unwrap(),
+                format!("\"{text}\""),
+                "serde and Display disagree on {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn cooperatively_canceled_is_kebab_case() {
+        assert_eq!(
+            Status::CooperativelyCanceled.to_string(),
+            "cooperatively-canceled"
+        );
+    }
+
+    #[test]
+    fn unknown_status_does_not_parse() {
+        assert!(Status::from_str("cooperative-cancel").is_err());
     }
 }
