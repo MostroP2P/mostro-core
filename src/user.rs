@@ -9,7 +9,7 @@
 //! shared with a counterpart during a trade without leaking internals.
 
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
 
@@ -26,8 +26,22 @@ const SECONDS_PER_DAY: u64 = 86_400;
 ///
 /// Timestamps before the epoch clamp to `0` rather than wrap.
 pub fn day_truncate(timestamp: i64) -> u64 {
-    let seconds = timestamp.max(0) as u64;
-    seconds - seconds % SECONDS_PER_DAY
+    truncate_since(timestamp.max(0) as u64)
+}
+
+/// [`day_truncate`] for a value that is already a `since`. Idempotent, so it
+/// is safe on every path a `since` takes out of the crate.
+pub(crate) fn truncate_since(since: u64) -> u64 {
+    since - since % SECONDS_PER_DAY
+}
+
+/// `serialize_with` for a `since` field: the field is public, so rounding at
+/// the serialization boundary is the only place that covers every producer.
+pub(crate) fn serialize_since<S: Serializer>(
+    since: &Option<u64>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    since.map(truncate_since).serialize(serializer)
 }
 
 /// Public snapshot of a user's reputation shared with peers during a trade.
@@ -54,7 +68,12 @@ pub struct UserInfo {
     /// Clients compute the age at display time, so it does not go stale the
     /// way `operating_days` does. Skipped when absent, so a `UserInfo` that
     /// never sets it serializes exactly as it did before this field existed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// Always serialized truncated to its UTC day, however it was set.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_since"
+    )]
     pub since: Option<u64>,
 }
 
@@ -235,6 +254,23 @@ mod tests {
         // Assert
         assert_eq!(parsed.since, Some(DAY_START as u64));
         assert_eq!(parsed.operating_days, 30);
+    }
+
+    #[test]
+    fn user_info_truncates_since_on_serialization() {
+        // Arrange — built directly, bypassing any helper that would round it.
+        let info = UserInfo {
+            rating: 4.5,
+            reviews: 10,
+            operating_days: 30,
+            since: Some(LATE_IN_DAY as u64),
+        };
+
+        // Act
+        let json = serde_json::to_string(&info).expect("serializes");
+
+        // Assert — the peer sees the day, never the second.
+        assert!(json.contains(&format!("\"since\":{DAY_START}")), "{json}");
     }
 
     #[test]

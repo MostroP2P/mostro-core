@@ -10,6 +10,7 @@ use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ServiceError;
+use crate::user::{serialize_since, truncate_since};
 
 /// User reputation snapshot, suitable for publishing as Nostr tags.
 ///
@@ -40,8 +41,13 @@ pub struct Rating {
     /// be a fingerprint linking their trade pubkeys together.
     ///
     /// Skipped when absent, so a `Rating` that never sets it serializes
-    /// exactly as it did before this field existed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// exactly as it did before this field existed. Always published truncated
+    /// to its UTC day, in JSON and in tags, however it was set.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_since"
+    )]
     pub since: Option<u64>,
 }
 
@@ -69,11 +75,11 @@ impl Rating {
 
     /// Attach the date of the user's first trade.
     ///
-    /// `since` is expected already truncated to the start of its UTC day; this
-    /// does not round it, because the caller owns the clock and a helper here
-    /// would quietly disagree with the one the daemon uses.
+    /// `since` is truncated to the start of its UTC day with the same rule as
+    /// [`day_truncate`](crate::user::day_truncate), so a caller that passes a
+    /// raw timestamp cannot leak second precision.
     pub fn with_since(mut self, since: u64) -> Self {
-        self.since = Some(since);
+        self.since = Some(truncate_since(since));
         self
     }
 
@@ -107,7 +113,10 @@ impl Rating {
         // Only when set: an absent `since` must leave the tag list exactly as
         // it was before this field existed.
         if let Some(since) = self.since {
-            tags.push(Tag::custom("since", vec![since.to_string()]));
+            tags.push(Tag::custom(
+                "since",
+                vec![truncate_since(since).to_string()],
+            ));
         }
 
         tags.push(Tag::custom("z", vec!["rating".to_string()]));
@@ -302,6 +311,31 @@ mod tests {
 
         // Assert
         assert_eq!(parsed.since, None);
+    }
+
+    #[test]
+    fn with_since_truncates_to_the_start_of_the_utc_day() {
+        // Arrange / Act — a second-precision value would link the user's
+        // trade pubkeys, so it must not survive the builder.
+        let rating = sample().with_since(SINCE + 86_399);
+
+        // Assert
+        assert_eq!(rating.since, Some(SINCE));
+    }
+
+    #[test]
+    fn a_since_set_directly_is_truncated_on_the_way_out() {
+        // Arrange — the field is public, so the builder is not the only way in.
+        let mut rating = sample();
+        rating.since = Some(SINCE + 3_600);
+
+        // Act
+        let json = rating.as_json().expect("serializes");
+        let tags = rating.to_tags();
+
+        // Assert — both publication formats emit the day, not the second.
+        assert!(json.contains(&format!("\"since\":{SINCE}")), "{json}");
+        assert_eq!(tag_value(&tags, "since"), Some(SINCE.to_string()));
     }
 
     #[test]
