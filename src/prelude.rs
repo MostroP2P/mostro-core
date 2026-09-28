@@ -11,9 +11,8 @@
 //! and maximum rating bounds.
 
 pub use crate::chat::{
-    chat_filter, derive_chat_keys, derive_chat_keys_from_shared, giftwrap_chat_filter,
-    unwrap_chat_message, unwrap_giftwrap_chat_message, wrap_chat_message,
-    wrap_giftwrap_chat_message, ChatMessage, SharedKey, CHAT_DEFAULT_LOOKBACK_SECS,
+    chat_filter, derive_chat_keys, derive_chat_keys_from_shared, unwrap_chat_message,
+    wrap_chat_message, ChatMessage, SharedKey, CHAT_DEFAULT_LOOKBACK_SECS,
     CHAT_MAX_CLOCK_SKEW_SECS, CHAT_MAX_CONTENT_BYTES,
 };
 #[cfg(feature = "sqlx")]
@@ -25,13 +24,12 @@ pub use crate::message::{
     MessageKind, Payload, PaymentFailedInfo, Peer, RestoreSessionInfo, RestoredDisputeHelper,
     RestoredDisputesInfo, RestoredOrderHelper, RestoredOrdersInfo,
 };
-pub use crate::nip59::{
-    unwrap_message, validate_response, wrap_message, UnwrappedMessage, WrapOptions,
-};
 pub use crate::order::{Kind, Order, SmallOrder, Status};
 pub use crate::rating::Rating;
+pub use crate::response::validate_response;
 pub use crate::transport::{
     unwrap_incoming, unwrap_message_nip44, wrap_message_nip44, wrap_message_with, Transport,
+    UnwrappedMessage, WrapOptions,
 };
 pub use crate::user::{User, UserInfo};
 pub(crate) use serde::{Deserialize, Serialize};
@@ -56,6 +54,6 @@ pub const NOSTR_DISPUTE_EVENT_KIND: u16 = 38386;
 ///
 /// Version 2 introduces the NIP-44 direct transport (`kind: 14`) and its
 /// 3-element content tuple carrying an in-ciphertext identity proof — see
-/// [`crate::transport`]. Version 1 (the GiftWrap 2-tuple format) is frozen
-/// and still parses; daemons decide how long to keep accepting it.
+/// [`crate::transport`]. Version 1 (the gift-wrap 2-tuple format) was
+/// removed in 0.16.0.
 pub(crate) const PROTOCOL_VER: u8 = 2;

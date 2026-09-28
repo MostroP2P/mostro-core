@@ -7,8 +7,8 @@
 //! index, [`Action`] and [`Payload`].
 //!
 //! In transit, messages are serialized to JSON, optionally signed with the
-//! sender's trade keys using [`Message::sign`], and wrapped in a NIP-59
-//! envelope by [`crate::nip59::wrap_message`].
+//! sender's trade keys using [`Message::sign`], and wrapped in a NIP-44
+//! direct event by [`crate::transport::wrap_message_with`].
 
 use crate::prelude::*;
 use bitcoin::hashes::sha256::Hash as Sha256Hash;
@@ -345,9 +345,9 @@ impl Message {
     /// Produce a Schnorr signature over the SHA-256 digest of `message`
     /// using `keys`.
     ///
-    /// This is the signature embedded in the rumor tuple when
-    /// [`crate::nip59::wrap_message`] is called with
-    /// [`WrapOptions::signed`](crate::nip59::WrapOptions::signed) set to
+    /// This is the trade signature embedded in the content tuple when
+    /// [`crate::transport::wrap_message_nip44`] is called with
+    /// [`WrapOptions::signed`](crate::transport::WrapOptions::signed) set to
     /// `true`. It binds a message to the sender's trade keys without
     /// relying on the outer Nostr event signature.
     ///
