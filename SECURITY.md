@@ -1,6 +1,6 @@
 # Security Policy
 
-`mostro-core` is the library that defines the Mostro protocol types, the order and dispute state machines, the NIP-59 and NIP-44 transports, and the P2P chat envelope. It is a dependency of the Mostro daemon and of every Mostro client, so a defect here is inherited by all of them: a flaw in signature verification, key derivation, or envelope handling can compromise funds and user privacy across the whole network at once. Security reports are treated as a priority.
+`mostro-core` is the library that defines the Mostro protocol types, the order and dispute state machines, the NIP-44 direct transport, and the P2P chat envelope. It is a dependency of the Mostro daemon and of every Mostro client, so a defect here is inherited by all of them: a flaw in signature verification, key derivation, or envelope handling can compromise funds and user privacy across the whole network at once. Security reports are treated as a priority.
 
 ## Supported Versions
 
@@ -21,7 +21,7 @@ If you want to encrypt your report, ask for a public key at that address before 
 Include as much of the following as you can:
 
 - A description of the issue and the impact you believe it has.
-- The affected version, tag, or commit hash, and the affected module (for example `nip59`, `transport`, `chat`, `message`).
+- The affected version, tag, or commit hash, and the affected module (for example `transport`, `chat`, `message`).
 - Whether the issue is reachable through the crate's public API, and under which Cargo features (`wasm`, `sqlx`).
 - Step-by-step reproduction instructions, ideally as a failing test or a small example using `mostro_core::prelude`.
 - Any proof-of-concept code, logs, or Nostr events that demonstrate the problem.
@@ -50,8 +50,8 @@ In scope: the library in this repository, including
 
 - Protocol message construction, serialization, and signature verification (`message`).
 - Order, dispute, user, and rating types and their state transitions (`order`, `dispute`, `user`, `rating`).
-- The NIP-59 GiftWrap transport, including the identity/trade key split, seal and rumor handling, and metadata hygiene (`nip59`).
-- Transport selection and the NIP-44 direct `kind: 14` path, including kind-based dispatch (`transport`).
+- The NIP-44 direct `kind: 14` transport, including the identity/trade key split, the in-ciphertext identity proof and kind-based dispatch (`transport`).
+- Response validation (`response`).
 - The P2P chat envelope: HKDF derivation of `K_conv` and `K_sign`, encryption, subscription filters, and sender authorization (`chat`).
 - Information disclosure through the error taxonomy (`error`).
 - SQLite persistence helpers behind the `sqlx` feature (`db`), and the `wasm-bindgen` surface behind the `wasm` feature.

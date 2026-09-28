@@ -46,15 +46,15 @@ impl SharedKey {
 
     /// Borrow the underlying ECDH `Keys` (IKM as a keypair).
     ///
-    /// For gift-wrap dual-read decrypt only. New envelopes use [`Self::chat_keys`].
+    /// Chat envelopes use the keys derived by [`Self::chat_keys`] instead.
     pub fn keys(&self) -> &Keys {
         &self.0
     }
 
     /// Public key of the raw ECDH secret interpreted as a keypair.
     ///
-    /// This was the GiftWrap `p` tag under the superseded envelope. The new
-    /// envelope uses `pub(K_conv)` from [`Self::chat_keys`] instead.
+    /// It is not a chat key: envelopes use `pub(K_conv)` from
+    /// [`Self::chat_keys`].
     pub fn public_key(&self) -> PublicKey {
         self.0.public_key()
     }

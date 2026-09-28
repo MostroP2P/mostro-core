@@ -3,16 +3,18 @@
 //! `mostro-core` is the foundational library behind [Mostro](https://mostro.network),
 //! a peer-to-peer Bitcoin/Lightning over Nostr marketplace. It contains the
 //! protocol-level data types (orders, disputes, users, ratings and messages)
-//! shared between the Mostro daemon and any client, together with the NIP-59
-//! GiftWrap transport used to exchange them privately.
+//! shared between the Mostro daemon and any client, together with the NIP-44
+//! direct transport used to exchange them privately.
 //!
 //! ## Overview
 //!
 //! A typical Mostro flow involves two peers (a buyer and a seller) and a
 //! Mostro node that coordinates the trade. All protocol-level communication is
 //! expressed through [`message::Message`] values that travel inside encrypted
-//! NIP-59 envelopes built by [`nip59::wrap_message`]. The receiver uses
-//! [`nip59::unwrap_message`] to recover the original [`message::Message`] and,
+//! signed, NIP-44 encrypted `kind: 14` events built by
+//! [`transport::wrap_message_with`]. The receiver uses
+//! [`transport::unwrap_incoming`] to recover the original
+//! [`message::Message`], the sender's trade key, its proven identity and,
 //! optionally, the sender's signature.
 //!
 //! Persistent state (orders, disputes, users) is modelled by the [`order`],
@@ -65,9 +67,9 @@
 //! * [`rating`] — Nostr-tag-encoded reputation helper.
 //! * [`error`] — unified error taxonomy ([`MostroError`], [`ServiceError`],
 //!   [`CantDoReason`]).
-//! * [`nip59`] — GiftWrap wrap/unwrap transport for protocol messages (v1).
-//! * [`transport`] — transport selection: v1 GiftWrap, v2 NIP-44 direct
-//!   (`kind: 14`), and the kind-based dispatch between them.
+//! * [`transport`] — the protocol v2 NIP-44 direct transport (`kind: 14`)
+//!   and the transport-driven wrap/unwrap dispatchers.
+//! * [`response`] — validation of the responses a client receives.
 //! * [`chat`] — P2P buyer/seller and admin/party chat envelope.
 //! * [`prelude`] — convenience re-exports.
 //!
@@ -84,9 +86,9 @@ pub mod db;
 pub mod dispute;
 pub mod error;
 pub mod message;
-pub mod nip59;
 pub mod order;
 pub mod prelude;
 pub mod rating;
+pub mod response;
 pub mod transport;
 pub mod user;

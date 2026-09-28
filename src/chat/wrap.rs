@@ -8,18 +8,11 @@
 //!     -> NIP-44 v2 self-encrypt under K_conv
 //!     -> kind 14, p = pub(K_conv), signed by K_sign (outer)
 //! ```
-//!
-//! Legacy gift-wrap producers remain available as
-//! [`wrap_giftwrap_chat_message`] for dual-read migration windows.
 
 use nostr::nips::nip44;
 use nostr_sdk::prelude::*;
 
 use crate::error::{MostroError, ServiceError};
-
-/// NIP-59-compatible random timestamp tweak range (0..2 days), mirrored locally
-/// because `nostr::nips::nip59::RANGE_RANDOM_TIMESTAMP_TWEAK` is private in 0.45.
-const RANGE_RANDOM_TIMESTAMP_TWEAK_SECS: u64 = 172_800;
 
 /// Wrap a plain-text chat message into a kind 14 event signed by `K_sign`.
 ///
@@ -82,50 +75,4 @@ pub async fn wrap_chat_message_with_tags(
         .custom_created_at(now)
         .finalize(sign)
         .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
-}
-
-/// Legacy gift-wrap producer (kind 1059, ephemeral outer key).
-///
-/// Prefer [`wrap_chat_message`]. Kept for dual-read transition tests and any
-/// client that still needs to emit the superseded envelope during migration.
-///
-/// Outer `created_at` is blurred with [`tweaked_timestamp`] (NIP-59-compatible
-/// 0..2 day offset); signing uses `EventBuilder::finalize` (nostr 0.45).
-pub async fn wrap_giftwrap_chat_message(
-    sender_trade_keys: &Keys,
-    shared_pubkey: &PublicKey,
-    message: &str,
-) -> Result<Event, MostroError> {
-    let inner = EventBuilder::new(Kind::TextNote, message)
-        .finalize_unsigned(sender_trade_keys.public_key())
-        .finalize_async(sender_trade_keys)
-        .await
-        .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))?;
-
-    let ephemeral = Keys::generate();
-    let encrypted = nip44::encrypt(
-        ephemeral.secret_key(),
-        shared_pubkey,
-        inner.as_json(),
-        nip44::Version::V2,
-    )
-    .map_err(|e| MostroError::MostroInternalErr(ServiceError::EncryptionError(e.to_string())))?;
-
-    EventBuilder::new(Kind::GiftWrap, encrypted)
-        .tag(Tag::public_key(*shared_pubkey))
-        .custom_created_at(tweaked_timestamp())
-        .finalize(&ephemeral)
-        .map_err(|e| MostroError::MostroInternalErr(ServiceError::NostrError(e.to_string())))
-}
-
-/// Subtract a random offset in `0..RANGE_RANDOM_TIMESTAMP_TWEAK_SECS` from now
-/// (same behaviour as nostr 0.45's private `tweaked_timestamp`).
-fn tweaked_timestamp() -> Timestamp {
-    let now = Timestamp::now().as_secs();
-    // Re-use key material as CSPRNG bytes without pulling `rand` into the crate.
-    let entropy = Keys::generate();
-    let bytes = entropy.secret_key().to_secret_bytes();
-    let tweak = u64::from_le_bytes(bytes[0..8].try_into().expect("8 bytes"))
-        % RANGE_RANDOM_TIMESTAMP_TWEAK_SECS;
-    Timestamp::from_secs(now.saturating_sub(tweak))
 }

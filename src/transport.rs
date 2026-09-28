@@ -1,52 +1,82 @@
-//! Transport selection for Mostro protocol messages.
+//! Transport for Mostro protocol messages.
 //!
-//! Mostro supports two wire transports for the same logical
-//! [`Message`](crate::message::Message):
+//! Mostro messages travel as **protocol v2 — NIP-44 direct** (`kind: 14`):
+//! a *signed* event authored by the per-trade key, whose `content` is the
+//! NIP-44 encryption of a 3-element JSON tuple:
 //!
-//! * **Protocol v1 — NIP-59 GiftWrap** (`kind: 1059`, see [`crate::nip59`]):
-//!   fully opaque envelopes. Strong metadata privacy, but relays cannot
-//!   rate-limit by sender, which makes the node spam-prone. **DEPRECATED**
-//!   (see [`Transport::GiftWrap`]): mostrod v0.19.0 drops it and runs
-//!   protocol v2 only —
-//!   <https://github.com/MostroP2P/mostro/issues/786>.
-//! * **Protocol v2 — NIP-44 direct** (`kind: 14`): a *signed* event authored
-//!   by the per-trade key, whose `content` is the NIP-44 encryption of a
-//!   3-element JSON tuple:
+//! ```text
+//! [Message, trade_sig | null, [identity_pubkey, identity_sig] | null]
+//! ```
 //!
-//!   ```text
-//!   [Message, trade_sig | null, [identity_pubkey, identity_sig] | null]
-//!   ```
-//!
-//!   The visible sender lets relays and the daemon rate-limit and
-//!   pre-filter cheaply, while the identity key — and its proof of
-//!   possession — stays inside the ciphertext, exactly as private as the
-//!   seal makes it in v1. `trade_sig` is [`Message::sign`] over the JSON
-//!   of the first tuple element; `identity_sig` signs a domain-tagged
-//!   payload that includes the trade pubkey
-//!   (`mostro-transport-v2-identity:<trade_pubkey>:<message_json>`), so
-//!   the proof binds the identity to the specific trade key authoring the
-//!   event and cannot be grafted onto another sender. A `null` third
-//!   element is full-privacy mode: the identity is the trade key itself.
+//! The visible sender lets relays and the daemon rate-limit and pre-filter
+//! cheaply, while the identity key — and its proof of possession — stays
+//! inside the ciphertext. `trade_sig` is [`Message::sign`] over the JSON of
+//! the first tuple element; `identity_sig` signs a domain-tagged payload
+//! that includes the trade pubkey
+//! (`mostro-transport-v2-identity:<trade_pubkey>:<message_json>`), so the
+//! proof binds the identity to the specific trade key authoring the event
+//! and cannot be grafted onto another sender. A `null` third element is
+//! full-privacy mode: the identity is the trade key itself.
 //!
 //! Note the deliberate deviation from NIP-17: there, `kind: 14` is an
 //! *unsigned* rumor that only travels inside a gift wrap. Mostro publishes
 //! it signed because the author is an ephemeral, single-trade key, so the
 //! association the NIP-17 rule protects against is intentional and bounded.
 //!
-//! A node speaks exactly one transport, chosen by the operator: v1 *or*
-//! v2, never both at once. Both transports still unwrap into the same
-//! [`UnwrappedMessage`], so consumers never need to know which envelope a
-//! message arrived in — [`unwrap_incoming`] dispatches on the event kind,
-//! which also lets one client implementation talk to v1 and v2 nodes.
+//! Protocol v1 (NIP-59 gift wrap, `kind: 1059`) was removed in 0.16.0
+//! (mostro#786). The [`Transport`] enum and the [`wrap_message_with`] /
+//! [`unwrap_incoming`] dispatchers are kept even with a single transport:
+//! they are what let v2 be introduced next to v1 without touching message
+//! handlers, and every transport yields the same [`UnwrappedMessage`].
 
 use std::str::FromStr;
 
 use crate::message::Message;
-use crate::nip59::{self, UnwrappedMessage, WrapOptions};
 use crate::prelude::{MostroError, ServiceError};
 use nostr::nips::nip44;
 use nostr_sdk::prelude::*;
 use serde::{Deserialize, Serialize};
+
+/// Options controlling how a Mostro message is wrapped.
+#[derive(Debug, Clone)]
+pub struct WrapOptions {
+    /// NIP-13 proof-of-work difficulty applied to the outer event.
+    pub pow: u8,
+    /// Optional NIP-40 expiration tag for the outer event.
+    pub expiration: Option<Timestamp>,
+    /// When true the tuple carries the trade key's signature over the JSON
+    /// of `Message`. When false that element is `null`. Traffic to a Mostro
+    /// node always uses `true`.
+    pub signed: bool,
+}
+
+impl Default for WrapOptions {
+    fn default() -> Self {
+        Self {
+            pow: 0,
+            expiration: None,
+            signed: true,
+        }
+    }
+}
+
+/// A Mostro message recovered from an incoming event, plus the sender and
+/// identity it proves.
+#[derive(Debug, Clone)]
+pub struct UnwrappedMessage {
+    /// The logical Mostro message.
+    pub message: Message,
+    /// Signature of the JSON-serialized `Message`, produced with the sender's
+    /// trade keys. Present only when the sender set `signed = true`.
+    pub signature: Option<Signature>,
+    /// Event author — the sender's trade public key.
+    pub sender: PublicKey,
+    /// The sender's long-lived identity public key, proven inside the
+    /// ciphertext. In full-privacy mode this equals `sender`.
+    pub identity: PublicKey,
+    /// Event `created_at` timestamp.
+    pub created_at: Timestamp,
+}
 
 /// Inner content of a v2 event, before NIP-44 encryption:
 /// `[Message, trade_sig, [identity_pubkey, identity_sig]]`.
@@ -56,8 +86,7 @@ type DirectTuple = (Message, Option<String>, Option<(String, String)>);
 ///
 /// It is domain-tagged and includes the trade pubkey, so the proof binds
 /// the identity to *both* the message and the trade key that authored the
-/// event — the binding v1 gets from the seal signature covering the
-/// encrypted rumor (which carries `rumor.pubkey`). Signing the message
+/// event. Signing the message
 /// JSON alone would let any party that sees the plaintext tuple graft the
 /// proof onto an event authored by a different trade key.
 fn identity_proof_payload(trade_pubkey: &PublicKey, message_json: &str) -> String {
@@ -68,84 +97,54 @@ fn identity_proof_payload(trade_pubkey: &PublicKey, message_json: &str) -> Strin
     )
 }
 
-/// The wire transport a node speaks. A node runs exactly one: the
-/// operator picks protocol v1 *or* v2 via the `transport` setting
-/// (`"gift-wrap"` or `"nip44"`), and every message — inbound subscription
-/// and outbound replies — uses that transport.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// The wire transport a node speaks, selected by the `transport` setting.
+///
+/// Protocol v2 is the only transport. The enum stays so that the kind, the
+/// envelope and the advertised `protocol_version` keep coming from one
+/// place, as they did while v1 and v2 coexisted.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Transport {
-    /// Protocol v1 — NIP-59 GiftWrap (`kind: 1059`).
-    ///
-    /// DEPRECATED(mostro#786): protocol v1 is being phased out. mostrod
-    /// v0.19.0 removes its `transport` setting and runs protocol v2
-    /// (`nip44`) only; this variant will be removed from mostro-core in a
-    /// following release, once the ecosystem completes the v2 migration.
-    /// Clients may still need it meanwhile to talk to pre-v2 nodes.
-    #[deprecated(
-        note = "protocol v1 (gift-wrap) is being phased out — mostrod v0.19.0 runs protocol v2 (nip44) only; see https://github.com/MostroP2P/mostro/issues/786"
-    )]
-    #[serde(rename = "gift-wrap")]
-    GiftWrap,
     /// Protocol v2 — NIP-44 direct message (`kind: 14`).
+    #[default]
     #[serde(rename = "nip44")]
     Nip44Direct,
 }
 
-/// Manual impl (not `#[derive(Default)]` + `#[default]`) because the default
-/// variant is the deprecated one and the derive would trip the deprecation
-/// lint at the definition site. The default stays `GiftWrap` for backward
-/// compatibility until mostrod v0.19.0 flips the ecosystem to v2 only.
-impl Default for Transport {
-    #[allow(deprecated)]
-    fn default() -> Self {
-        Transport::GiftWrap
-    }
-}
-
-// The variant stays fully functional until removal, so the enum's own
-// impls keep matching on it without tripping the deprecation lint.
-#[allow(deprecated)]
 impl Transport {
     /// The Nostr event kind this transport publishes and subscribes to.
     pub fn event_kind(&self) -> Kind {
         match self {
-            Transport::GiftWrap => Kind::GiftWrap,
             Transport::Nip44Direct => Kind::PrivateDirectMessage,
         }
     }
 
     /// The Mostro protocol version this transport carries, for capability
-    /// advertisement (the `protocol_versions` tag of the node info event).
+    /// advertisement (the `protocol_version` tag of the node info event).
     pub fn protocol_version(&self) -> u8 {
         match self {
-            Transport::GiftWrap => 1,
             Transport::Nip44Direct => 2,
         }
     }
 }
 
-#[allow(deprecated)]
 impl FromStr for Transport {
     type Err = MostroError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "gift-wrap" => Ok(Transport::GiftWrap),
             "nip44" => Ok(Transport::Nip44Direct),
             other => Err(MostroError::MostroInternalErr(
                 ServiceError::UnexpectedError(format!(
-                    "unknown transport {other:?}; expected \"gift-wrap\" or \"nip44\""
+                    "unknown transport {other:?}; expected \"nip44\""
                 )),
             )),
         }
     }
 }
 
-#[allow(deprecated)]
 impl std::fmt::Display for Transport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Transport::GiftWrap => "gift-wrap",
             Transport::Nip44Direct => "nip44",
         };
         write!(f, "{s}")
@@ -169,8 +168,8 @@ impl std::fmt::Display for Transport {
 ///   for node-originated messages). The NIP-44 conversation key is derived
 ///   from `trade_keys` and `receiver`, so only those two parties can
 ///   decrypt the content.
-/// * `opts` — PoW difficulty, NIP-40 expiration and inner-signature flag,
-///   same semantics as the gift-wrap transport. When `opts.pow > 0`, PoW is
+/// * `opts` — PoW difficulty, NIP-40 expiration and inner-signature flag.
+///   When `opts.pow > 0`, PoW is
 ///   mined on the unsigned event via `UnsignedEvent::mine(&SingleThreadPow, …)`
 ///   before signing with `finalize` (nostr 0.45; replaces `EventBuilder::pow`
 ///   / `sign_with_keys`).
@@ -233,8 +232,7 @@ pub fn wrap_message_nip44(
 /// given `receiver_keys`.
 ///
 /// Returns `Ok(None)` only when the NIP-44 content could not be decrypted
-/// with `receiver_keys` — the "not addressed to me" signal, mirroring
-/// [`nip59::unwrap_message`]. Every other failure (invalid event signature,
+/// with `receiver_keys` — the "not addressed to me" signal. Every other failure (invalid event signature,
 /// malformed tuple, non-verifying inner signatures) yields `Err`.
 ///
 /// On success, [`UnwrappedMessage::sender`] is the event author (the trade
@@ -251,9 +249,8 @@ pub fn unwrap_message_nip44(
         ));
     }
 
-    // The event signature is the trade-key authorship proof — unlike the
-    // gift wrap's outer layer (signed by a throwaway ephemeral key), it
-    // must be valid before anything in the content is trusted.
+    // The event signature is the trade-key authorship proof: it must be
+    // valid before anything in the content is trusted.
     event.verify().map_err(|_| {
         MostroError::MostroInternalErr(ServiceError::NostrError(
             "invalid event signature".to_string(),
@@ -326,9 +323,8 @@ pub fn unwrap_message_nip44(
     }))
 }
 
-/// Wrap `message` for the given `transport`. Thin dispatcher over
-/// [`nip59::wrap_message`] and [`wrap_message_nip44`] so senders hold a
-/// single code path.
+/// Wrap `message` for the given `transport`, so senders hold a single code
+/// path whatever transport the node speaks.
 pub async fn wrap_message_with(
     transport: Transport,
     message: &Message,
@@ -337,34 +333,25 @@ pub async fn wrap_message_with(
     receiver: PublicKey,
     opts: WrapOptions,
 ) -> Result<Event, MostroError> {
-    // Dispatching over the deprecated v1 variant stays supported until the
-    // variant is removed.
-    #[allow(deprecated)]
     match transport {
-        Transport::GiftWrap => {
-            nip59::wrap_message(message, identity_keys, trade_keys, receiver, opts).await
-        }
         Transport::Nip44Direct => {
             wrap_message_nip44(message, identity_keys, trade_keys, receiver, opts)
         }
     }
 }
 
-/// Try to open an incoming event on whichever Mostro transport matches its
+/// Try to open an incoming event on the Mostro transport that matches its
 /// kind, returning the transport-agnostic [`UnwrappedMessage`].
 ///
-/// * `kind: 1059` → the v1 gift-wrap path ([`nip59::unwrap_message`]).
-/// * `kind: 14` → the v2 direct path ([`unwrap_message_nip44`]).
-/// * anything else → `Err` (the caller subscribed to a kind no Mostro
-///   transport speaks).
-///
-/// `Ok(None)` keeps its "not addressed to me" meaning on both paths.
+/// * `kind: 14` → [`unwrap_message_nip44`]; `Ok(None)` means "not
+///   addressed to me".
+/// * anything else, including the removed protocol-v1 gift wrap
+///   (`kind: 1059`) → `Err`.
 pub async fn unwrap_incoming(
     event: &Event,
     receiver_keys: &Keys,
 ) -> Result<Option<UnwrappedMessage>, MostroError> {
     match event.kind {
-        Kind::GiftWrap => nip59::unwrap_message(event, receiver_keys).await,
         Kind::PrivateDirectMessage => unwrap_message_nip44(event, receiver_keys),
         other => Err(MostroError::MostroInternalErr(
             ServiceError::UnexpectedError(format!("no Mostro transport for event kind {other}")),
@@ -376,7 +363,6 @@ pub async fn unwrap_incoming(
 mod tests {
     use super::*;
     use crate::message::{Action, MessageKind, Payload, Peer};
-    use crate::nip59::wrap_message;
     use uuid::uuid;
 
     fn sample_order_message(request_id: Option<u64>) -> Message {
@@ -657,22 +643,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unwrap_incoming_dispatches_both_transports() {
+    async fn unwrap_incoming_opens_nip44() {
         let identity_keys = Keys::generate();
         let trade_keys = Keys::generate();
         let receiver_keys = Keys::generate();
         let message = sample_order_message(Some(7));
 
-        let wrapped = wrap_message(
-            &message,
-            &identity_keys,
-            &trade_keys,
-            receiver_keys.public_key(),
-            WrapOptions::default(),
-        )
-        .await
-        .expect("gift wrap");
-        let direct = wrap_message_nip44(
+        let event = wrap_message_nip44(
             &message,
             &identity_keys,
             &trade_keys,
@@ -681,18 +658,41 @@ mod tests {
         )
         .expect("nip44 wrap");
 
-        for event in [wrapped, direct] {
-            let unwrapped = unwrap_incoming(&event, &receiver_keys)
-                .await
-                .expect("unwrap")
-                .expect("some");
-            assert_eq!(unwrapped.sender, trade_keys.public_key());
-            assert_eq!(unwrapped.identity, identity_keys.public_key());
-            assert_eq!(
-                unwrapped.message.as_json().unwrap(),
-                message.as_json().unwrap()
-            );
-        }
+        let unwrapped = unwrap_incoming(&event, &receiver_keys)
+            .await
+            .expect("unwrap")
+            .expect("some");
+        assert_eq!(unwrapped.sender, trade_keys.public_key());
+        assert_eq!(unwrapped.identity, identity_keys.public_key());
+        assert_eq!(
+            unwrapped.message.as_json().unwrap(),
+            message.as_json().unwrap()
+        );
+    }
+
+    #[test]
+    fn gift_wrap_is_not_a_transport() {
+        assert!("gift-wrap".parse::<Transport>().is_err());
+        assert!(serde_json::from_str::<Transport>("\"gift-wrap\"").is_err());
+        assert_eq!(Transport::default(), Transport::Nip44Direct);
+    }
+
+    #[tokio::test]
+    async fn unwrap_incoming_rejects_gift_wrap() {
+        // A kind-1059 event addressed to the receiver is no longer a Mostro
+        // transport: it must be an error, not the "not addressed to me"
+        // `Ok(None)` a v1 unwrap returned when decryption failed.
+        let receiver_keys = Keys::generate();
+        let event = EventBuilder::new(Kind::GiftWrap, "ciphertext")
+            .tags([Tag::public_key(receiver_keys.public_key())])
+            .finalize(&Keys::generate())
+            .expect("sign");
+
+        let result = unwrap_incoming(&event, &receiver_keys).await;
+        assert!(
+            matches!(result, Err(MostroError::MostroInternalErr(_))),
+            "a gift wrap must be rejected, got {result:?}",
+        );
     }
 
     #[tokio::test]
@@ -707,27 +707,13 @@ mod tests {
     }
 
     #[tokio::test]
-    // Exercises the deprecated v1 variant on purpose — coverage must hold
-    // until the variant is removed.
-    #[allow(deprecated)]
-    async fn wrap_message_with_dispatches_by_transport() {
+    async fn wrap_message_with_uses_nip44() {
         let trade_keys = Keys::generate();
         let receiver_keys = Keys::generate();
-        let message = sample_order_message(Some(1));
 
-        let gift = wrap_message_with(
-            Transport::GiftWrap,
-            &message,
-            &trade_keys,
-            &trade_keys,
-            receiver_keys.public_key(),
-            WrapOptions::default(),
-        )
-        .await
-        .expect("gift wrap");
-        let direct = wrap_message_with(
+        let event = wrap_message_with(
             Transport::Nip44Direct,
-            &message,
+            &sample_order_message(Some(1)),
             &trade_keys,
             &trade_keys,
             receiver_keys.public_key(),
@@ -736,40 +722,28 @@ mod tests {
         .await
         .expect("nip44");
 
-        assert_eq!(gift.kind, Kind::GiftWrap);
-        assert_eq!(direct.kind, Kind::PrivateDirectMessage);
+        assert_eq!(event.kind, Kind::PrivateDirectMessage);
     }
 
     #[test]
-    // Exercises the deprecated v1 variant on purpose — coverage must hold
-    // until the variant is removed.
-    #[allow(deprecated)]
     fn transport_config_parsing() {
-        for (s, expected) in [
-            ("gift-wrap", Transport::GiftWrap),
-            ("nip44", Transport::Nip44Direct),
-        ] {
-            assert_eq!(s.parse::<Transport>().unwrap(), expected);
-            let from_serde: Transport = serde_json::from_str(&format!("{s:?}")).unwrap();
-            assert_eq!(from_serde, expected);
-            assert_eq!(expected.to_string(), s);
-        }
+        assert_eq!(
+            "nip44".parse::<Transport>().unwrap(),
+            Transport::Nip44Direct
+        );
+        let from_serde: Transport = serde_json::from_str("\"nip44\"").unwrap();
+        assert_eq!(from_serde, Transport::Nip44Direct);
+        assert_eq!(Transport::Nip44Direct.to_string(), "nip44");
         assert!("dual".parse::<Transport>().is_err());
         assert!("bogus".parse::<Transport>().is_err());
-        assert_eq!(Transport::default(), Transport::GiftWrap);
     }
 
     #[test]
-    // Exercises the deprecated v1 variant on purpose — coverage must hold
-    // until the variant is removed.
-    #[allow(deprecated)]
     fn transport_kind_and_version() {
-        assert_eq!(Transport::GiftWrap.event_kind(), Kind::GiftWrap);
         assert_eq!(
             Transport::Nip44Direct.event_kind(),
             Kind::PrivateDirectMessage
         );
-        assert_eq!(Transport::GiftWrap.protocol_version(), 1);
         assert_eq!(Transport::Nip44Direct.protocol_version(), 2);
     }
 }
