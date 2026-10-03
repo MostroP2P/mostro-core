@@ -201,6 +201,10 @@ impl User {
     /// `total_rating` with an incremental running-average formula.
     /// `min_rating` and `max_rating` are tightened as new extremes arrive.
     ///
+    /// `native_rating_sum` accumulates the raw rating, undamped, so the
+    /// average of the ratings received natively stays exact for a
+    /// reputation export.
+    ///
     /// # Example
     ///
     /// ```
@@ -235,12 +239,32 @@ impl User {
         }
         // Store last rating
         self.last_rating = rating.into();
+        // The raw sum, undamped, keeps the native average exact for export.
+        self.native_rating_sum += f64::from(rating);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_first_native_rating_is_summed_raw_although_the_average_is_damped() {
+        let mut user = User::new("pubkey".into(), 0, 0, 0, 0, 0);
+        user.update_rating(5);
+        assert_eq!(user.total_rating, 2.5);
+        assert_eq!(user.native_rating_sum, 5.0);
+    }
+
+    #[test]
+    fn native_ratings_sum_to_their_plain_total() {
+        let mut user = User::new("pubkey".into(), 0, 0, 0, 0, 0);
+        for rating in [5, 3, 4, 1, 5] {
+            user.update_rating(rating);
+        }
+        assert_eq!(user.native_rating_sum, 18.0);
+        assert_eq!(user.native_rating_sum / user.total_reviews as f64, 3.6);
+    }
 
     #[test]
     fn a_new_user_records_its_creation_as_the_native_date() {
