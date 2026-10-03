@@ -622,7 +622,7 @@ pub struct ReputationExportRequest {
     /// A rebind authorisation serialised as event JSON, signed by the
     /// identity the account is currently bound to, when `destination` is a
     /// different one. See
-    /// [`ReputationRebind`](crate::reputation::ReputationRebind).
+    /// [`crate::reputation::ReputationRebind`].
     #[serde(default)]
     pub rebind: Option<String>,
 }
