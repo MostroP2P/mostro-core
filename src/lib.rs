@@ -90,6 +90,7 @@ pub mod order;
 pub mod payer;
 pub mod prelude;
 pub mod rating;
+pub mod reputation;
 pub mod response;
 pub mod transport;
 pub mod user;

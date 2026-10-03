@@ -30,6 +30,7 @@ pub use crate::payer::{
     PaymentHistory, PAYMENT_HASH_DOMAIN, PAYMENT_HASH_ORDER_DOMAIN,
 };
 pub use crate::rating::Rating;
+pub use crate::reputation::{AttestationError, ReputationAttestation, ReputationRebind};
 pub use crate::response::validate_response;
 pub use crate::transport::{
     unwrap_incoming, unwrap_message_nip44, wrap_message_nip44, wrap_message_with, Transport,
@@ -53,6 +54,13 @@ pub const NOSTR_RATING_EVENT_KIND: u16 = 38384;
 pub const NOSTR_INFO_EVENT_KIND: u16 = 38385;
 /// Nostr event kind used to publish disputes.
 pub const NOSTR_DISPUTE_EVENT_KIND: u16 = 38386;
+/// Nostr event kind of a reputation attestation and of a rebind
+/// authorisation (see [`crate::reputation`]).
+///
+/// Unlike the kinds above it is never published to relays: the event travels
+/// inside encrypted messages, so it carries no `d` tag although the number
+/// sits in the addressable range.
+pub const NOSTR_REPUTATION_ATTESTATION_KIND: u16 = 38388;
 /// Current Mostro protocol version. Embedded in every outgoing
 /// [`MessageKind`](crate::message::MessageKind).
 ///
