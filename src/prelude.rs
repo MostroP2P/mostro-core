@@ -26,8 +26,8 @@ pub use crate::message::{
 };
 pub use crate::order::{Kind, Order, SmallOrder, Status};
 pub use crate::payer::{
-    is_valid_payment_hash, payment_hash, BuyerMode, PayerDeclaration, PaymentHistory,
-    PAYMENT_HASH_DOMAIN,
+    is_valid_payment_hash, order_bound_payment_hash, payment_hash, BuyerMode, PayerDeclaration,
+    PaymentHistory, PAYMENT_HASH_DOMAIN, PAYMENT_HASH_ORDER_DOMAIN,
 };
 pub use crate::rating::Rating;
 pub use crate::response::validate_response;

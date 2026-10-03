@@ -13,6 +13,7 @@
 
 use crate::prelude::*;
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 /// Domain-separation prefix hashed in front of the canonical payment data.
 ///
@@ -33,13 +34,43 @@ pub const PAYMENT_HASH_HEX_LEN: usize = 64;
 /// include an order id, trade key, timestamp or salt, which would make it
 /// unique per trade and defeat the history.
 pub fn payment_hash(canonical: &str) -> String {
-    let digest = Sha256::new()
-        .chain_update(PAYMENT_HASH_DOMAIN.as_bytes())
-        .chain_update(canonical.as_bytes())
-        .finalize();
+    lower_hex(
+        Sha256::new()
+            .chain_update(PAYMENT_HASH_DOMAIN.as_bytes())
+            .chain_update(canonical.as_bytes())
+            .finalize()
+            .as_slice(),
+    )
+}
+
+/// Domain-separation prefix of the order-bound declaration a full-privacy
+/// buyer sends (see [`order_bound_payment_hash`]).
+pub const PAYMENT_HASH_ORDER_DOMAIN: &str = "mostro-payer-order-v1|";
+
+/// The declaration hash of a full-privacy buyer, bound to one order.
+///
+/// Returns `sha256(PAYMENT_HASH_ORDER_DOMAIN || order_id || "|" ||
+/// canonical)` as 64 lowercase hex characters, with `order_id` in its
+/// lowercase hyphenated form. A full-privacy buyer has no history to build,
+/// and reusing [`payment_hash`] would give the same value on every order and
+/// let the node link its trade keys. The value still commits the buyer to an
+/// account for this order: the seller recomputes it from the plaintext.
+pub fn order_bound_payment_hash(order_id: &Uuid, canonical: &str) -> String {
+    lower_hex(
+        Sha256::new()
+            .chain_update(PAYMENT_HASH_ORDER_DOMAIN.as_bytes())
+            .chain_update(order_id.hyphenated().to_string().as_bytes())
+            .chain_update(b"|")
+            .chain_update(canonical.as_bytes())
+            .finalize()
+            .as_slice(),
+    )
+}
+
+fn lower_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(PAYMENT_HASH_HEX_LEN);
-    for b in digest {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
         out.push(HEX[usize::from(b >> 4)] as char);
         out.push(HEX[usize::from(b & 0x0f)] as char);
     }
@@ -148,6 +179,25 @@ impl PaymentHistory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn order_bound_hash_matches_the_protocol_vector() {
+        // `printf '%s' 'mostro-payer-order-v1|ede61c96-4c13-4519-bf3a-dcf7f1e9d842|EU|SEPA|DE89370400440532013000|ALICE SMITH' | sha256sum`
+        let order = Uuid::parse_str("EDE61C96-4C13-4519-BF3A-DCF7F1E9D842").unwrap();
+        let canonical = "EU|SEPA|DE89370400440532013000|ALICE SMITH";
+        let hash = order_bound_payment_hash(&order, canonical);
+        assert_eq!(
+            hash,
+            "1f0616c3f355282b7fb73b54f172be84d023f1f63a8a7d7822c4d51f83528628"
+        );
+        assert!(is_valid_payment_hash(&hash));
+        assert_ne!(hash, payment_hash(canonical), "never the reusable hash");
+        assert_ne!(
+            hash,
+            order_bound_payment_hash(&Uuid::new_v4(), canonical),
+            "different on every order"
+        );
+    }
 
     #[test]
     fn payment_hash_is_domain_separated_lowercase_sha256() {
