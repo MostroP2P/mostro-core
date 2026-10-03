@@ -935,9 +935,13 @@ impl MessageKind {
                 if self.id.is_none() {
                     return false;
                 }
+                // Payloads owned by one action family are refused here.
                 !matches!(
                     &self.payload,
-                    Some(Payload::BondResolution(_)) | Some(Payload::BondPayoutRequest(_))
+                    Some(Payload::BondResolution(_))
+                        | Some(Payload::BondPayoutRequest(_))
+                        | Some(Payload::PayerDeclaration(_))
+                        | Some(Payload::PaymentHistory(_))
                 )
             }
             Action::LastTradeIndex | Action::RestoreSession => self.payload.is_none(),
