@@ -1354,6 +1354,76 @@ mod test {
     }
 
     #[test]
+    fn test_payer_payloads_rejected_on_unrelated_actions() {
+        // PayerDeclaration belongs to DeclarePayer / PayerDeclared and
+        // PaymentHistory to PaymentHistory; every other action refuses both.
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let unrelated = [
+            Action::NewOrder,
+            Action::TakeSell,
+            Action::TakeBuy,
+            Action::PayInvoice,
+            Action::PayBondInvoice,
+            Action::FiatSent,
+            Action::FiatSentOk,
+            Action::Release,
+            Action::Released,
+            Action::Cancel,
+            Action::Canceled,
+            Action::CooperativeCancelInitiatedByYou,
+            Action::CooperativeCancelInitiatedByPeer,
+            Action::DisputeInitiatedByYou,
+            Action::DisputeInitiatedByPeer,
+            Action::CooperativeCancelAccepted,
+            Action::BuyerInvoiceAccepted,
+            Action::BondInvoiceAccepted,
+            Action::PurchaseCompleted,
+            Action::BondPayoutCompleted,
+            Action::BondSlashed,
+            Action::HoldInvoicePaymentAccepted,
+            Action::HoldInvoicePaymentSettled,
+            Action::HoldInvoicePaymentCanceled,
+            Action::WaitingSellerToPay,
+            Action::WaitingBuyerInvoice,
+            Action::AddInvoice,
+            Action::BuyerTookOrder,
+            Action::Rate,
+            Action::RateUser,
+            Action::RateReceived,
+            Action::CantDo,
+            Action::Dispute,
+            Action::AdminCancel,
+            Action::AdminCanceled,
+            Action::AdminSettle,
+            Action::AdminSettled,
+            Action::AdminAddSolver,
+            Action::AdminTakeDispute,
+            Action::AdminTookDispute,
+            Action::PaymentFailed,
+            Action::InvoiceUpdated,
+            Action::SendDm,
+            Action::TradePubkey,
+            Action::RestoreSession,
+            Action::LastTradeIndex,
+            Action::Orders,
+            Action::AddCashuEscrow,
+            Action::CashuEscrowLocked,
+            Action::CashuPmSignature,
+            Action::AddBondInvoice,
+        ];
+        for action in unrelated {
+            for payload in [
+                Payload::PayerDeclaration(PayerDeclaration::new("a".repeat(64))),
+                Payload::PaymentHistory(PaymentHistory::unavailable("a".repeat(64))),
+            ] {
+                let kind =
+                    MessageKind::new(Some(order_id), None, None, action.clone(), Some(payload));
+                assert!(!kind.verify(), "{action:?} must reject {:?}", kind.payload);
+            }
+        }
+    }
+
+    #[test]
     fn test_bond_payout_ack_actions_verify_and_wire_format() {
         use crate::message::BondResolution;
 
