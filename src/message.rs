@@ -216,6 +216,23 @@ pub enum Action {
     /// `fiat-sent-ok` or reply to the query (payload
     /// [`Payload::PaymentHistory`]).
     PaymentHistory,
+    /// User asks the node to attest their reputation there for a destination
+    /// identity. Acts on the identity the transport proved, never on the
+    /// payload, and requires that identity proof. Carries no `id`.
+    /// Direction: client → issuer. Payload: [`Payload::ReputationExportRequest`].
+    ExportReputation,
+    /// The node's reputation attestation, in reply to
+    /// [`Action::ExportReputation`]. Direction: issuer → client.
+    /// Payload: [`Payload::ReputationAttestation`].
+    ReputationExported,
+    /// User imports a reputation attestation into the node. Requires the
+    /// identity proof; carries no `id`. Direction: client → destination.
+    /// Payload: [`Payload::ReputationAttestation`].
+    ImportReputation,
+    /// The import was recorded and merged, in reply to
+    /// [`Action::ImportReputation`]. Direction: destination → client.
+    /// Payload must be `None`.
+    ReputationImported,
 }
 
 impl fmt::Display for Action {
@@ -606,6 +623,22 @@ pub struct BondPayoutRequest {
     pub slashed_at: i64,
 }
 
+/// Request carried by [`Action::ExportReputation`].
+///
+/// The source account is never named here: the issuer attests the identity
+/// the transport proved.
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+pub struct ReputationExportRequest {
+    /// Identity the attestation will name, as 64 lowercase hex characters.
+    pub destination: String,
+    /// A rebind authorisation serialised as event JSON, signed by the
+    /// identity the account is currently bound to, when `destination` is a
+    /// different one. See
+    /// [`crate::reputation::ReputationRebind`].
+    #[serde(default)]
+    pub rebind: Option<String>,
+}
+
 /// Cashu 2-of-3 multisig escrow lock submitted by the seller.
 ///
 /// Carried inside [`Payload::CashuLockProof`] on [`Action::AddCashuEscrow`]
@@ -767,6 +800,15 @@ pub enum Payload {
     /// [`Action::PaymentHistory`] from Mostro to the seller. See
     /// [`PaymentHistory`].
     PaymentHistory(PaymentHistory),
+    /// Destination identity and optional rebind authorisation carried by
+    /// [`Action::ExportReputation`]. See [`ReputationExportRequest`].
+    ReputationExportRequest(ReputationExportRequest),
+    /// A reputation attestation (kind `38388`) serialised as event JSON,
+    /// carried by [`Action::ReputationExported`] and
+    /// [`Action::ImportReputation`]. Parse it with
+    /// [`ReputationAttestation::parse_json`](crate::reputation::ReputationAttestation::parse_json);
+    /// a client forwards it unchanged.
+    ReputationAttestation(String),
 }
 
 #[allow(dead_code)]
@@ -963,6 +1005,15 @@ impl MessageKind {
                     Some(Payload::Ids(_)) | Some(Payload::Orders(_))
                 )
             }
+            Action::ExportReputation => {
+                self.id.is_none()
+                    && matches!(&self.payload, Some(Payload::ReputationExportRequest(_)))
+            }
+            Action::ReputationExported | Action::ImportReputation => {
+                self.id.is_none()
+                    && matches!(&self.payload, Some(Payload::ReputationAttestation(_)))
+            }
+            Action::ReputationImported => self.id.is_none() && self.payload.is_none(),
         }
     }
 
@@ -1285,6 +1336,10 @@ mod test {
             | Action::DeclarePayer
             | Action::PayerDeclared
             | Action::PaymentHistory
+            | Action::ExportReputation
+            | Action::ReputationExported
+            | Action::ImportReputation
+            | Action::ReputationImported
             | Action::Orders => {}
         };
 
@@ -1342,6 +1397,10 @@ mod test {
             Action::DeclarePayer,
             Action::PayerDeclared,
             Action::PaymentHistory,
+            Action::ExportReputation,
+            Action::ReputationExported,
+            Action::ImportReputation,
+            Action::ReputationImported,
         ];
 
         for action in other_actions {
@@ -2608,6 +2667,117 @@ mod test {
         match payload {
             Payload::PaymentHistory(h) => assert_eq!(h, PaymentHistory::unavailable(hash)),
             other => panic!("expected a PaymentHistory payload, got {other:?}"),
+        }
+    }
+
+    /// The wire shapes the protocol's reputation chapter documents: the
+    /// `order` wrapper, no `id`, kebab-case actions and snake_case payloads.
+    #[test]
+    fn reputation_messages_have_the_documented_wire_shape() {
+        let export = Message::new_order(
+            None,
+            Some(4126),
+            None,
+            Action::ExportReputation,
+            Some(Payload::ReputationExportRequest(
+                super::ReputationExportRequest {
+                    destination: "ab".repeat(32),
+                    rebind: None,
+                },
+            )),
+        );
+        let json: serde_json::Value = serde_json::from_str(&export.as_json().unwrap()).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "order": {
+                "version": 2,
+                "request_id": 4126,
+                "trade_index": null,
+                "action": "export-reputation",
+                "payload": { "reputation_export_request": {
+                    "destination": "ab".repeat(32),
+                    "rebind": null,
+                }},
+            }})
+        );
+
+        for (action, wire) in [
+            (Action::ReputationExported, "reputation-exported"),
+            (Action::ImportReputation, "import-reputation"),
+        ] {
+            let message = Message::new_order(
+                None,
+                None,
+                None,
+                action,
+                Some(Payload::ReputationAttestation("{}".into())),
+            );
+            let json: serde_json::Value =
+                serde_json::from_str(&message.as_json().unwrap()).unwrap();
+            assert_eq!(json["order"]["action"], wire);
+            assert_eq!(json["order"]["payload"]["reputation_attestation"], "{}");
+        }
+
+        let imported = Message::new_order(None, None, None, Action::ReputationImported, None);
+        let json: serde_json::Value = serde_json::from_str(&imported.as_json().unwrap()).unwrap();
+        assert_eq!(json["order"]["action"], "reputation-imported");
+        assert!(json["order"]["payload"].is_null());
+    }
+
+    #[test]
+    fn an_export_request_without_rebind_deserialises() {
+        let json = r#"{"order":{"version":2,"action":"export-reputation","payload":{"reputation_export_request":{"destination":"ab"}}}}"#;
+        let message = Message::from_json(json).unwrap();
+        let kind = message.get_inner_message_kind();
+        match &kind.payload {
+            Some(Payload::ReputationExportRequest(request)) => assert_eq!(request.rebind, None),
+            other => panic!("unexpected payload {other:?}"),
+        }
+        assert!(kind.verify());
+    }
+
+    #[test]
+    fn reputation_actions_verify_only_without_an_id_and_with_their_payload() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let request = Payload::ReputationExportRequest(super::ReputationExportRequest {
+            destination: "ab".repeat(32),
+            rebind: None,
+        });
+        let attestation = Payload::ReputationAttestation("{}".into());
+        let cases = [
+            (Action::ExportReputation, Some(request.clone()), true),
+            (Action::ExportReputation, Some(attestation.clone()), false),
+            (Action::ExportReputation, None, false),
+            (Action::ReputationExported, Some(attestation.clone()), true),
+            (Action::ReputationExported, None, false),
+            (Action::ImportReputation, Some(attestation.clone()), true),
+            (Action::ImportReputation, Some(request.clone()), false),
+            (Action::ReputationImported, None, true),
+            (Action::ReputationImported, Some(attestation.clone()), false),
+        ];
+        for (action, payload, ok) in cases {
+            let without_id = MessageKind::new(None, None, None, action.clone(), payload.clone());
+            assert_eq!(without_id.verify(), ok, "{action:?} {payload:?}");
+            let with_id = MessageKind::new(Some(order_id), None, None, action.clone(), payload);
+            assert!(!with_id.verify(), "{action:?} must not carry an id");
+        }
+    }
+
+    /// `PROTOCOL_VER` stays 2: the reputation actions are request/response
+    /// over encrypted direct messages, so an old client never sends them and
+    /// is never sent their replies, and a new client only sends them to a
+    /// node whose info event advertises them. Nothing about them is
+    /// broadcast. A new `cant-do` reason reaching an old client degrades to
+    /// `Unknown` through `CantDoReason`'s catch-all.
+    #[test]
+    fn reputation_messages_keep_protocol_version_2() {
+        for action in [
+            Action::ExportReputation,
+            Action::ReputationExported,
+            Action::ImportReputation,
+            Action::ReputationImported,
+        ] {
+            assert_eq!(MessageKind::new(None, None, None, action, None).version, 2);
         }
     }
 }

@@ -115,6 +115,32 @@ pub enum CantDoReason {
     /// `fiat-sent` was refused because this node requires the buyer to send
     /// `declare-payer` first.
     PayerNotDeclared,
+    /// A reputation request carries no identity proof: in full privacy mode
+    /// there is no identity-bound reputation to export or import into.
+    ReputationIdentityRequired,
+    /// The account cannot export its reputation: it is banned, or has fewer
+    /// than 10 completed trades or 5 ratings received.
+    NotEligibleForReputationExport,
+    /// The account is bound to another identity and the export request
+    /// carries no rebind authorisation.
+    ReputationBoundToOtherIdentity,
+    /// The rebind authorisation is malformed, badly signed, not signed by the
+    /// bound identity, names another issuer or has expired.
+    InvalidReputationRebind,
+    /// The attestation does not parse, is badly signed, breaks a tag rule,
+    /// is dated in the future or outlives the destination's lifetime cap.
+    InvalidReputationAttestation,
+    /// The attestation is signed by a key in no trust-list entry, or by the
+    /// destination's own issuer key.
+    UntrustedReputationIssuer,
+    /// The attestation has expired.
+    ExpiredReputationAttestation,
+    /// The attestation names another identity than the one the request
+    /// proves.
+    ReputationIdentityMismatch,
+    /// The source account, or another account from the same issuer for this
+    /// identity, was imported before.
+    ReputationAlreadyImported,
     /// Catch-all for reasons this build of `mostro-core` does not know yet.
     ///
     /// Newer daemons may emit reasons added after this release; without this
@@ -337,5 +363,54 @@ mod tests {
     fn unknown_serializes_to_snake_case() {
         let json = serde_json::to_string(&CantDoReason::Unknown).unwrap();
         assert_eq!(json, "\"unknown\"");
+    }
+
+    /// The reasons the protocol's reputation chapter documents, by the exact
+    /// snake_case spelling clients match on.
+    #[test]
+    fn reputation_reasons_travel_with_their_documented_names() {
+        let reasons = [
+            (
+                CantDoReason::ReputationIdentityRequired,
+                "reputation_identity_required",
+            ),
+            (
+                CantDoReason::NotEligibleForReputationExport,
+                "not_eligible_for_reputation_export",
+            ),
+            (
+                CantDoReason::ReputationBoundToOtherIdentity,
+                "reputation_bound_to_other_identity",
+            ),
+            (
+                CantDoReason::InvalidReputationRebind,
+                "invalid_reputation_rebind",
+            ),
+            (
+                CantDoReason::InvalidReputationAttestation,
+                "invalid_reputation_attestation",
+            ),
+            (
+                CantDoReason::UntrustedReputationIssuer,
+                "untrusted_reputation_issuer",
+            ),
+            (
+                CantDoReason::ExpiredReputationAttestation,
+                "expired_reputation_attestation",
+            ),
+            (
+                CantDoReason::ReputationIdentityMismatch,
+                "reputation_identity_mismatch",
+            ),
+            (
+                CantDoReason::ReputationAlreadyImported,
+                "reputation_already_imported",
+            ),
+        ];
+        for (reason, wire) in reasons {
+            let json = serde_json::to_string(&reason).unwrap();
+            assert_eq!(json, format!("\"{wire}\""));
+            assert_eq!(serde_json::from_str::<CantDoReason>(&json).unwrap(), reason);
+        }
     }
 }

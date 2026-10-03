@@ -23,6 +23,7 @@ use std::fmt;
 
 use nostr_sdk::prelude::*;
 
+use crate::error::CantDoReason;
 use crate::prelude::NOSTR_REPUTATION_ATTESTATION_KIND;
 
 /// Lifetime an issuer gives an attestation, and the default cap a
@@ -91,6 +92,19 @@ impl fmt::Display for AttestationError {
 }
 
 impl std::error::Error for AttestationError {}
+
+impl AttestationError {
+    /// The `cant-do` reason a destination answers an attestation refused
+    /// with this error: `expired_reputation_attestation` when it expired,
+    /// `invalid_reputation_attestation` otherwise. A refused rebind
+    /// authorisation is always [`CantDoReason::InvalidReputationRebind`].
+    pub fn cant_do_reason(&self) -> CantDoReason {
+        match self {
+            Self::Expired => CantDoReason::ExpiredReputationAttestation,
+            _ => CantDoReason::InvalidReputationAttestation,
+        }
+    }
+}
 
 /// A parsed, verified reputation attestation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -547,8 +561,8 @@ mod tests {
                 continue;
             }
             let err = result.expect_err(name);
-            let expired = case["reason"] == "expired_reputation_attestation";
-            assert_eq!(err == AttestationError::Expired, expired, "{name}: {err:?}");
+            let reason = serde_json::to_value(err.cant_do_reason()).expect("reason serialises");
+            assert_eq!(reason, case["reason"], "{name}: {err:?}");
         }
     }
 
