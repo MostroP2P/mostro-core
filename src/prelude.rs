@@ -26,7 +26,9 @@ pub use crate::message::{
 };
 pub use crate::order::{Kind, Order, SmallOrder, Status};
 pub use crate::rating::Rating;
-pub use crate::reputation::{AttestationError, ReputationAttestation, ReputationRebind};
+pub use crate::reputation::{
+    AttestationError, ReputationAttestation, ReputationImport, ReputationRebind,
+};
 pub use crate::response::validate_response;
 pub use crate::transport::{
     unwrap_incoming, unwrap_message_nip44, wrap_message_nip44, wrap_message_with, Transport,

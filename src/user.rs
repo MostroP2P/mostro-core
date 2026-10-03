@@ -9,6 +9,8 @@
 //! shared with a counterpart during a trade without leaking internals.
 
 use chrono::Utc;
+
+use crate::reputation::ReputationImport;
 use serde::{Deserialize, Serialize, Serializer};
 #[cfg(feature = "sqlx")]
 use sqlx::FromRow;
@@ -186,6 +188,94 @@ impl User {
         }
     }
 
+    /// Merge an imported reputation into this record (section 6 of the
+    /// reputation portability plan).
+    ///
+    /// Ratings received add up, the average is weighted by each origin's
+    /// review count, and the age is the earliest date, never a sum.
+    /// `min_rating`, `max_rating` and `last_rating` are set from the
+    /// imported average only where still `0`. The import is also counted in
+    /// `seeded_reviews` and `seeded_rating_sum`, so it is never exported as
+    /// native reputation and can be reversed exactly; `native_rating_sum`
+    /// and the native date are left alone. A record that predates the
+    /// `native_created_at` column gets it pinned to its current
+    /// `created_at` before that moves, so a reversal can restore it.
+    pub fn apply_reputation_import(&mut self, import: &ReputationImport) {
+        let reviews = i64::from(import.reviews);
+        let rating = import.rating();
+        let rounded = rating.round() as i64;
+        self.native_created_at = Some(self.native_created_at());
+        self.total_rating = (self.total_rating * self.total_reviews as f64
+            + rating * reviews as f64)
+            / (self.total_reviews + reviews) as f64;
+        self.total_reviews += reviews;
+        self.created_at = self.created_at.min(import.since as i64);
+        for extreme in [
+            &mut self.min_rating,
+            &mut self.max_rating,
+            &mut self.last_rating,
+        ] {
+            if *extreme == 0 {
+                *extreme = rounded;
+            }
+        }
+        self.seeded_reviews += reviews;
+        self.seeded_rating_sum += rating * reviews as f64;
+    }
+
+    /// Reverse an import merged by [`User::apply_reputation_import`], as an
+    /// operator does after an issuer key is compromised.
+    ///
+    /// `remaining_since` is the earliest `since` among the imports that
+    /// stay; the displayed date goes back to the earliest of it and the
+    /// native date. Native ratings received in between are kept exactly,
+    /// because the running average is linear in each contribution. The
+    /// rating extrema are reset to `0` when no rating remains and are
+    /// otherwise left as they are: they cannot be recomputed without a
+    /// per-rating history.
+    pub fn revert_reputation_import(
+        &mut self,
+        import: &ReputationImport,
+        remaining_since: Option<i64>,
+    ) {
+        let reviews = i64::from(import.reviews);
+        let rating = import.rating();
+        let remaining = (self.total_reviews - reviews).max(0);
+        self.total_rating = if remaining == 0 {
+            0.0
+        } else {
+            (self.total_rating * self.total_reviews as f64 - rating * reviews as f64)
+                / remaining as f64
+        };
+        self.total_reviews = remaining;
+        self.seeded_reviews = (self.seeded_reviews - reviews).max(0);
+        self.seeded_rating_sum -= rating * reviews as f64;
+        let native = self.native_created_at();
+        self.created_at = remaining_since.map_or(native, |since| since.min(native));
+        if remaining == 0 {
+            self.min_rating = 0;
+            self.max_rating = 0;
+            self.last_rating = 0;
+        }
+    }
+
+    /// The reputation this record earned on this instance alone: ratings
+    /// received natively and their exact average (`0.0` with none). This is
+    /// what an export carries, so an imported reputation never travels on.
+    ///
+    /// For a record that predates `native_rating_sum`, the migration
+    /// backfills it from the displayed average, which the first vote damps;
+    /// such a record exports the average its counterparties already see.
+    pub fn native_stats(&self) -> (i64, f64) {
+        let reviews = (self.total_reviews - self.seeded_reviews).max(0);
+        let rating = if reviews == 0 {
+            0.0
+        } else {
+            self.native_rating_sum / reviews as f64
+        };
+        (reviews, rating)
+    }
+
     /// When the record was created, which no import ever moves.
     ///
     /// Falls back to `created_at` for a record whose database predates the
@@ -247,6 +337,222 @@ impl User {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod import {
+        use super::*;
+        use serde_json::Value;
+
+        const VECTORS: &str = include_str!("../tests/vectors/reputation_v1.json");
+
+        fn import(reviews: u32, rating_hundredths: u16, since: u64) -> ReputationImport {
+            ReputationImport {
+                reviews,
+                rating_hundredths,
+                since,
+            }
+        }
+
+        fn row(v: &Value) -> User {
+            User {
+                total_reviews: v["total_reviews"].as_i64().unwrap(),
+                total_rating: v["total_rating"].as_f64().unwrap(),
+                created_at: v["created_at"].as_i64().unwrap(),
+                native_created_at: Some(v["native_created_at"].as_i64().unwrap()),
+                min_rating: v["min_rating"].as_i64().unwrap(),
+                max_rating: v["max_rating"].as_i64().unwrap(),
+                last_rating: v["last_rating"].as_i64().unwrap(),
+                seeded_reviews: v["seeded_reviews"].as_i64().unwrap(),
+                seeded_rating_sum: v["seeded_rating_sum"].as_f64().unwrap(),
+                native_rating_sum: v["native_rating_sum"].as_f64().unwrap(),
+                ..User::default()
+            }
+        }
+
+        fn assert_rows_match(actual: &User, expected: &User, tolerance: f64, what: &str) {
+            let close = |a: f64, b: f64| (a - b).abs() <= tolerance;
+            assert!(
+                close(actual.total_rating, expected.total_rating),
+                "{what}: total_rating {} != {}",
+                actual.total_rating,
+                expected.total_rating
+            );
+            assert!(
+                close(actual.seeded_rating_sum, expected.seeded_rating_sum),
+                "{what}: seeded_rating_sum"
+            );
+            assert!(
+                close(actual.native_rating_sum, expected.native_rating_sum),
+                "{what}: native_rating_sum"
+            );
+            let exact = |u: &User| {
+                (
+                    u.total_reviews,
+                    u.created_at,
+                    u.native_created_at,
+                    u.min_rating,
+                    u.max_rating,
+                    u.last_rating,
+                    u.seeded_reviews,
+                )
+            };
+            assert_eq!(exact(actual), exact(expected), "{what}");
+        }
+
+        #[test]
+        fn the_merge_vectors_apply_and_reverse() {
+            let v: Value = serde_json::from_str(VECTORS).unwrap();
+            let tolerance = v["merge"]["tolerance"].as_f64().unwrap();
+            for case in v["merge"]["cases"].as_array().unwrap() {
+                let name = case["name"].as_str().unwrap();
+                let figures = &case["import"];
+                let rating = crate::reputation::rating_hundredths(
+                    figures["rating"].as_str().unwrap().parse().unwrap(),
+                )
+                .unwrap();
+                let imported = import(
+                    figures["reviews"].as_u64().unwrap() as u32,
+                    rating,
+                    figures["since"].as_u64().unwrap(),
+                );
+                let mut user = row(&case["before"]);
+                user.apply_reputation_import(&imported);
+                assert_rows_match(&user, &row(&case["after"]), tolerance, name);
+                user.revert_reputation_import(&imported, None);
+                assert_rows_match(&user, &row(&case["reverted"]), tolerance, name);
+            }
+        }
+
+        #[test]
+        fn imports_from_several_issuers_add_up_and_keep_the_earliest_date() {
+            let mut user = User {
+                created_at: 1_790_000_000,
+                ..User::new("p".into(), 0, 0, 0, 0, 0)
+            };
+            user.native_created_at = Some(user.created_at);
+            user.apply_reputation_import(&import(10, 400, 1_700_006_400));
+            user.apply_reputation_import(&import(30, 500, 1_690_070_400));
+            assert_eq!(user.total_reviews, 40);
+            assert!((user.total_rating - 4.75).abs() < 1e-12);
+            assert_eq!(user.created_at, 1_690_070_400);
+            assert_eq!(user.seeded_reviews, 40);
+            assert_eq!(user.native_stats(), (0, 0.0));
+
+            // Reversing the older one leaves the other's date.
+            user.revert_reputation_import(&import(30, 500, 1_690_070_400), Some(1_700_006_400));
+            assert_eq!(user.total_reviews, 10);
+            assert!((user.total_rating - 4.0).abs() < 1e-12);
+            assert_eq!(user.created_at, 1_700_006_400);
+        }
+
+        #[test]
+        fn native_ratings_before_and_after_an_import_stay_exportable_as_native() {
+            let mut user = User::new("p".into(), 0, 0, 0, 0, 0);
+            user.update_rating(5);
+            user.update_rating(3);
+            user.apply_reputation_import(&import(100, 487, 1_696_204_800));
+            user.update_rating(1);
+            assert_eq!(user.native_stats(), (3, 3.0));
+            assert_eq!(user.total_reviews, 103);
+            assert_eq!(user.min_rating, 1);
+
+            // The native rating that arrived after the import survives its reversal.
+            let before_revert = user.total_rating * 103.0 - 487.0;
+            user.revert_reputation_import(&import(100, 487, 1_696_204_800), None);
+            assert_eq!(user.total_reviews, 3);
+            assert!((user.total_rating * 3.0 - before_revert).abs() < 1e-9);
+            assert_eq!(user.native_stats(), (3, 3.0));
+        }
+
+        #[test]
+        fn a_legacy_record_without_a_native_date_gets_it_pinned_before_the_import_moves_it() {
+            let mut user = User {
+                created_at: 1_780_000_000,
+                native_created_at: None,
+                ..User::default()
+            };
+            user.apply_reputation_import(&import(5, 450, 1_696_204_800));
+            assert_eq!(user.native_created_at, Some(1_780_000_000));
+            user.revert_reputation_import(&import(5, 450, 1_696_204_800), None);
+            assert_eq!(user.created_at, 1_780_000_000);
+        }
+
+        /// Deterministic generator for the property tests, so a failure
+        /// reproduces without a seed.
+        struct Lcg(u64);
+
+        impl Lcg {
+            fn next(&mut self, bound: u64) -> u64 {
+                self.0 = self
+                    .0
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                (self.0 >> 33) % bound
+            }
+
+            fn import(&mut self) -> ReputationImport {
+                import(
+                    5 + self.next(500) as u32,
+                    100 + self.next(401) as u16,
+                    1_577_836_800 + self.next(2_000) * 86_400,
+                )
+            }
+
+            fn user(&mut self) -> User {
+                let mut user = User::new("p".into(), 0, 0, 0, 0, 0);
+                user.created_at = 1_700_000_000 + self.next(100_000_000) as i64;
+                user.native_created_at = Some(user.created_at);
+                for _ in 0..self.next(20) {
+                    user.update_rating(1 + self.next(5) as u8);
+                }
+                user
+            }
+        }
+
+        #[test]
+        fn an_import_never_lowers_reviews_nor_moves_dates_forward_nor_touches_native_state() {
+            let mut rng = Lcg(7);
+            for _ in 0..2_000 {
+                let mut user = rng.user();
+                let before = user.clone();
+                user.apply_reputation_import(&rng.import());
+                assert!(user.total_reviews > before.total_reviews);
+                assert!(user.created_at <= before.created_at);
+                assert_eq!(user.native_created_at, before.native_created_at);
+                assert_eq!(user.native_rating_sum, before.native_rating_sum);
+                assert_eq!(user.native_stats().0, before.native_stats().0);
+                assert!((1.0..=5.0).contains(&user.total_rating));
+            }
+        }
+
+        #[test]
+        fn apply_then_revert_restores_the_row() {
+            let mut rng = Lcg(11);
+            for _ in 0..2_000 {
+                let mut user = rng.user();
+                let before = user.clone();
+                let imported = rng.import();
+                user.apply_reputation_import(&imported);
+                user.revert_reputation_import(&imported, None);
+                assert_rows_match(&user, &before, 1e-9, "apply then revert");
+            }
+        }
+
+        #[test]
+        fn a_chain_a_b_c_exports_from_b_what_b_earned_natively() {
+            let mut rng = Lcg(13);
+            for _ in 0..500 {
+                let mut on_b = rng.user();
+                let native_before = on_b.native_stats();
+                on_b.apply_reputation_import(&rng.import());
+                for _ in 0..rng.next(5) {
+                    on_b.apply_reputation_import(&rng.import());
+                }
+                let (reviews, rating) = on_b.native_stats();
+                assert_eq!(reviews, native_before.0);
+                assert!((rating - native_before.1).abs() < 1e-12);
+            }
+        }
+    }
 
     #[test]
     fn a_first_native_rating_is_summed_raw_although_the_average_is_damped() {
