@@ -107,7 +107,8 @@ pub struct PayerDeclaration {
     /// [`order_bound_payment_hash`], `sha256("mostro-payer-order-v1|" ||
     /// order_id || "|" || canonical)`, so the node cannot link its orders. A
     /// seller checking the plaintext uses the construction that matches the
-    /// `buyer_mode` reported in [`PaymentHistory`].
+    /// `buyer_mode` reported in [`PaymentHistory`] (either one for a mode it
+    /// does not know).
     pub payment_hash: String,
 }
 
@@ -147,8 +148,11 @@ pub enum BuyerMode {
 pub struct PaymentHistory {
     /// Echo of the buyer-committed hash, so the seller's client can compare
     /// it with the hash it computes from the plaintext it received: with
-    /// [`order_bound_payment_hash`] when `buyer_mode` is
-    /// [`BuyerMode::FullPrivacy`], with [`payment_hash`] otherwise.
+    /// [`payment_hash`] when `buyer_mode` is [`BuyerMode::Reputation`], with
+    /// [`order_bound_payment_hash`] when it is [`BuyerMode::FullPrivacy`].
+    /// For [`BuyerMode::Unknown`] the client cannot know which construction
+    /// a newer buyer used: it accepts a match under either one rather than
+    /// picking one and reporting a false mismatch.
     pub payment_hash: String,
     /// Whether the counters are meaningful. See [`BuyerMode`].
     pub buyer_mode: BuyerMode,
