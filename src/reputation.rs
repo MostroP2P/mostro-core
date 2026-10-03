@@ -252,6 +252,35 @@ impl ReputationAttestation {
     }
 }
 
+/// What a destination keeps of an import to be able to reverse it: the
+/// three figures it merged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReputationImport {
+    /// Ratings received the import added.
+    pub reviews: u32,
+    /// Their average, in hundredths.
+    pub rating_hundredths: u16,
+    /// The first-trade date it carried.
+    pub since: u64,
+}
+
+impl ReputationImport {
+    /// Average rating as a number, the same double the merge used.
+    pub fn rating(&self) -> f64 {
+        f64::from(self.rating_hundredths) / 100.0
+    }
+}
+
+impl From<&ReputationAttestation> for ReputationImport {
+    fn from(a: &ReputationAttestation) -> Self {
+        Self {
+            reviews: a.reviews,
+            rating_hundredths: a.rating_hundredths,
+            since: a.since,
+        }
+    }
+}
+
 /// A parsed, verified rebind authorisation: the identity a source account is
 /// bound to at an issuer consents to moving the binding to a new identity.
 #[derive(Debug, Clone, PartialEq, Eq)]

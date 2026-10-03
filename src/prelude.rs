@@ -30,7 +30,9 @@ pub use crate::payer::{
     PaymentHistory, PAYMENT_HASH_DOMAIN, PAYMENT_HASH_ORDER_DOMAIN,
 };
 pub use crate::rating::Rating;
-pub use crate::reputation::{AttestationError, ReputationAttestation, ReputationRebind};
+pub use crate::reputation::{
+    AttestationError, ReputationAttestation, ReputationImport, ReputationRebind,
+};
 pub use crate::response::validate_response;
 pub use crate::transport::{
     unwrap_incoming, unwrap_message_nip44, wrap_message_nip44, wrap_message_with, Transport,
