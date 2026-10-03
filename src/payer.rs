@@ -32,7 +32,8 @@ pub const PAYMENT_HASH_HEX_LEN: usize = 64;
 /// prefix, Unicode NFKC, uppercase, separators stripped from identifiers);
 /// see the protocol chapter for the per-method rules. The hash must never
 /// include an order id, trade key, timestamp or salt, which would make it
-/// unique per trade and defeat the history.
+/// unique per trade and defeat the history. This is the reputation-mode
+/// construction; a full-privacy buyer uses [`order_bound_payment_hash`].
 pub fn payment_hash(canonical: &str) -> String {
     lower_hex(
         Sha256::new()
@@ -100,8 +101,13 @@ pub fn is_valid_payment_hash(hash: &str) -> bool {
 /// [`crate::error::CantDoReason::InvalidPaymentHash`] when it fails.
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct PayerDeclaration {
-    /// `sha256("mostro-payer-v1|" || canonical_payment_data)`, 64 lowercase
-    /// hex characters. See [`payment_hash`].
+    /// 64 lowercase hex characters. A reputation-mode buyer declares
+    /// [`payment_hash`], `sha256("mostro-payer-v1|" || canonical)`, which is
+    /// stable across orders and builds history. A full-privacy buyer declares
+    /// [`order_bound_payment_hash`], `sha256("mostro-payer-order-v1|" ||
+    /// order_id || "|" || canonical)`, so the node cannot link its orders. A
+    /// seller checking the plaintext uses the construction that matches the
+    /// `buyer_mode` reported in [`PaymentHistory`].
     pub payment_hash: String,
 }
 
@@ -140,7 +146,9 @@ pub enum BuyerMode {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct PaymentHistory {
     /// Echo of the buyer-committed hash, so the seller's client can compare
-    /// it with the hash it computes from the plaintext it received.
+    /// it with the hash it computes from the plaintext it received: with
+    /// [`order_bound_payment_hash`] when `buyer_mode` is
+    /// [`BuyerMode::FullPrivacy`], with [`payment_hash`] otherwise.
     pub payment_hash: String,
     /// Whether the counters are meaningful. See [`BuyerMode`].
     pub buyer_mode: BuyerMode,
