@@ -204,6 +204,18 @@ pub enum Action {
     /// [`Action::AdminSettled`] / [`Action::AdminCanceled`].
     /// Direction: Mostro → winner. Payload: [`Payload::CashuSignatures`].
     CashuPmSignature,
+    /// Buyer commits to the fiat account it will pay from, by hash only.
+    /// Direction: buyer → Mostro. Payload: [`Payload::PayerDeclaration`].
+    DeclarePayer,
+    /// The committed payer hash: Mostro's ack to the buyer and its forward
+    /// to the seller. Direction: Mostro → buyer/seller.
+    /// Payload: [`Payload::PayerDeclaration`].
+    PayerDeclared,
+    /// Aggregate history of the buyer's committed payment account.
+    /// Seller → Mostro query (payload `None`); Mostro → seller push after
+    /// `fiat-sent-ok` or reply to the query (payload
+    /// [`Payload::PaymentHistory`]).
+    PaymentHistory,
 }
 
 impl fmt::Display for Action {
@@ -747,6 +759,14 @@ pub enum Payload {
     /// denominations contains multiple proofs, and SIG_INPUTS requires each to
     /// be signed independently. See [`CashuProofSignature`].
     CashuSignatures(Vec<CashuProofSignature>),
+    /// Buyer's hash-only commitment to its fiat payer account, carried by
+    /// [`Action::DeclarePayer`] and [`Action::PayerDeclared`]. See
+    /// [`PayerDeclaration`].
+    PayerDeclaration(PayerDeclaration),
+    /// Aggregate history of a `(buyer, payment_hash)` pair, carried by
+    /// [`Action::PaymentHistory`] from Mostro to the seller. See
+    /// [`PaymentHistory`].
+    PaymentHistory(PaymentHistory),
 }
 
 #[allow(dead_code)]
@@ -861,6 +881,20 @@ impl MessageKind {
                     return false;
                 }
                 matches!(&self.payload, Some(Payload::CashuSignatures(sigs)) if !sigs.is_empty())
+            }
+            Action::DeclarePayer | Action::PayerDeclared => {
+                if self.id.is_none() {
+                    return false;
+                }
+                matches!(&self.payload, Some(Payload::PayerDeclaration(_)))
+            }
+            Action::PaymentHistory => {
+                if self.id.is_none() {
+                    return false;
+                }
+                // Two valid shapes: the seller's query (no payload) and
+                // Mostro's push / reply (the aggregate history).
+                matches!(&self.payload, None | Some(Payload::PaymentHistory(_)))
             }
             Action::TakeSell
             | Action::TakeBuy
@@ -1007,6 +1041,7 @@ mod test {
         Payload, Peer,
     };
     use crate::order::SmallOrder;
+    use crate::payer::{payment_hash, BuyerMode, PayerDeclaration, PaymentHistory};
     use crate::user::UserInfo;
     use nostr_sdk::prelude::Keys;
     use uuid::uuid;
@@ -1243,6 +1278,9 @@ mod test {
             | Action::AddCashuEscrow
             | Action::CashuEscrowLocked
             | Action::CashuPmSignature
+            | Action::DeclarePayer
+            | Action::PayerDeclared
+            | Action::PaymentHistory
             | Action::Orders => {}
         };
 
@@ -1297,6 +1335,9 @@ mod test {
             Action::AddCashuEscrow,
             Action::CashuEscrowLocked,
             Action::CashuPmSignature,
+            Action::DeclarePayer,
+            Action::PayerDeclared,
+            Action::PaymentHistory,
         ];
 
         for action in other_actions {
@@ -2293,5 +2334,206 @@ mod test {
             !no_id.verify(),
             "CashuEscrowLocked without id must be rejected"
         );
+    }
+
+    fn sample_declaration() -> PayerDeclaration {
+        PayerDeclaration::new(payment_hash("EU|SEPA|DE89370400440532013000|ALICE SMITH"))
+    }
+
+    fn sample_history() -> PaymentHistory {
+        PaymentHistory {
+            payment_hash: sample_declaration().payment_hash,
+            buyer_mode: BuyerMode::Reputation,
+            successful_trades: 47,
+            distinct_counterparties: 29,
+            experienced_counterparties: 11,
+            first_success_at: Some(1_762_128_000),
+            last_success_at: Some(1_787_654_321),
+        }
+    }
+
+    #[test]
+    fn test_payer_history_actions_use_kebab_case_wire_names() {
+        for (action, wire) in [
+            (Action::DeclarePayer, "\"declare-payer\""),
+            (Action::PayerDeclared, "\"payer-declared\""),
+            (Action::PaymentHistory, "\"payment-history\""),
+        ] {
+            assert_eq!(serde_json::to_string(&action).unwrap(), wire);
+            assert_eq!(serde_json::from_str::<Action>(wire).unwrap(), action);
+        }
+    }
+
+    #[test]
+    fn test_declare_payer_requires_id_and_declaration() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let decl = Some(Payload::PayerDeclaration(sample_declaration()));
+
+        let ok = MessageKind::new(
+            Some(order_id),
+            Some(1),
+            Some(7),
+            Action::DeclarePayer,
+            decl.clone(),
+        );
+        assert!(
+            ok.verify(),
+            "DeclarePayer with id and declaration must verify"
+        );
+
+        let no_id = MessageKind::new(None, None, None, Action::DeclarePayer, decl);
+        assert!(!no_id.verify(), "DeclarePayer without id must be rejected");
+
+        let no_payload = MessageKind::new(Some(order_id), None, None, Action::DeclarePayer, None);
+        assert!(
+            !no_payload.verify(),
+            "DeclarePayer without payload must be rejected"
+        );
+
+        let wrong = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::DeclarePayer,
+            Some(Payload::TextMessage(
+                "plaintext must never be sent".to_string(),
+            )),
+        );
+        assert!(
+            !wrong.verify(),
+            "DeclarePayer with a non-declaration payload must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_payer_declared_requires_id_and_declaration() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let decl = Some(Payload::PayerDeclaration(sample_declaration()));
+
+        let ok = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::PayerDeclared,
+            decl.clone(),
+        );
+        assert!(
+            ok.verify(),
+            "PayerDeclared with id and declaration must verify"
+        );
+
+        let no_id = MessageKind::new(None, None, None, Action::PayerDeclared, decl);
+        assert!(!no_id.verify(), "PayerDeclared without id must be rejected");
+
+        let no_payload = MessageKind::new(Some(order_id), None, None, Action::PayerDeclared, None);
+        assert!(
+            !no_payload.verify(),
+            "PayerDeclared without payload must be rejected"
+        );
+
+        let wrong = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::PayerDeclared,
+            Some(Payload::PaymentHistory(sample_history())),
+        );
+        assert!(
+            !wrong.verify(),
+            "PayerDeclared with a history payload must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_payment_history_accepts_query_and_reply_shapes() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+
+        // Seller → Mostro query: no payload.
+        let query = MessageKind::new(Some(order_id), Some(3), None, Action::PaymentHistory, None);
+        assert!(
+            query.verify(),
+            "PaymentHistory query (no payload) must verify"
+        );
+
+        // Mostro → seller push / reply: the aggregate history.
+        let reply = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::PaymentHistory,
+            Some(Payload::PaymentHistory(sample_history())),
+        );
+        assert!(reply.verify(), "PaymentHistory reply must verify");
+
+        let no_id = MessageKind::new(None, None, None, Action::PaymentHistory, None);
+        assert!(
+            !no_id.verify(),
+            "PaymentHistory without id must be rejected"
+        );
+
+        let wrong = MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::PaymentHistory,
+            Some(Payload::PayerDeclaration(sample_declaration())),
+        );
+        assert!(
+            !wrong.verify(),
+            "PaymentHistory with a declaration payload must be rejected"
+        );
+    }
+
+    #[test]
+    fn test_payer_payloads_round_trip_with_snake_case_keys() {
+        let order_id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+
+        let declare = Message::Order(MessageKind::new(
+            Some(order_id),
+            Some(981_231),
+            Some(7),
+            Action::DeclarePayer,
+            Some(Payload::PayerDeclaration(sample_declaration())),
+        ));
+        let json = declare.as_json().unwrap();
+        assert!(json.contains("\"action\":\"declare-payer\""));
+        assert!(json.contains("\"payer_declaration\":{\"payment_hash\":"));
+        assert!(Message::from_json(&json).unwrap().verify());
+
+        let push = Message::Order(MessageKind::new(
+            Some(order_id),
+            None,
+            None,
+            Action::PaymentHistory,
+            Some(Payload::PaymentHistory(sample_history())),
+        ));
+        let json = push.as_json().unwrap();
+        assert!(json.contains("\"payment_history\":{"));
+        assert!(json.contains("\"buyer_mode\":\"reputation\""));
+        assert!(json.contains("\"experienced_counterparties\":11"));
+        let back = Message::from_json(&json).unwrap();
+        assert!(back.verify());
+        match back.get_inner_message_kind().payload.clone() {
+            Some(Payload::PaymentHistory(h)) => assert_eq!(h, sample_history()),
+            other => panic!("expected a PaymentHistory payload, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_payment_history_parses_the_protocol_wire_example() {
+        // The full-privacy example from the protocol chapter, verbatim apart
+        // from the elided hash.
+        let hash = sample_declaration().payment_hash;
+        let json = format!(
+            r#"{{"payment_history": {{"payment_hash": "{hash}", "buyer_mode": "full_privacy",
+              "successful_trades": 0, "distinct_counterparties": 0,
+              "experienced_counterparties": 0,
+              "first_success_at": null, "last_success_at": null}}}}"#
+        );
+        let payload: Payload = serde_json::from_str(&json).unwrap();
+        match payload {
+            Payload::PaymentHistory(h) => assert_eq!(h, PaymentHistory::unavailable(hash)),
+            other => panic!("expected a PaymentHistory payload, got {other:?}"),
+        }
     }
 }

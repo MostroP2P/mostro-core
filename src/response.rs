@@ -80,6 +80,8 @@ fn action_accepts_missing_request_id(action: &Action) -> bool {
             | Action::BondSlashed
             | Action::CashuEscrowLocked
             | Action::CashuPmSignature
+            | Action::PayerDeclared
+            | Action::PaymentHistory
     )
 }
 
@@ -162,5 +164,36 @@ mod tests {
             ));
             validate_response(&msg, Some(1)).unwrap();
         }
+    }
+
+    #[test]
+    fn validate_response_allows_payer_history_pushes_without_request_id() {
+        // The seller receives the forwarded `payer-declared` and the
+        // `payment-history` push unsolicited, possibly while waiting on an
+        // unrelated request.
+        for action in [Action::PayerDeclared, Action::PaymentHistory] {
+            let msg = Message::Order(MessageKind::new(
+                Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+                None,
+                None,
+                action,
+                None,
+            ));
+            validate_response(&msg, Some(1)).unwrap();
+        }
+    }
+
+    #[test]
+    fn validate_response_rejects_declare_payer_echo_without_request_id() {
+        // `declare-payer` is only ever sent by a client; it is never a valid
+        // unsolicited response.
+        let msg = Message::Order(MessageKind::new(
+            Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+            None,
+            None,
+            Action::DeclarePayer,
+            None,
+        ));
+        assert!(validate_response(&msg, Some(1)).is_err());
     }
 }
