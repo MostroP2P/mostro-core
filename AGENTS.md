@@ -11,7 +11,7 @@ Mostro Core is a Rust library with `src/lib.rs` orchestrating modules that mirro
 - `cargo doc --open` — review generated API docs when adding or renaming exports.
 
 ## Coding Style & Naming Conventions
-Code targets Rust 1.86.0 (2021 edition). Favor clear module boundaries and avoid leaking internals outside the prelude unless necessary. Use `snake_case` for functions and modules, `PascalCase` for types and enums, and `SCREAMING_SNAKE_CASE` for constants. Document public APIs with `///` comments and keep error enums exhaustive. Always run `cargo fmt` before pushing and address clippy warnings immediately.
+Code targets Rust 1.94.0 (2021 edition). Favor clear module boundaries and avoid leaking internals outside the prelude unless necessary. Use `snake_case` for functions and modules, `PascalCase` for types and enums, and `SCREAMING_SNAKE_CASE` for constants. Document public APIs with `///` comments and keep error enums exhaustive. Always run `cargo fmt` before pushing and address clippy warnings immediately.
 
 ## Testing Guidelines
 Place new unit tests in the same module inside `#[cfg(test)] mod tests` blocks with descriptive names like `test_signature_roundtrip`. Cover failure paths around invalid currencies, dispute resolution, and other edge cases. Reuse existing builders or helpers instead of duplicating fixtures. Run `cargo test --all-features` before opening a PR to ensure feature parity.
