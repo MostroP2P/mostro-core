@@ -112,8 +112,45 @@ pub struct User {
     pub max_rating: i64,
     /// Lowest rating ever received.
     pub min_rating: i64,
-    /// Unix timestamp (seconds) when the user record was created.
+    /// Unix timestamp (seconds) the user's age is shown from: when the
+    /// record was created, moved back by an imported reputation's earlier
+    /// first-trade date.
     pub created_at: i64,
+    /// Ratings received through imported reputation, never natively.
+    /// Internal only. See [`crate::reputation`].
+    #[cfg_attr(feature = "sqlx", sqlx(default))]
+    #[serde(default)]
+    pub seeded_reviews: i64,
+    /// Sum of `rating × reviews` over every imported reputation. Internal
+    /// only.
+    #[cfg_attr(feature = "sqlx", sqlx(default))]
+    #[serde(default)]
+    pub seeded_rating_sum: f64,
+    /// Sum of the raw ratings received natively, with no first-vote
+    /// damping, so the native average is exact. Internal only.
+    #[cfg_attr(feature = "sqlx", sqlx(default))]
+    #[serde(default)]
+    pub native_rating_sum: f64,
+    /// When the record was created, which an import never moves: what
+    /// `created_at` goes back to when an import is reversed. Read it through
+    /// [`User::native_created_at`].
+    ///
+    /// An `Option` on purpose: a database that predates the column reads it
+    /// as `None`, and the accessor falls back to `created_at`; a plain `i64`
+    /// would default to `0` and place every such user in 1970.
+    #[cfg_attr(feature = "sqlx", sqlx(default))]
+    #[serde(default)]
+    pub native_created_at: Option<i64>,
+    /// The identity this account's reputation is bound to, as an issuer:
+    /// the only identity an export may name without a rebind authorisation.
+    #[cfg_attr(feature = "sqlx", sqlx(default))]
+    #[serde(default)]
+    pub reputation_exported_to: Option<String>,
+    /// UTC day start of the last export. Day precision, so the record cannot
+    /// time-correlate an export with an import elsewhere.
+    #[cfg_attr(feature = "sqlx", sqlx(default))]
+    #[serde(default)]
+    pub reputation_exported_at: Option<i64>,
 }
 
 impl User {
@@ -129,6 +166,7 @@ impl User {
         category: i64,
         trade_index: i64,
     ) -> Self {
+        let created_at = Utc::now().timestamp();
         Self {
             pubkey,
             is_admin,
@@ -142,8 +180,18 @@ impl User {
             last_rating: 0,
             max_rating: 0,
             min_rating: 0,
-            created_at: Utc::now().timestamp(),
+            created_at,
+            native_created_at: Some(created_at),
+            ..Self::default()
         }
+    }
+
+    /// When the record was created, which no import ever moves.
+    ///
+    /// Falls back to `created_at` for a record whose database predates the
+    /// `native_created_at` column, never to `0`.
+    pub fn native_created_at(&self) -> i64 {
+        self.native_created_at.unwrap_or(self.created_at)
     }
 
     /// Record a new rating for the user and refresh the aggregates.
@@ -193,6 +241,78 @@ impl User {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_new_user_records_its_creation_as_the_native_date() {
+        let user = User::new("pubkey".into(), 0, 0, 0, 0, 0);
+        assert_eq!(user.native_created_at, Some(user.created_at));
+        assert_eq!(user.native_created_at(), user.created_at);
+        assert_eq!((user.seeded_reviews, user.seeded_rating_sum), (0, 0.0));
+        assert_eq!(user.native_rating_sum, 0.0);
+        assert_eq!(user.reputation_exported_to, None);
+        assert_eq!(user.reputation_exported_at, None);
+    }
+
+    #[test]
+    fn a_record_without_a_native_date_falls_back_to_created_at_never_zero() {
+        let user = User {
+            created_at: 1_700_000_000,
+            native_created_at: None,
+            ..User::default()
+        };
+        assert_eq!(user.native_created_at(), 1_700_000_000);
+    }
+
+    #[test]
+    fn a_serialised_user_from_before_the_new_fields_still_deserialises() {
+        let json = r#"{"pubkey":"p","is_admin":0,"admin_password":null,"is_solver":0,
+            "is_banned":0,"category":0,"last_trade_index":3,"total_reviews":2,
+            "total_rating":4.5,"last_rating":5,"max_rating":5,"min_rating":4,
+            "created_at":1700000000}"#;
+        let user: User = serde_json::from_str(json).unwrap();
+        assert_eq!(user.native_created_at(), 1_700_000_000);
+        assert_eq!(user.seeded_reviews, 0);
+    }
+
+    /// A daemon whose database predates the migration still reads its rows
+    /// with `SELECT *`, and the native date of such a row is its
+    /// `created_at`, not 1970.
+    #[cfg(feature = "sqlx")]
+    #[tokio::test]
+    async fn a_row_without_the_new_columns_loads_with_their_defaults() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(":memory:")
+            .await
+            .unwrap();
+        sqlx::query(
+            "CREATE TABLE users (pubkey char(64) primary key, is_admin integer not null default 0, \
+             admin_password char(64), is_solver integer not null default 0, \
+             is_banned integer not null default 0, category integer not null default 0, \
+             last_trade_index integer not null default 0, total_reviews integer not null default 0, \
+             total_rating real not null default 0.0, last_rating integer not null default 0, \
+             max_rating integer not null default 0, min_rating integer not null default 0, \
+             created_at integer not null)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO users (pubkey, total_reviews, total_rating, created_at) \
+             VALUES ('p', 2, 4.5, 1700000000)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let user: User = sqlx::query_as("SELECT * FROM users")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(user.native_created_at, None);
+        assert_eq!(user.native_created_at(), 1_700_000_000);
+        assert_eq!((user.seeded_reviews, user.native_rating_sum), (0, 0.0));
+        assert_eq!(user.reputation_exported_to, None);
+    }
 
     /// 2026-01-01T00:00:00Z, and the same instant plus most of a day.
     const DAY_START: i64 = 1_767_225_600;
