@@ -128,6 +128,12 @@ pub struct User {
     pub seeded_rating_sum: f64,
     /// Sum of the raw ratings received natively, with no first-vote
     /// damping, so the native average is exact. Internal only.
+    ///
+    /// A row that predates the column must be backfilled as
+    /// `total_rating * total_reviews` before it takes a new rating: the
+    /// default `0.0` would make the sum count only post-migration ratings.
+    /// Rows from before any import have no seeded reviews, so that product is
+    /// their whole native history, damped by the first vote.
     #[cfg_attr(feature = "sqlx", sqlx(default))]
     #[serde(default)]
     pub native_rating_sum: f64,
