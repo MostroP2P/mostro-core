@@ -152,10 +152,10 @@ mod tests {
     #[test]
     fn payment_hash_is_domain_separated_lowercase_sha256() {
         // Arrange: computed independently with
-        // `printf '%s' 'mostro-payer-v1|BR|PIX|+5511999998888' | sha256sum`.
-        let expected = "77801d9713f5a93e133c8b507429b69ce89ae392e5c37c4777730e2153f08b78";
+        // `printf '%s' 'mostro-payer-v1|EU|SEPA|DE89370400440532013000|ALICE SMITH' | sha256sum`.
+        let expected = "ee06af92c95429e7cb0cf8428636199a71a01e32bab7a8526d226161f0de9903";
         // Act
-        let hash = payment_hash("BR|PIX|+5511999998888");
+        let hash = payment_hash("EU|SEPA|DE89370400440532013000|ALICE SMITH");
         // Assert
         assert_eq!(hash.len(), PAYMENT_HASH_HEX_LEN);
         assert!(is_valid_payment_hash(&hash));
