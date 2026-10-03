@@ -109,6 +109,12 @@ pub enum CantDoReason {
     /// Lightning node migration) and is not accepting new orders or takes.
     /// Actions on already existing orders keep working.
     MaintenanceMode,
+    /// The `payment_hash` of a payer declaration is not 64 lowercase hex
+    /// characters.
+    InvalidPaymentHash,
+    /// `fiat-sent` was refused because this node requires the buyer to send
+    /// `declare-payer` first.
+    PayerNotDeclared,
     /// A reputation request carries no identity proof: in full privacy mode
     /// there is no identity-bound reputation to export or import into.
     ReputationIdentityRequired,
@@ -322,6 +328,19 @@ mod tests {
         assert_eq!(json, "\"maintenance_mode\"");
         let round: CantDoReason = serde_json::from_str(&json).unwrap();
         assert_eq!(round, CantDoReason::MaintenanceMode);
+    }
+
+    #[test]
+    fn payer_history_reasons_serialize_to_snake_case() {
+        for (reason, wire) in [
+            (CantDoReason::InvalidPaymentHash, "\"invalid_payment_hash\""),
+            (CantDoReason::PayerNotDeclared, "\"payer_not_declared\""),
+        ] {
+            let json = serde_json::to_string(&reason).unwrap();
+            assert_eq!(json, wire);
+            let round: CantDoReason = serde_json::from_str(&json).unwrap();
+            assert_eq!(round, reason);
+        }
     }
 
     #[test]

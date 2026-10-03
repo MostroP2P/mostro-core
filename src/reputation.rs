@@ -148,6 +148,7 @@ impl ReputationAttestation {
     /// `average` is the issuer's internal average; it is rounded and clamped
     /// as [`rating_hundredths`] does. The arguments are checked against the
     /// rules a destination applies, so a successful build always parses.
+    /// `lifetime` is at most [`ATTESTATION_LIFETIME_SECS`], the default cap.
     #[allow(clippy::too_many_arguments)]
     pub fn build(
         issuer: &Keys,
@@ -171,7 +172,7 @@ impl ReputationAttestation {
         if !valid_since(since, created) {
             return Err(AttestationError::InvalidInput("since"));
         }
-        if lifetime == 0 {
+        if lifetime == 0 || lifetime > ATTESTATION_LIFETIME_SECS {
             return Err(AttestationError::InvalidInput("lifetime"));
         }
         let expiration = created
@@ -740,6 +741,10 @@ mod tests {
         );
         assert_eq!(
             build("s", 5, 4.0, since, 0),
+            Err(AttestationError::InvalidInput("lifetime"))
+        );
+        assert_eq!(
+            build("s", 5, 4.0, since, ATTESTATION_LIFETIME_SECS + 1),
             Err(AttestationError::InvalidInput("lifetime"))
         );
         assert_eq!(
