@@ -1229,6 +1229,7 @@ mod test {
             buyer_invoice: None,
             created_at: None,
             expires_at: None,
+            cashu_mint_url: None,
         };
         let payload = Payload::BondPayoutRequest(BondPayoutRequest {
             order,
@@ -1276,6 +1277,7 @@ mod test {
             buyer_invoice: None,
             created_at: None,
             expires_at: None,
+            cashu_mint_url: None,
         };
 
         // Compile-time exhaustiveness guard: adding a new Action variant
@@ -1510,6 +1512,7 @@ mod test {
             buyer_invoice: None,
             created_at: None,
             expires_at: None,
+            cashu_mint_url: None,
         };
 
         // These bond notifications carry Payload::Order (BondInvoiceAccepted
