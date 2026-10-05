@@ -94,11 +94,12 @@ pub enum CantDoReason {
     /// 2-of-3 spending condition does not match the expected
     /// buyer/seller/Mostro pubkeys.
     InvalidCashuToken,
-    /// The configured Cashu mint could not be reached or did not answer the
-    /// state check.
+    /// The order's Cashu mint could not be reached or did not answer the
+    /// state check. Nothing was recorded, so the request can be retried.
     CashuMintUnavailable,
-    /// The provided mint URL is malformed or does not match the node's
-    /// configured mint.
+    /// The mint URL is malformed, names a mint the node does not accept for
+    /// a new order, or does not match the mint the order's escrow must be
+    /// locked on.
     InvalidMintUrl,
     /// The requested action needs a locked Cashu escrow, but none has been
     /// recorded for this order.
@@ -335,6 +336,32 @@ mod tests {
         for (reason, wire) in [
             (CantDoReason::InvalidPaymentHash, "\"invalid_payment_hash\""),
             (CantDoReason::PayerNotDeclared, "\"payer_not_declared\""),
+        ] {
+            let json = serde_json::to_string(&reason).unwrap();
+            assert_eq!(json, wire);
+            let round: CantDoReason = serde_json::from_str(&json).unwrap();
+            assert_eq!(round, reason);
+        }
+    }
+
+    #[test]
+    fn cashu_reasons_serialize_to_snake_case() {
+        // Wire names documented in the protocol's CantDo catalog.
+        for (reason, wire) in [
+            (CantDoReason::InvalidCashuToken, "\"invalid_cashu_token\""),
+            (
+                CantDoReason::CashuMintUnavailable,
+                "\"cashu_mint_unavailable\"",
+            ),
+            (CantDoReason::InvalidMintUrl, "\"invalid_mint_url\""),
+            (
+                CantDoReason::CashuEscrowNotLocked,
+                "\"cashu_escrow_not_locked\"",
+            ),
+            (
+                CantDoReason::CashuSignatureMissing,
+                "\"cashu_signature_missing\"",
+            ),
         ] {
             let json = serde_json::to_string(&reason).unwrap();
             assert_eq!(json, wire);
