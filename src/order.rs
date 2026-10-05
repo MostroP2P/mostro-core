@@ -301,6 +301,7 @@ impl From<SmallOrder> for Order {
             created_at: small_order.created_at.unwrap_or(0),
             expires_at: small_order.expires_at.unwrap_or(0),
             payment_attempts: 0,
+            cashu_mint_url: small_order.cashu_mint_url,
             ..Default::default()
         }
     }
@@ -313,7 +314,7 @@ impl Order {
     /// from `self`. Trade pubkeys are left unset because a new order is
     /// published before a counterpart is assigned.
     pub fn as_new_order(&self) -> SmallOrder {
-        SmallOrder::new(
+        let small_order = SmallOrder::new(
             Some(self.id),
             Some(Kind::from_str(&self.kind).unwrap()),
             Some(Status::from_str(&self.status).unwrap()),
@@ -329,7 +330,11 @@ impl Order {
             self.buyer_invoice.clone(),
             Some(self.created_at),
             Some(self.expires_at),
-        )
+        );
+        SmallOrder {
+            cashu_mint_url: self.cashu_mint_url.clone(),
+            ..small_order
+        }
     }
     /// Parse the order kind from the string-encoded field.
     ///
@@ -593,6 +598,13 @@ pub struct SmallOrder {
     pub created_at: Option<i64>,
     /// Unix timestamp (seconds) when the order expires automatically.
     pub expires_at: Option<i64>,
+    /// URL of the Cashu mint the escrow will be locked on (Cashu escrow mode
+    /// only). The maker chooses it in `new-order`; the node publishes the
+    /// order only if it accepts that mint, and a taker accepts it by taking
+    /// the order. Omitted from JSON when `None`, so Lightning orders are
+    /// unchanged on the wire.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cashu_mint_url: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -632,6 +644,7 @@ impl SmallOrder {
             buyer_invoice,
             created_at,
             expires_at,
+            cashu_mint_url: None,
         }
     }
     /// Parse a [`SmallOrder`] from its JSON representation.
@@ -768,6 +781,7 @@ impl From<Order> for SmallOrder {
             buyer_invoice,
             created_at: Some(order.created_at),
             expires_at: Some(order.expires_at),
+            cashu_mint_url: order.cashu_mint_url,
         }
     }
 }
@@ -1125,5 +1139,71 @@ mod tests {
         let result = order.check_amount();
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), CantDoReason::InvalidAmount);
+    }
+
+    const MINT: &str = "https://mint.example.com";
+
+    fn cashu_order() -> Order {
+        Order {
+            kind: Kind::Sell.to_string(),
+            status: Status::Pending.to_string(),
+            fiat_code: "USD".to_string(),
+            fiat_amount: 100,
+            payment_method: "SEPA".to_string(),
+            cashu_mint_url: Some(MINT.to_string()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn small_order_omits_cashu_mint_url_when_none() {
+        // A Lightning order must serialize byte-for-byte as before the field
+        // existed, so nodes and clients that predate it keep parsing it.
+        let order = SmallOrder::default();
+        let json = order.as_json().unwrap();
+        assert!(!json.contains("cashu_mint_url"));
+    }
+
+    #[test]
+    fn small_order_parses_without_cashu_mint_url() {
+        let json = r#"{"kind":"sell","status":"pending","amount":0,"fiat_code":"USD","min_amount":null,"max_amount":null,"fiat_amount":100,"payment_method":"SEPA","premium":0,"created_at":null,"expires_at":null}"#;
+        let order = SmallOrder::from_json(json).unwrap();
+        assert_eq!(order.cashu_mint_url, None);
+    }
+
+    #[test]
+    fn small_order_cashu_mint_url_roundtrips() {
+        let order = SmallOrder {
+            cashu_mint_url: Some(MINT.to_string()),
+            ..SmallOrder::default()
+        };
+        let json = order.as_json().unwrap();
+        assert!(json.contains(r#""cashu_mint_url":"https://mint.example.com""#));
+        let back = SmallOrder::from_json(&json).unwrap();
+        assert_eq!(back.cashu_mint_url.as_deref(), Some(MINT));
+    }
+
+    #[test]
+    fn order_from_small_order_keeps_cashu_mint_url() {
+        let small = SmallOrder {
+            cashu_mint_url: Some(MINT.to_string()),
+            ..SmallOrder::default()
+        };
+        let order = Order::from(small);
+        assert_eq!(order.cashu_mint_url.as_deref(), Some(MINT));
+    }
+
+    #[test]
+    fn small_order_from_order_keeps_cashu_mint_url() {
+        let small = SmallOrder::from(cashu_order());
+        assert_eq!(small.cashu_mint_url.as_deref(), Some(MINT));
+    }
+
+    #[test]
+    fn as_new_order_keeps_cashu_mint_url() {
+        // The published order must carry its mint so a taker sees it before
+        // taking the order.
+        let small = cashu_order().as_new_order();
+        assert_eq!(small.cashu_mint_url.as_deref(), Some(MINT));
     }
 }
