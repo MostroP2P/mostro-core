@@ -185,6 +185,12 @@ pub enum Action {
     /// Client asks Mostro for its last known trade index. Payload must be
     /// `None`.
     LastTradeIndex,
+    /// Client asks Mostro for its own reputation snapshot (`UserInfo`).
+    ///
+    /// Request: `payload` must be `None`. Response: `None` (identity unknown
+    /// on this node) or [`Payload::Peer`] with optional reputation. Carries
+    /// no order `id`.
+    GetUserInfo,
     /// Listing of orders in response to a query.
     /// Payload: [`Payload::Ids`] or [`Payload::Orders`].
     Orders,
@@ -987,6 +993,9 @@ impl MessageKind {
                 )
             }
             Action::LastTradeIndex | Action::RestoreSession => self.payload.is_none(),
+            Action::GetUserInfo => {
+                self.id.is_none() && matches!(&self.payload, None | Some(Payload::Peer(_)))
+            }
             Action::PaymentFailed => {
                 if self.id.is_none() {
                     return false;
@@ -1332,6 +1341,7 @@ mod test {
             | Action::TradePubkey
             | Action::RestoreSession
             | Action::LastTradeIndex
+            | Action::GetUserInfo
             | Action::AddCashuEscrow
             | Action::CashuEscrowLocked
             | Action::CashuPmSignature
@@ -1392,6 +1402,7 @@ mod test {
             Action::TradePubkey,
             Action::RestoreSession,
             Action::LastTradeIndex,
+            Action::GetUserInfo,
             Action::Orders,
             Action::AddCashuEscrow,
             Action::CashuEscrowLocked,
@@ -1470,6 +1481,7 @@ mod test {
             Action::TradePubkey,
             Action::RestoreSession,
             Action::LastTradeIndex,
+            Action::GetUserInfo,
             Action::Orders,
             Action::AddCashuEscrow,
             Action::CashuEscrowLocked,
@@ -1933,6 +1945,62 @@ mod test {
     }
 
     #[test]
+    fn test_get_user_info_request_without_payload_verifies() {
+        let kind = MessageKind::new(None, Some(1), None, Action::GetUserInfo, None);
+        let msg = Message::Restore(kind);
+        assert!(msg.verify());
+
+        let json = msg.as_json().unwrap();
+        assert!(json.contains("get-user-info"));
+        let decoded = Message::from_json(&json).unwrap();
+        assert!(decoded.verify());
+        assert_eq!(decoded.get_inner_message_kind().action, Action::GetUserInfo);
+    }
+
+    #[test]
+    fn test_get_user_info_response_with_peer_verifies() {
+        let reputation = UserInfo {
+            rating: 4.5,
+            reviews: 12,
+            operating_days: 90,
+            since: Some(1_700_000_000),
+        };
+        let kind = MessageKind::new(
+            None,
+            Some(1),
+            None,
+            Action::GetUserInfo,
+            Some(Payload::Peer(Peer::new(
+                "identity-pubkey".to_string(),
+                Some(reputation),
+            ))),
+        );
+        let msg = Message::Restore(kind);
+        assert!(msg.verify());
+    }
+
+    #[test]
+    fn test_get_user_info_rejects_wrong_payload_and_id() {
+        let wrong_payload = MessageKind::new(
+            None,
+            None,
+            None,
+            Action::GetUserInfo,
+            Some(Payload::TextMessage("nope".to_string())),
+        );
+        assert!(!Message::Restore(wrong_payload).verify());
+
+        let with_id = MessageKind::new(
+            Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+            None,
+            None,
+            Action::GetUserInfo,
+            None,
+        );
+        assert!(!Message::Restore(with_id).verify());
+    }
+
+    #[test]
     fn test_bond_resolution_admin_actions_accept_payload_or_none() {
         use crate::message::BondResolution;
 
@@ -2047,6 +2115,7 @@ mod test {
             Action::TradePubkey,
             Action::RestoreSession,
             Action::LastTradeIndex,
+            Action::GetUserInfo,
             Action::Orders,
         ] {
             let msg = Message::Order(MessageKind::new(
