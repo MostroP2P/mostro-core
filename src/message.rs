@@ -185,6 +185,11 @@ pub enum Action {
     /// Client asks Mostro for its last known trade index. Payload must be
     /// `None`.
     LastTradeIndex,
+    /// Client reads the reputation this node holds for its own identity key.
+    /// Sent in the `restore` wrapper, requires the identity proof and carries
+    /// no `id`. Request payload: `None`. Response payload:
+    /// [`Payload::UserInfo`] (zeros and no `since` for an unknown identity).
+    UserInfo,
     /// Listing of orders in response to a query.
     /// Payload: [`Payload::Ids`] or [`Payload::Orders`].
     Orders,
@@ -359,8 +364,14 @@ impl Message {
     }
 
     /// Validate that the inner [`MessageKind`] is consistent with its
-    /// [`Action`]. Delegates to [`MessageKind::verify`].
+    /// [`Action`]. Delegates to [`MessageKind::verify`], and rejects
+    /// [`Action::UserInfo`] outside the `restore` wrapper.
     pub fn verify(&self) -> bool {
+        if !matches!(self, Message::Restore(_))
+            && self.get_inner_message_kind().action == Action::UserInfo
+        {
+            return false;
+        }
         match self {
             Message::Order(m)
             | Message::Dispute(m)
@@ -809,6 +820,9 @@ pub enum Payload {
     /// [`ReputationAttestation::parse_json`](crate::reputation::ReputationAttestation::parse_json);
     /// a client forwards it unchanged.
     ReputationAttestation(String),
+    /// The requester's own reputation on this node, carried by
+    /// [`Action::UserInfo`] from Mostro to the client.
+    UserInfo(UserInfo),
 }
 
 #[allow(dead_code)]
@@ -984,9 +998,13 @@ impl MessageKind {
                         | Some(Payload::BondPayoutRequest(_))
                         | Some(Payload::PayerDeclaration(_))
                         | Some(Payload::PaymentHistory(_))
+                        | Some(Payload::UserInfo(_))
                 )
             }
             Action::LastTradeIndex | Action::RestoreSession => self.payload.is_none(),
+            Action::UserInfo => {
+                self.id.is_none() && matches!(&self.payload, None | Some(Payload::UserInfo(_)))
+            }
             Action::PaymentFailed => {
                 if self.id.is_none() {
                     return false;
@@ -1332,6 +1350,7 @@ mod test {
             | Action::TradePubkey
             | Action::RestoreSession
             | Action::LastTradeIndex
+            | Action::UserInfo
             | Action::AddCashuEscrow
             | Action::CashuEscrowLocked
             | Action::CashuPmSignature
@@ -1392,6 +1411,7 @@ mod test {
             Action::TradePubkey,
             Action::RestoreSession,
             Action::LastTradeIndex,
+            Action::UserInfo,
             Action::Orders,
             Action::AddCashuEscrow,
             Action::CashuEscrowLocked,
@@ -1470,6 +1490,7 @@ mod test {
             Action::TradePubkey,
             Action::RestoreSession,
             Action::LastTradeIndex,
+            Action::UserInfo,
             Action::Orders,
             Action::AddCashuEscrow,
             Action::CashuEscrowLocked,
@@ -1933,6 +1954,115 @@ mod test {
     }
 
     #[test]
+    fn test_user_info_request_wire_format() {
+        let json =
+            r#"{"restore":{"version":2,"request_id":123456,"action":"user-info","payload":null}}"#;
+        let msg = Message::from_json(json).unwrap();
+        assert!(msg.verify());
+        let inner = msg.get_inner_message_kind();
+        assert_eq!(inner.action, Action::UserInfo);
+        assert_eq!(inner.request_id, Some(123456));
+        assert!(inner.id.is_none());
+        assert!(inner.payload.is_none());
+
+        let kind = MessageKind::new(None, Some(123456), None, Action::UserInfo, None);
+        let out = Message::Restore(kind).as_json().unwrap();
+        assert!(out.contains(r#""action":"user-info""#));
+    }
+
+    #[test]
+    fn test_user_info_response_wire_format() {
+        let json = r#"{"restore":{"version":2,"request_id":123456,"action":"user-info","payload":{"user_info":{"rating":4.8,"reviews":23,"operating_days":142,"since":1700784000}}}}"#;
+        let msg = Message::from_json(json).unwrap();
+        assert!(msg.verify());
+        match msg.get_inner_message_kind().payload.as_ref() {
+            Some(Payload::UserInfo(info)) => {
+                assert_eq!(info.rating, 4.8);
+                assert_eq!(info.reviews, 23);
+                assert_eq!(info.operating_days, 142);
+                assert_eq!(info.since, Some(1_700_784_000));
+            }
+            other => panic!("unexpected payload: {other:?}"),
+        }
+        let value: serde_json::Value = serde_json::from_str(&msg.as_json().unwrap()).unwrap();
+        let expected: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["restore"]["action"], expected["restore"]["action"]);
+        assert_eq!(value["restore"]["payload"], expected["restore"]["payload"]);
+    }
+
+    #[test]
+    fn test_user_info_response_unknown_identity_omits_since() {
+        let info = UserInfo {
+            rating: 0.0,
+            reviews: 0,
+            operating_days: 0,
+            since: None,
+        };
+        let kind = MessageKind::new(
+            None,
+            None,
+            None,
+            Action::UserInfo,
+            Some(Payload::UserInfo(info)),
+        );
+        let msg = Message::Restore(kind);
+        assert!(msg.verify());
+        let json = msg.as_json().unwrap();
+        assert!(json.contains(r#""payload":{"user_info":{"#));
+        assert!(!json.contains("since"));
+    }
+
+    #[test]
+    fn test_user_info_rejects_wrong_payload_and_id() {
+        let wrong_payload = MessageKind::new(
+            None,
+            None,
+            None,
+            Action::UserInfo,
+            Some(Payload::Peer(Peer::new("pubkey".to_string(), None))),
+        );
+        assert!(!Message::Restore(wrong_payload).verify());
+
+        let with_id = MessageKind::new(
+            Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+            None,
+            None,
+            Action::UserInfo,
+            None,
+        );
+        assert!(!Message::Restore(with_id).verify());
+
+        let on_order_action = MessageKind::new(
+            Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+            None,
+            None,
+            Action::FiatSent,
+            Some(Payload::UserInfo(UserInfo {
+                rating: 0.0,
+                reviews: 0,
+                operating_days: 0,
+                since: None,
+            })),
+        );
+        assert!(!on_order_action.verify());
+    }
+
+    #[test]
+    fn test_user_info_rejected_outside_restore_wrapper() {
+        let request = MessageKind::new(None, Some(1), None, Action::UserInfo, None);
+        assert!(Message::Restore(request.clone()).verify());
+        for msg in [
+            Message::Order(request.clone()),
+            Message::Dispute(request.clone()),
+            Message::CantDo(request.clone()),
+            Message::Rate(request.clone()),
+            Message::Dm(request),
+        ] {
+            assert!(!msg.verify(), "user-info must be rejected in {msg:?}");
+        }
+    }
+
+    #[test]
     fn test_bond_resolution_admin_actions_accept_payload_or_none() {
         use crate::message::BondResolution;
 
@@ -2047,6 +2177,7 @@ mod test {
             Action::TradePubkey,
             Action::RestoreSession,
             Action::LastTradeIndex,
+            Action::UserInfo,
             Action::Orders,
         ] {
             let msg = Message::Order(MessageKind::new(

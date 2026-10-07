@@ -117,7 +117,7 @@ pub enum CantDoReason {
     /// `declare-payer` first.
     PayerNotDeclared,
     /// A reputation request carries no identity proof: in full privacy mode
-    /// there is no identity-bound reputation to export or import into.
+    /// there is no identity-bound reputation to read, export or import into.
     ReputationIdentityRequired,
     /// The account cannot export its reputation: it is banned, or has fewer
     /// than 10 completed trades or 5 ratings received.
