@@ -669,12 +669,19 @@ mod tests {
             let result = ReputationRebind::parse(&event(&case["event"]), now);
             if REBIND_CONTEXT_REFUSALS.contains(&name) {
                 let r = result.expect(name);
-                assert!(
-                    r.bound_identity != bound
-                        || r.issuer != issuer
-                        || r.new_identity != destination,
-                    "{name}"
+                // Each case breaks exactly the field it is named after.
+                let mismatched = (
+                    r.bound_identity != bound,
+                    r.issuer != issuer,
+                    r.new_identity != destination,
                 );
+                let expected = match name {
+                    "signed_by_other_identity" => (true, false, false),
+                    "other_issuer" => (false, true, false),
+                    "other_destination" => (false, false, true),
+                    _ => unreachable!("{name}"),
+                };
+                assert_eq!(mismatched, expected, "{name}");
             } else {
                 assert!(result.is_err(), "{name}: {result:?}");
             }
