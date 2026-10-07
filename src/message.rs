@@ -364,8 +364,14 @@ impl Message {
     }
 
     /// Validate that the inner [`MessageKind`] is consistent with its
-    /// [`Action`]. Delegates to [`MessageKind::verify`].
+    /// [`Action`]. Delegates to [`MessageKind::verify`], and rejects
+    /// [`Action::UserInfo`] outside the `restore` wrapper.
     pub fn verify(&self) -> bool {
+        if !matches!(self, Message::Restore(_))
+            && self.get_inner_message_kind().action == Action::UserInfo
+        {
+            return false;
+        }
         match self {
             Message::Order(m)
             | Message::Dispute(m)
@@ -2039,6 +2045,21 @@ mod test {
             })),
         );
         assert!(!on_order_action.verify());
+    }
+
+    #[test]
+    fn test_user_info_rejected_outside_restore_wrapper() {
+        let request = MessageKind::new(None, Some(1), None, Action::UserInfo, None);
+        assert!(Message::Restore(request.clone()).verify());
+        for msg in [
+            Message::Order(request.clone()),
+            Message::Dispute(request.clone()),
+            Message::CantDo(request.clone()),
+            Message::Rate(request.clone()),
+            Message::Dm(request),
+        ] {
+            assert!(!msg.verify(), "user-info must be rejected in {msg:?}");
+        }
     }
 
     #[test]
