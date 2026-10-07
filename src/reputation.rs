@@ -325,8 +325,9 @@ impl ReputationRebind {
 
     /// Parse and verify a rebind authorisation.
     ///
-    /// Whether the signer is the identity actually bound, and whether
-    /// `issuer` is the receiver's own issuer key, is the caller's to check.
+    /// Whether the signer is the identity actually bound, whether `issuer`
+    /// is the receiver's own issuer key, and whether `p` is the destination
+    /// of the export request it travels in, is the caller's to check.
     pub fn parse(event: &Event, now: Timestamp) -> Result<Self, AttestationError> {
         verify(event, REBIND_DOCUMENT)?;
         let tags = single_tags(event, &["p", "issuer", "expiration"])?;
@@ -511,7 +512,11 @@ mod tests {
     /// Well-formed attestations that only the destination's context refuses.
     const CONTEXT_REFUSALS: [&str; 3] = ["identity_mismatch", "untrusted_issuer", "own_issuer_key"];
     /// Well-formed rebinds that only the issuer's context refuses.
-    const REBIND_CONTEXT_REFUSALS: [&str; 2] = ["signed_by_other_identity", "other_issuer"];
+    const REBIND_CONTEXT_REFUSALS: [&str; 3] = [
+        "signed_by_other_identity",
+        "other_issuer",
+        "other_destination",
+    ];
 
     fn vectors() -> Value {
         serde_json::from_str(VECTORS).expect("vectors parse")
@@ -658,12 +663,18 @@ mod tests {
         let ctx = &rebind["context"];
         let now = Timestamp::from(u64_at(ctx, "now"));
         let (bound, issuer) = (key(&ctx["bound_identity"]), key(&ctx["issuer_key"]));
+        let destination = key(&ctx["destination"]);
         for case in rebind["invalid"].as_array().expect("cases") {
             let name = case["name"].as_str().expect("name");
             let result = ReputationRebind::parse(&event(&case["event"]), now);
             if REBIND_CONTEXT_REFUSALS.contains(&name) {
                 let r = result.expect(name);
-                assert!(r.bound_identity != bound || r.issuer != issuer, "{name}");
+                assert!(
+                    r.bound_identity != bound
+                        || r.issuer != issuer
+                        || r.new_identity != destination,
+                    "{name}"
+                );
             } else {
                 assert!(result.is_err(), "{name}: {result:?}");
             }
