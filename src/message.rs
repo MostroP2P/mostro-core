@@ -172,9 +172,10 @@ pub enum Action {
     /// Solver took the dispute acknowledged.
     AdminTookDispute,
     /// The admin or a registered solver asks for the real state of an
-    /// order of the node. Read-only. Sent in the `order` wrapper; `id` is
-    /// the order id. Request payload: `None`. Response payload:
-    /// [`Payload::OrderInfo`], with the same `id` and `request_id`.
+    /// order of the node. Read-only. Sent in the `order` wrapper only; `id`
+    /// is the order id. Request payload: `None`. Response payload:
+    /// [`Payload::OrderInfo`], with the same `id` and `request_id`, and
+    /// describing that same order.
     AdminOrderInfo,
     /// Notification that a Lightning payment failed.
     /// Payload: [`Payload::PaymentFailed`].
@@ -370,11 +371,14 @@ impl Message {
 
     /// Validate that the inner [`MessageKind`] is consistent with its
     /// [`Action`]. Delegates to [`MessageKind::verify`], and rejects
-    /// [`Action::UserInfo`] outside the `restore` wrapper.
+    /// [`Action::UserInfo`] outside the `restore` wrapper and
+    /// [`Action::AdminOrderInfo`] outside the `order` wrapper.
     pub fn verify(&self) -> bool {
-        if !matches!(self, Message::Restore(_))
-            && self.get_inner_message_kind().action == Action::UserInfo
-        {
+        let action = &self.get_inner_message_kind().action;
+        if !matches!(self, Message::Restore(_)) && *action == Action::UserInfo {
+            return false;
+        }
+        if !matches!(self, Message::Order(_)) && *action == Action::AdminOrderInfo {
             return false;
         }
         match self {
@@ -940,8 +944,13 @@ impl MessageKind {
                 }
                 // Two valid shapes: the query (no payload) and Mostro's
                 // reply (the order snapshot). The daemon must refuse the
-                // reply shape at intake.
-                matches!(&self.payload, None | Some(Payload::OrderInfo(_)))
+                // reply shape at intake. The snapshot must describe the
+                // order the message is about.
+                match &self.payload {
+                    None => true,
+                    Some(Payload::OrderInfo(info)) => self.id == Some(info.id),
+                    Some(_) => false,
+                }
             }
             Action::AddCashuEscrow => {
                 if self.id.is_none() {
@@ -2169,6 +2178,52 @@ mod test {
             Some(Payload::OrderInfo(sample_order_info(id))),
         );
         assert!(!reply.verify());
+    }
+
+    #[test]
+    fn test_admin_order_info_reply_must_describe_the_same_order() {
+        let id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let other = uuid!("ede61c96-4c13-4519-bf3a-dcf7f1e9d842");
+        let reply = |info_id| {
+            MessageKind::new(
+                Some(id),
+                Some(1),
+                None,
+                Action::AdminOrderInfo,
+                Some(Payload::OrderInfo(sample_order_info(info_id))),
+            )
+        };
+        assert!(reply(id).verify());
+        assert!(!reply(other).verify());
+        assert!(!Message::Order(reply(other)).verify());
+    }
+
+    #[test]
+    fn test_admin_order_info_rejected_outside_order_wrapper() {
+        let id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let request = MessageKind::new(Some(id), Some(1), None, Action::AdminOrderInfo, None);
+        let reply = MessageKind::new(
+            Some(id),
+            Some(1),
+            None,
+            Action::AdminOrderInfo,
+            Some(Payload::OrderInfo(sample_order_info(id))),
+        );
+        for kind in [request, reply] {
+            assert!(Message::Order(kind.clone()).verify());
+            for msg in [
+                Message::Dispute(kind.clone()),
+                Message::CantDo(kind.clone()),
+                Message::Rate(kind.clone()),
+                Message::Dm(kind.clone()),
+                Message::Restore(kind.clone()),
+            ] {
+                assert!(
+                    !msg.verify(),
+                    "admin-order-info must be rejected in {msg:?}"
+                );
+            }
+        }
     }
 
     #[test]
