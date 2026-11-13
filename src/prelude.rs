@@ -25,6 +25,10 @@ pub use crate::message::{
     RestoredDisputeHelper, RestoredDisputesInfo, RestoredOrderHelper, RestoredOrdersInfo,
 };
 pub use crate::order::{Kind, Order, SmallOrder, Status};
+pub use crate::order_info::{
+    BondInfo, BondKind, BondRole, BondSlashReason, BondState, CashuEscrowInfo, HoldInvoiceInfo,
+    HoldInvoiceState, OrderInfo, PayoutFailureReason, PayoutInfo, PayoutState,
+};
 pub use crate::payer::{
     is_valid_payment_hash, order_bound_payment_hash, payment_hash, BuyerMode, PayerDeclaration,
     PaymentHistory, PAYMENT_HASH_DOMAIN, PAYMENT_HASH_ORDER_DOMAIN,
