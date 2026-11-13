@@ -171,6 +171,11 @@ pub enum Action {
     AdminTakeDispute,
     /// Solver took the dispute acknowledged.
     AdminTookDispute,
+    /// The admin or a registered solver asks for the real state of an
+    /// order of the node. Read-only. Sent in the `order` wrapper; `id` is
+    /// the order id. Request payload: `None`. Response payload:
+    /// [`Payload::OrderInfo`], with the same `id` and `request_id`.
+    AdminOrderInfo,
     /// Notification that a Lightning payment failed.
     /// Payload: [`Payload::PaymentFailed`].
     PaymentFailed,
@@ -823,6 +828,9 @@ pub enum Payload {
     /// The requester's own reputation on this node, carried by
     /// [`Action::UserInfo`] from Mostro to the client.
     UserInfo(UserInfo),
+    /// The real state of an order, carried by [`Action::AdminOrderInfo`]
+    /// from Mostro to the admin or solver who asked. See [`OrderInfo`].
+    OrderInfo(OrderInfo),
 }
 
 #[allow(dead_code)]
@@ -926,6 +934,15 @@ impl MessageKind {
                 }
                 matches!(&self.payload, None | Some(Payload::BondResolution(_)))
             }
+            Action::AdminOrderInfo => {
+                if self.id.is_none() {
+                    return false;
+                }
+                // Two valid shapes: the query (no payload) and Mostro's
+                // reply (the order snapshot). The daemon must refuse the
+                // reply shape at intake.
+                matches!(&self.payload, None | Some(Payload::OrderInfo(_)))
+            }
             Action::AddCashuEscrow => {
                 if self.id.is_none() {
                     return false;
@@ -999,6 +1016,7 @@ impl MessageKind {
                         | Some(Payload::PayerDeclaration(_))
                         | Some(Payload::PaymentHistory(_))
                         | Some(Payload::UserInfo(_))
+                        | Some(Payload::OrderInfo(_))
                 )
             }
             Action::LastTradeIndex | Action::RestoreSession => self.payload.is_none(),
@@ -1114,10 +1132,14 @@ mod test {
         Payload, Peer,
     };
     use crate::order::SmallOrder;
+    use crate::order_info::{
+        BondInfo, BondKind, BondRole, BondState, HoldInvoiceInfo, HoldInvoiceState, OrderInfo,
+        PayoutFailureReason, PayoutInfo, PayoutState,
+    };
     use crate::payer::{payment_hash, BuyerMode, PayerDeclaration, PaymentHistory};
     use crate::user::UserInfo;
     use nostr_sdk::prelude::Keys;
-    use uuid::uuid;
+    use uuid::{uuid, Uuid};
 
     #[test]
     fn test_peer_with_reputation() {
@@ -1344,6 +1366,7 @@ mod test {
             | Action::AdminAddSolver
             | Action::AdminTakeDispute
             | Action::AdminTookDispute
+            | Action::AdminOrderInfo
             | Action::PaymentFailed
             | Action::InvoiceUpdated
             | Action::SendDm
@@ -1405,6 +1428,7 @@ mod test {
             Action::AdminAddSolver,
             Action::AdminTakeDispute,
             Action::AdminTookDispute,
+            Action::AdminOrderInfo,
             Action::PaymentFailed,
             Action::InvoiceUpdated,
             Action::SendDm,
@@ -1484,6 +1508,7 @@ mod test {
             Action::AdminAddSolver,
             Action::AdminTakeDispute,
             Action::AdminTookDispute,
+            Action::AdminOrderInfo,
             Action::PaymentFailed,
             Action::InvoiceUpdated,
             Action::SendDm,
@@ -2047,6 +2072,277 @@ mod test {
         assert!(!on_order_action.verify());
     }
 
+    /// A reply to `admin-order-info` with every part answered.
+    fn sample_order_info(id: Uuid) -> OrderInfo {
+        OrderInfo {
+            id,
+            kind: "sell".to_string(),
+            status: "settled-hold-invoice".to_string(),
+            amount: 100_000,
+            fee: 600,
+            fiat_code: "EUR".to_string(),
+            fiat_amount: 50,
+            payment_method: "SEPA".to_string(),
+            created_at: 1_700_000_000,
+            taken_at: Some(1_700_000_100),
+            expires_at: 1_700_086_400,
+            failed_payment: true,
+            payment_attempts: 2,
+            hold_settled_at: Some(1_700_000_250),
+            hold_invoice: Some(HoldInvoiceInfo {
+                state: HoldInvoiceState::Settled,
+                held_at: Some(1_700_000_200),
+            }),
+            payout: Some(PayoutInfo {
+                state: PayoutState::Failed,
+                failure_reason: Some(PayoutFailureReason::NoRoute),
+                resolved_at: Some(1_700_000_300),
+            }),
+            bonds: vec![BondInfo {
+                role: BondRole::Taker,
+                amount: 1_000,
+                state: BondState::Locked,
+                slash_reason: None,
+                kind: BondKind::Bond,
+                root_order_id: None,
+            }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_admin_order_info_request_roundtrip() {
+        let json = r#"{"order":{"version":2,"request_id":7,"id":"308e1272-d5f4-47e6-bd97-3504baea9c23","action":"admin-order-info","payload":null}}"#;
+        let msg = Message::from_json(json).unwrap();
+        assert!(msg.verify());
+        let inner = msg.get_inner_message_kind();
+        assert_eq!(inner.action, Action::AdminOrderInfo);
+        assert_eq!(inner.request_id, Some(7));
+        assert!(inner.payload.is_none());
+
+        let value: serde_json::Value = serde_json::from_str(&msg.as_json().unwrap()).unwrap();
+        let expected: serde_json::Value = serde_json::from_str(json).unwrap();
+        assert_eq!(value["order"]["action"], expected["order"]["action"]);
+        assert_eq!(value["order"]["id"], expected["order"]["id"]);
+        assert_eq!(value["order"]["payload"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_admin_order_info_reply_roundtrip() {
+        let id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let info = sample_order_info(id);
+        let msg = Message::Order(MessageKind::new(
+            Some(id),
+            Some(7),
+            None,
+            Action::AdminOrderInfo,
+            Some(Payload::OrderInfo(info.clone())),
+        ));
+        assert!(msg.verify());
+
+        let json = msg.as_json().unwrap();
+        assert!(json.contains(r#""action":"admin-order-info""#));
+        assert!(json.contains(r#""payload":{"order_info":{"#));
+
+        let back = Message::from_json(&json).unwrap();
+        assert!(back.verify());
+        let inner = back.get_inner_message_kind();
+        assert_eq!(inner.id, Some(id));
+        assert_eq!(inner.request_id, Some(7));
+        match &inner.payload {
+            Some(Payload::OrderInfo(got)) => assert_eq!(got, &info),
+            other => panic!("unexpected payload: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_admin_order_info_requires_id() {
+        let id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        let request = MessageKind::new(None, Some(1), None, Action::AdminOrderInfo, None);
+        assert!(!request.verify());
+
+        let reply = MessageKind::new(
+            None,
+            Some(1),
+            None,
+            Action::AdminOrderInfo,
+            Some(Payload::OrderInfo(sample_order_info(id))),
+        );
+        assert!(!reply.verify());
+    }
+
+    #[test]
+    fn test_admin_order_info_rejects_other_payloads() {
+        let id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        for payload in [
+            Payload::BondResolution(crate::message::BondResolution::default()),
+            Payload::Peer(Peer::new("pubkey".to_string(), None)),
+            Payload::TextMessage("which order?".to_string()),
+            Payload::Amount(1),
+        ] {
+            let kind = MessageKind::new(
+                Some(id),
+                Some(1),
+                None,
+                Action::AdminOrderInfo,
+                Some(payload),
+            );
+            assert!(
+                !kind.verify(),
+                "admin-order-info must reject {:?}",
+                kind.payload
+            );
+        }
+    }
+
+    #[test]
+    fn test_order_info_payload_rejected_on_other_actions() {
+        // Payload::OrderInfo belongs to AdminOrderInfo; every other action
+        // refuses it. Listed explicitly (no strum): the exhaustiveness guard
+        // below forces a decision here when an Action variant is added.
+        let _exhaustive: fn(Action) = |a| match a {
+            Action::AdminOrderInfo => {}
+            Action::NewOrder
+            | Action::TakeSell
+            | Action::TakeBuy
+            | Action::PayInvoice
+            | Action::PayBondInvoice
+            | Action::FiatSent
+            | Action::FiatSentOk
+            | Action::Release
+            | Action::Released
+            | Action::Cancel
+            | Action::Canceled
+            | Action::CooperativeCancelInitiatedByYou
+            | Action::CooperativeCancelInitiatedByPeer
+            | Action::DisputeInitiatedByYou
+            | Action::DisputeInitiatedByPeer
+            | Action::CooperativeCancelAccepted
+            | Action::BuyerInvoiceAccepted
+            | Action::BondInvoiceAccepted
+            | Action::PurchaseCompleted
+            | Action::BondPayoutCompleted
+            | Action::BondSlashed
+            | Action::HoldInvoicePaymentAccepted
+            | Action::HoldInvoicePaymentSettled
+            | Action::HoldInvoicePaymentCanceled
+            | Action::WaitingSellerToPay
+            | Action::WaitingBuyerInvoice
+            | Action::AddInvoice
+            | Action::AddBondInvoice
+            | Action::BuyerTookOrder
+            | Action::Rate
+            | Action::RateUser
+            | Action::RateReceived
+            | Action::CantDo
+            | Action::Dispute
+            | Action::AdminCancel
+            | Action::AdminCanceled
+            | Action::AdminSettle
+            | Action::AdminSettled
+            | Action::AdminAddSolver
+            | Action::AdminTakeDispute
+            | Action::AdminTookDispute
+            | Action::PaymentFailed
+            | Action::InvoiceUpdated
+            | Action::SendDm
+            | Action::TradePubkey
+            | Action::RestoreSession
+            | Action::LastTradeIndex
+            | Action::UserInfo
+            | Action::Orders
+            | Action::AddCashuEscrow
+            | Action::CashuEscrowLocked
+            | Action::CashuPmSignature
+            | Action::DeclarePayer
+            | Action::PayerDeclared
+            | Action::PaymentHistory
+            | Action::ExportReputation
+            | Action::ReputationExported
+            | Action::ImportReputation
+            | Action::ReputationImported => {}
+        };
+
+        let id = uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23");
+        for action in [
+            Action::NewOrder,
+            Action::TakeSell,
+            Action::TakeBuy,
+            Action::PayInvoice,
+            Action::PayBondInvoice,
+            Action::FiatSent,
+            Action::FiatSentOk,
+            Action::Release,
+            Action::Released,
+            Action::Cancel,
+            Action::Canceled,
+            Action::CooperativeCancelInitiatedByYou,
+            Action::CooperativeCancelInitiatedByPeer,
+            Action::DisputeInitiatedByYou,
+            Action::DisputeInitiatedByPeer,
+            Action::CooperativeCancelAccepted,
+            Action::BuyerInvoiceAccepted,
+            Action::BondInvoiceAccepted,
+            Action::PurchaseCompleted,
+            Action::BondPayoutCompleted,
+            Action::BondSlashed,
+            Action::HoldInvoicePaymentAccepted,
+            Action::HoldInvoicePaymentSettled,
+            Action::HoldInvoicePaymentCanceled,
+            Action::WaitingSellerToPay,
+            Action::WaitingBuyerInvoice,
+            Action::AddInvoice,
+            Action::AddBondInvoice,
+            Action::BuyerTookOrder,
+            Action::Rate,
+            Action::RateUser,
+            Action::RateReceived,
+            Action::CantDo,
+            Action::Dispute,
+            Action::AdminCancel,
+            Action::AdminCanceled,
+            Action::AdminSettle,
+            Action::AdminSettled,
+            Action::AdminAddSolver,
+            Action::AdminTakeDispute,
+            Action::AdminTookDispute,
+            Action::PaymentFailed,
+            Action::InvoiceUpdated,
+            Action::SendDm,
+            Action::TradePubkey,
+            Action::RestoreSession,
+            Action::LastTradeIndex,
+            Action::UserInfo,
+            Action::Orders,
+            Action::AddCashuEscrow,
+            Action::CashuEscrowLocked,
+            Action::CashuPmSignature,
+            Action::DeclarePayer,
+            Action::PayerDeclared,
+            Action::PaymentHistory,
+            Action::ExportReputation,
+            Action::ReputationExported,
+            Action::ImportReputation,
+            Action::ReputationImported,
+        ] {
+            let payload = Payload::OrderInfo(sample_order_info(id));
+            // With an id, and without one for the actions that carry none.
+            for order_id in [Some(id), None] {
+                let kind = MessageKind::new(
+                    order_id,
+                    Some(1),
+                    None,
+                    action.clone(),
+                    Some(payload.clone()),
+                );
+                assert!(
+                    !kind.verify(),
+                    "{action:?} must reject Payload::OrderInfo (id: {order_id:?})"
+                );
+            }
+        }
+    }
+
     #[test]
     fn test_user_info_rejected_outside_restore_wrapper() {
         let request = MessageKind::new(None, Some(1), None, Action::UserInfo, None);
@@ -2171,6 +2467,7 @@ mod test {
             Action::AdminAddSolver,
             Action::AdminTakeDispute,
             Action::AdminTookDispute,
+            Action::AdminOrderInfo,
             Action::PaymentFailed,
             Action::InvoiceUpdated,
             Action::SendDm,

@@ -1,6 +1,6 @@
 //! Snapshot of one order for the admin and the solvers of a node.
 //!
-//! [`OrderInfo`] is the reply to the `admin-order-info` action: the real
+//! [`OrderInfo`] is the reply to [`Action::AdminOrderInfo`]: the real
 //! state of an order as the node sees it, taken from its database and from
 //! its Lightning node at the same moment. Database and Lightning values are
 //! reported side by side and never merged, because the point of the query is
@@ -25,7 +25,7 @@
 use crate::prelude::*;
 use uuid::Uuid;
 
-/// The real state of one order, carried by the `order_info` payload.
+/// The real state of one order, carried by [`Payload::OrderInfo`].
 ///
 /// The order fields come from the database and are always answered.
 /// [`hold_invoice`](Self::hold_invoice) and [`payout`](Self::payout) come
