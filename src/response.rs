@@ -184,6 +184,20 @@ mod tests {
     }
 
     #[test]
+    fn validate_response_rejects_admin_order_info_without_request_id() {
+        // admin-order-info is always the reply to a query, never a push.
+        let msg = Message::Order(MessageKind::new(
+            Some(uuid!("308e1272-d5f4-47e6-bd97-3504baea9c23")),
+            None,
+            None,
+            Action::AdminOrderInfo,
+            Some(Payload::OrderInfo(crate::order_info::OrderInfo::default())),
+        ));
+        let err = validate_response(&msg, Some(7)).unwrap_err();
+        assert!(matches!(err, MostroError::MostroInternalErr(_)));
+    }
+
+    #[test]
     fn validate_response_rejects_declare_payer_echo_without_request_id() {
         // `declare-payer` is only ever sent by a client; it is never a valid
         // unsolicited response.

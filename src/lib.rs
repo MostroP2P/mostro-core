@@ -61,6 +61,7 @@
 //!
 //! * [`message`] — protocol message envelope, actions and payloads.
 //! * [`order`] — order types, states and helpers.
+//! * [`order_info`] — snapshot of an order for the admin and the solvers.
 //! * [`dispute`] — dispute types and states.
 //! * [`db`] — SQLite [`Crud`] trait (`sqlx` feature).
 //! * [`user`] — persistent user representation and rating updates.
@@ -87,6 +88,7 @@ pub mod dispute;
 pub mod error;
 pub mod message;
 pub mod order;
+pub mod order_info;
 pub mod payer;
 pub mod prelude;
 pub mod rating;
